@@ -1,0 +1,17 @@
+Triggers
+
+It consist in nodes with distinct forms that determinate how does it work, like an circunference at the left so you ned to start with them. Exists distinct nodes, first native nodes which are activated from external apps like gmail/whatsapp, and n8n nodes.
+
+  webhooks: 
+    just a webhook, it might be represented as a json and is composed by two parts, the first one is the test url, and production url. so we're going to use http methods as POST, another part is the path by url with unique address, finally we can add authentication and change the behavior when you want to send the response, when the last node finished, inmediately which is mostly used.
+  schedule trigger:
+    trigger internal executed every x time(seconds, minutes, hours, ..., or a custom cron)
+  on form submission:
+    a trigger activated when a form is sending. Also you need to configurate the fields
+  when executed by another workflow:
+    we need to use 'execute workflow', it's usefull to separate and coordinate distinct modules.
+  when clicking execute workflok:
+    read the name
+  when chat message received:
+    it's for ai, ???
+  

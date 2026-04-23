@@ -1,0 +1,1765 @@
+{
+  "name": "Chat Discord PetSafe",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "discord-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "78ece160-4b44-44db-807d-179aefe44ecf",
+      "name": "Discord Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1760,
+        528
+      ],
+      "webhookId": "41c5ae04-e86b-4f83-8a5a-fa75e6bd59dc"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "w2c01",
+              "name": "TRELLO_API_KEY",
+              "value": "={{ $env.TRELLO_API_KEY }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c02",
+              "name": "TRELLO_TOKEN",
+              "value": "={{ $env.TRELLO_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c03",
+              "name": "TRELLO_BOARD_ID",
+              "value": "={{ $env.TRELLO_BOARD_ID }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c04",
+              "name": "GITHUB_TOKEN",
+              "value": "={{ $env.GITHUB_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c04b",
+              "name": "GITHUB_TOKEN_BACKEND",
+              "value": "={{ $env.GITHUB_TOKEN_BACKEND || $env.GITHUB_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c04f",
+              "name": "GITHUB_TOKEN_FRONTEND",
+              "value": "={{ $env.GITHUB_TOKEN_FRONTEND || $env.GITHUB_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c05",
+              "name": "GITHUB_OWNER_BACKEND",
+              "value": "={{ $env.GITHUB_OWNER_BACKEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c05f",
+              "name": "GITHUB_OWNER_FRONTEND",
+              "value": "={{ $env.GITHUB_OWNER_FRONTEND || $env.GITHUB_OWNER || $env.GITHUB_OWNER_BACKEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c06",
+              "name": "GITHUB_REPO_BACKEND",
+              "value": "={{ $env.GITHUB_REPO_BACKEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c07",
+              "name": "GITHUB_REPO_FRONTEND",
+              "value": "={{ $env.GITHUB_REPO_FRONTEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c08",
+              "name": "GEMINI_API_KEY",
+              "value": "={{ $env.GEMINI_API_KEY }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c09",
+              "name": "pregunta_usuario",
+              "value": "={{ $json.body.content || 'Dame un resumen' }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c10",
+              "name": "usuario_discord",
+              "value": "={{ $json.body.user || 'desconocido' }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c11",
+              "name": "DISCORD_WEBHOOK_URL",
+              "value": "={{ $env.DISCORD_WEBHOOK_URL }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a99b98c0-9db5-424f-816b-028fda3f8ac4",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1552,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const pregunta = ($node['Config'].json.pregunta_usuario || '').trim();\nconst low = pregunta.toLowerCase();\n\n// Objeto para almacenar los detalles del comando\nconst comando = {\n  nombre: null,\n  params: {},\n  tipo: 'chat', // Default\n  necesita_diff: false,\n  error: null\n};\n\n// Si no es un comando, es un chat normal\nif (!pregunta.startsWith('!')) {\n  // Mantenemos la heurística para detectar si es una pregunta sobre código\n  comando.necesita_diff = /(codig|commit|diff|revisa|calidad|pull request|\\bpr\\b|merge)/.test(low);\n} else {\n  const partes = pregunta.split(' ');\n  const cmd = partes[0].toLowerCase();\n\n  switch (cmd) {\n    case '!ayuda':\n    case '!help':\n      comando.nombre = 'ayuda';\n      comando.tipo = 'ayuda';\n      break;\n    case '!kpis':\n      comando.nombre = 'kpis';\n      comando.tipo = 'kpis';\n      break;\n    case '!reporte':\n      comando.nombre = 'reporte';\n      comando.tipo = 'reporte';\n      // Opcional: capturar número de días\n      const dias = parseInt(partes[1], 10);\n      if (!isNaN(dias) && dias > 0) {\n        comando.params.dias = dias;\n      } else {\n        comando.params.dias = 7; // Default\n      }\n      break;\n    case '!riesgos':\n      comando.nombre = 'riesgos';\n      comando.tipo = 'chat'; // Usará el flujo de chat pero con un contexto específico\n      break;\n    case '!hitos':\n      comando.nombre = 'hitos';\n      comando.tipo = 'chat'; // Igual que riesgos\n      break;\n    case '!revisar':\n      comando.nombre = 'revisar';\n      comando.tipo = 'chat';\n      comando.necesita_diff = true;\n      const repo = (partes[1] || '').toLowerCase();\n      if (repo === 'backend' || repo === 'frontend') {\n        comando.params.repo = repo;\n      } else {\n        comando.error = 'Debes especificar un repositorio: `!revisar backend` o `!revisar frontend`.';\n      }\n      break;\n    default:\n      comando.error = `Comando \\`${cmd}\\` no reconocido. Usa \\`!ayuda\\` para ver la lista de comandos.`;\n      break;\n  }\n}\n\n// El objeto de salida ahora es más rico en información\nreturn [{\n  json: {\n    pregunta,\n    comando,\n    // Mantenemos compatibilidad con nodos antiguos\n    tipo: comando.error ? 'error' : comando.tipo,\n    necesita_diff: comando.necesita_diff,\n    usuario: $node['Config'].json.usuario_discord\n  }\n}];"
+      },
+      "id": "8ca9e727-b9e8-4ebb-8347-96303ab1cb3a",
+      "name": "Router Comandos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.tipo }}",
+                  "operation": "equal",
+                  "value2": "reporte"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.tipo }}",
+                  "operation": "equal",
+                  "value2": "kpis"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.tipo }}",
+                  "operation": "equal",
+                  "value2": "chat"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.tipo }}",
+                  "operation": "equal",
+                  "value2": "ayuda"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.tipo }}",
+                  "operation": "equal",
+                  "value2": "error"
+                }
+              ]
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "729e1f04-55fd-4a4a-a6ca-04d8e9f26793",
+      "name": "Switch Tipo",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -1104,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "joddDTQkcp6U7mT9",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/joddDTQkcp6U7mT9",
+          "cachedResultName": "Reporte PDF Semanal"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "rango_dias": "={{ ($json.comando && $json.comando.params && $json.comando.params.dias) ? Number($json.comando.params.dias) : 7 }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "cf3e4709-6bc1-4154-9d44-33989daf302b",
+      "name": "Trigger Reporte PDF",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -848,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Reporte PDF generado y enviado al canal + email.",
+        "options": {}
+      },
+      "id": "bee98502-dc7b-4dfa-82b2-b7e2516c4663",
+      "name": "Resp Reporte",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -624,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT fecha_ejecucion, progreso_pct, tareas_vencidas, kpis_json FROM analisis_proyecto ORDER BY fecha_ejecucion DESC LIMIT 1;",
+        "options": {}
+      },
+      "id": "d16c9ee3-9e94-4182-a194-d374c62e34bf",
+      "name": "Postgres Ultimo KPI",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -848,
+        464
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json || {};\nlet k = row.kpis_json || {};\n\nif (typeof k === 'string') {\n  try {\n    k = JSON.parse(k);\n  } catch (e) {\n    k = {};\n  }\n}\n\nconst val = (v, fallback = 'N/A') => (v === undefined || v === null || v === '') ? fallback : v;\n\nconst lines = [\n  'KPIs PetSafe (' + new Date(row.fecha_ejecucion).toLocaleString('es-EC') + ')',\n  '',\n  'Progreso sprint: ' + val(row.progreso_pct, 0) + '%',\n  'Tareas vencidas: ' + val(row.tareas_vencidas, 0),\n  'Velocidad: ' + val(k.velocidad_tareas_por_dia, 0) + ' tareas/dia (completadas 7d: ' + val(k.completadas_7d, 0) + ')',\n  '% a tiempo: ' + val(k.pct_a_tiempo, 0) + '%',\n  'Commits 14d: ' + val(k.commits_14d, 0) + ' (' + val(k.commits_por_dia, 0) + '/dia)',\n  'PR avg open: ' + val(k.pr_open_time_dias, 0) + ' dias',\n  'PR merge ratio 30d: ' + val(k.pr_merge_ratio_30d, 0) + '%',\n  'Dias hasta fin: ' + val(k.dias_hasta_fin, 'N/A'),\n  'Proyeccion: ' + val(k.proyeccion, 'N/A')\n];\n\nreturn [{ json: { text: lines.join('\\n') } }];"
+      },
+      "id": "a379268d-6d7b-47f0-8018-3e0306488ad8",
+      "name": "Formatear KPIs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.text }}",
+        "options": {}
+      },
+      "id": "dc91e655-4b3e-4131-892f-f14ff25e476d",
+      "name": "Resp KPIs",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -416,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Config\"].json.TRELLO_BOARD_ID }}/cards",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $node[\"Config\"].json.TRELLO_API_KEY }}"
+            },
+            {
+              "name": "token",
+              "value": "={{ $node[\"Config\"].json.TRELLO_TOKEN }}"
+            },
+            {
+              "name": "fields",
+              "value": "name,desc,due,dueComplete,idMembers,idList,dateLastActivity,labels"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3bf15ad0-f7c3-44da-9c6c-35138047896d",
+      "name": "Trello Cards",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -864,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Config\"].json.TRELLO_BOARD_ID }}/lists",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $node[\"Config\"].json.TRELLO_API_KEY }}"
+            },
+            {
+              "name": "token",
+              "value": "={{ $node[\"Config\"].json.TRELLO_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "65970b84-efa7-49eb-8623-59e1c72789f8",
+      "name": "Trello Lists",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -864,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Config\"].json.TRELLO_BOARD_ID }}/members",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $node[\"Config\"].json.TRELLO_API_KEY }}"
+            },
+            {
+              "name": "token",
+              "value": "={{ $node[\"Config\"].json.TRELLO_TOKEN }}"
+            },
+            {
+              "name": "fields",
+              "value": "fullName,username"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "31225468-a0c3-408d-a094-eade3acba0dd",
+      "name": "Trello Members",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -864,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Config\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Config\"].json.GITHUB_REPO_BACKEND }}/commits?per_page=15",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config\"].json.GITHUB_TOKEN_BACKEND || $node[\"Config\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "89592f0d-793a-45c8-8e41-8730d5504ac5",
+      "name": "GH Back Commits",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -864,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Config\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Config\"].json.GITHUB_REPO_FRONTEND }}/commits?per_page=15",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Config\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "97ba8837-f742-40a9-afff-5915eba0011b",
+      "name": "GH Front Commits",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -864,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Config\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Config\"].json.GITHUB_REPO_BACKEND }}/pulls?state=all&per_page=15",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config\"].json.GITHUB_TOKEN_BACKEND || $node[\"Config\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "605b86fd-3497-4b4f-be97-b0cf95e9dabc",
+      "name": "GH Back PRs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -864,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Config\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Config\"].json.GITHUB_REPO_FRONTEND }}/pulls?state=all&per_page=15",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Config\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0e0eb93d-4e7f-4f5e-80f5-5e77eebef949",
+      "name": "GH Front PRs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -864,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT fecha_ejecucion, hay_problemas, tareas_vencidas, progreso_pct, kpis_json, recomendaciones_ia FROM analisis_proyecto ORDER BY fecha_ejecucion DESC LIMIT 5;",
+        "options": {}
+      },
+      "id": "e2a8c8bc-6744-47ba-aa5f-87b44416966b",
+      "name": "PG Historial",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -864,
+        1200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT pregunta, respuesta, fecha, aplicada, usuario FROM recomendaciones WHERE pregunta IS NOT NULL ORDER BY fecha DESC LIMIT 5;",
+        "options": {}
+      },
+      "id": "0e58d949-0540-4ed7-9c15-2c0c293c2dfe",
+      "name": "PG Recomendaciones",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -864,
+        1280
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 10
+      },
+      "id": "bdef55e9-e632-41f3-928f-4491de8f31e5",
+      "name": "Merge Chat",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -576,
+        928
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "d1",
+              "leftValue": "={{ $('Router Comandos').first().json.necesita_diff }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "10f2ffbd-9fd3-4a61-9e8d-dceaf2a2b7cc",
+      "name": "IF Necesita Diff",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Config\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Config\"].json.GITHUB_REPO_BACKEND }}/commits/{{ $node[\"GH Back Commits\"].first().json.sha }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config\"].json.GITHUB_TOKEN_BACKEND || $node[\"Config\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "90f21e4e-8b60-47ed-9704-a09572b7e96b",
+      "name": "Diff Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -112,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Config\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Config\"].json.GITHUB_REPO_FRONTEND }}/commits/{{ $node[\"GH Front Commits\"].first().json.sha }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Config\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4aa02622-5336-4013-8193-5c59c243ac17",
+      "name": "Diff Frontend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -128,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst MS_PER_DAY = 86400000;\n\n/**\n * Helpers generales\n */\nfunction isValidDate(d) {\n  return d instanceof Date && !Number.isNaN(d.getTime());\n}\n\nfunction parseDate(value) {\n  if (!value) return null;\n  const d = new Date(value);\n  return isValidDate(d) ? d : null;\n}\n\nfunction safeString(value, fallback = '') {\n  return typeof value === 'string' ? value : fallback;\n}\n\nfunction safeArray(value) {\n  return Array.isArray(value) ? value : [];\n}\n\nfunction truncate(value, max) {\n  const str = safeString(value, '');\n  return str.length > max ? str.slice(0, max) : str;\n}\n\nfunction getFirstJson(nodeName, fallback = null) {\n  try {\n    const item = $(nodeName).first();\n    return item && item.json ? item.json : fallback;\n  } catch (e) {\n    return fallback;\n  }\n}\n\nfunction getAllJson(nodeName) {\n  try {\n    const items = $(nodeName).all();\n    return Array.isArray(items) ? items.map(i => i?.json || {}) : [];\n  } catch (e) {\n    return [];\n  }\n}\n\nfunction daysBetween(from, to) {\n  if (!isValidDate(from) || !isValidDate(to)) return null;\n  return Math.floor((to - from) / MS_PER_DAY);\n}\n\nfunction coalesce(...values) {\n  for (const v of values) {\n    if (v !== undefined && v !== null && v !== '') return v;\n  }\n  return null;\n}\n\n/**\n * Inputs base\n */\nconst router = getFirstJson('Router Comandos', {});\nconst config = getFirstJson('Config', {});\n\nconst pregunta = safeString(router.pregunta, '').trim();\nconst usuario = safeString(router.usuario, 'desconocido');\nconst needDiff = !!router.necesita_diff;\nconst geminiKey = safeString(config.GEMINI_API_KEY, '');\n\n/**\n * Inputs de nodos fuente\n */\nconst cards = getAllJson('Trello Cards');\nconst lists = getAllJson('Trello Lists');\nconst members = getAllJson('Trello Members');\nconst bCommits = getAllJson('GH Back Commits');\nconst fCommits = getAllJson('GH Front Commits');\nconst bPRs = getAllJson('GH Back PRs');\nconst fPRs = getAllJson('GH Front PRs');\nconst historial = getAllJson('PG Historial');\nconst recos = getAllJson('PG Recomendaciones');\nconst hitos = getAllJson('PG Hitos');\n\nlet diffBack = null;\nlet diffFront = null;\n\n// Mejora: Obtener solo el diff necesario según el comando\nif (needDiff) {\n  const repo = router.comando?.params?.repo; // 'backend', 'frontend', o undefined\n\n  // Si el comando es específico para un repo, solo pedimos ese.\n  // Si no es específico (pregunta general sobre código), pedimos ambos.\n  if (!repo || repo === 'backend') {\n    diffBack = getFirstJson('Diff Backend', null);\n  }\n  if (!repo || repo === 'frontend') {\n    diffFront = getFirstJson('Diff Frontend', null);\n  }\n}\n\n/**\n * Índices auxiliares\n */\nconst listaById = {};\nfor (const l of lists) {\n  const id = safeString(l?.id, '');\n  if (id) {\n    listaById[id] = coalesce(l?.name, 'desconocida');\n  }\n}\n\nconst memberById = {};\nfor (const m of members) {\n  const id = safeString(m?.id, '');\n  if (id) {\n    memberById[id] = coalesce(m?.fullName, m?.username, id);\n  }\n}\n\n/**\n * Normalización Trello\n */\nconst tareas = cards.map((c, index) => {\n  const dueDate = parseDate(c?.due);\n  const completada = !!c?.dueComplete;\n  const vencida = !!(dueDate && !completada && dueDate < now);\n  const diasRest = dueDate ? daysBetween(now, dueDate) : null;\n\n  const idMembers = safeArray(c?.idMembers);\n  const responsables = idMembers.map(id => memberById[id] || String(id));\n\n  return {\n    nombre: coalesce(c?.name, `tarjeta_sin_nombre_${index + 1}`),\n    lista: listaById[c?.idList] || 'desconocida',\n    completada,\n    fecha_limite: dueDate ? dueDate.toISOString() : null,\n    dias_restantes: diasRest,\n    vencida,\n    responsables,\n  };\n});\n\nconst vencidas = tareas.filter(t => t.vencida);\n\nconst porVencer = tareas.filter(t =>\n  !t.completada &&\n  !t.vencida &&\n  typeof t.dias_restantes === 'number' &&\n  t.dias_restantes >= 0 &&\n  t.dias_restantes <= 3\n);\n\n/**\n * Historial: ordenar explícitamente por fecha desc\n */\nconst historialOrdenado = [...historial].sort((a, b) => {\n  const da = parseDate(a?.fecha_ejecucion);\n  const db = parseDate(b?.fecha_ejecucion);\n  const ta = da ? da.getTime() : 0;\n  const tb = db ? db.getTime() : 0;\n  return tb - ta;\n});\n\nconst ultimoAnalisis = historialOrdenado[0] || null;\nconst kpis = ultimoAnalisis?.kpis_json ?? null;\n\n/**\n * GitHub PRs\n */\nfunction simplifyPR(p, repo) {\n  const createdAt = parseDate(p?.created_at);\n  const diasAbierto = createdAt ? daysBetween(createdAt, now) : null;\n\n  return {\n    repo,\n    numero: p?.number ?? null,\n    titulo: coalesce(p?.title, 'PR sin titulo'),\n    estado: coalesce(p?.state, 'desconocido'),\n    autor: coalesce(p?.user?.login, 'desconocido'),\n    creado: createdAt ? createdAt.toISOString() : null,\n    dias_abierto: diasAbierto,\n  };\n}\n\nconst prsAbiertos = [\n  ...bPRs.map(p => simplifyPR(p, 'backend')),\n  ...fPRs.map(p => simplifyPR(p, 'frontend')),\n].filter(p => p.estado === 'open');\n\nconst prsStale = prsAbiertos.filter(p =>\n  typeof p.dias_abierto === 'number' && p.dias_abierto > 7\n);\n\n/**\n * GitHub Commits\n */\nfunction simplifyCommit(c, repo) {\n  const message = coalesce(c?.commit?.message, '');\n  const firstLine = safeString(message, '').split('\\n')[0];\n  const authorDate = parseDate(c?.commit?.author?.date);\n\n  return {\n    repo,\n    sha: truncate(coalesce(c?.sha, ''), 7),\n    mensaje: truncate(firstLine, 300),\n    autor: coalesce(c?.commit?.author?.name, 'desconocido'),\n    fecha: authorDate ? authorDate.toISOString() : null,\n  };\n}\n\n/**\n * Diffs\n */\nfunction shapeDiff(d, repo) {\n  if (!d || typeof d !== 'object') return null;\n\n  const files = safeArray(d?.files).map(f => ({\n    archivo: coalesce(f?.filename, 'archivo_desconocido'),\n    cambios: typeof f?.changes === 'number' ? f.changes : null,\n    patch: truncate(coalesce(f?.patch, ''), 1200),\n  }));\n\n  return {\n    repo,\n    sha: truncate(coalesce(d?.sha, ''), 7),\n    mensaje: truncate(coalesce(d?.commit?.message, ''), 800),\n    autor: coalesce(d?.commit?.author?.name, 'desconocido'),\n    archivos: files,\n  };\n}\n\nlet diffInfo = null;\nif (diffBack || diffFront) {\n  diffInfo = {\n    backend: shapeDiff(diffBack, 'backend'),\n    frontend: shapeDiff(diffFront, 'frontend'),\n  };\n}\n\n/**\n * Hitos\n */\nconst hitosActivos = hitos\n  .map(h => {\n    const fechaFin = parseDate(h?.fecha_fin);\n    return {\n      nombre: coalesce(h?.nombre, 'hito_sin_nombre'),\n      tipo: coalesce(h?.tipo, 'desconocido'),\n      fecha_fin: fechaFin ? fechaFin.toISOString().slice(0, 10) : null,\n      dias_faltan: fechaFin ? daysBetween(now, fechaFin) : null,\n      responsable: coalesce(h?.responsable, 'desconocido'),\n      _fechaFinObj: fechaFin,\n    };\n  })\n  .filter(h => h._fechaFinObj && h._fechaFinObj >= now)\n  .sort((a, b) => a._fechaFinObj - b._fechaFinObj)\n  .map(({ _fechaFinObj, ...rest }) => rest);\n\n/**\n * Resúmenes saneados\n */\nconst historialResumen = historialOrdenado.map(h => {\n  const fecha = parseDate(h?.fecha_ejecucion);\n  return {\n    fecha: fecha ? fecha.toISOString() : null,\n    problemas: h?.hay_problemas ?? null,\n    vencidas: h?.tareas_vencidas ?? null,\n    progreso: h?.progreso_pct ?? null,\n  };\n});\n\nconst recomendacionesPrevias = recos\n  .map(r => {\n    const fecha = parseDate(r?.fecha);\n    return {\n      pregunta: truncate(coalesce(r?.pregunta, ''), 120),\n      respuesta: truncate(coalesce(r?.respuesta, ''), 250),\n      aplicada: r?.aplicada ?? null,\n      fecha: fecha ? fecha.toISOString() : coalesce(r?.fecha, null),\n    };\n  })\n  .filter(r => r.pregunta || r.respuesta);\n\n/**\n * Salud de datos para que Gemini sepa qué faltó\n */\nconst dataHealth = {\n  router_ok: !!pregunta,\n  config_ok: !!geminiKey,\n  fuentes: {\n    trello_cards: cards.length,\n    trello_lists: lists.length,\n    trello_members: members.length,\n    gh_back_commits: bCommits.length,\n    gh_front_commits: fCommits.length,\n    gh_back_prs: bPRs.length,\n    gh_front_prs: fPRs.length,\n    pg_historial: historial.length,\n    pg_recomendaciones: recos.length,\n    pg_hitos: hitos.length,\n    diff_backend_disponible: !!diffBack,\n    diff_frontend_disponible: !!diffFront,\n  },\n  faltantes: [\n    !pregunta ? 'Router Comandos.pregunta faltante' : null,\n    !usuario ? 'Router Comandos.usuario faltante' : null,\n    !geminiKey ? 'Config.GEMINI_API_KEY faltante' : null,\n    cards.length === 0 ? 'Sin tarjetas Trello' : null,\n    historial.length === 0 ? 'Sin historial previo' : null,\n    hitos.length === 0 ? 'Sin hitos' : null,\n    needDiff && !diffBack && !diffFront ? 'Se pidio diff pero no llegaron diffs' : null,\n  ].filter(Boolean),\n};\n\n/**\n * Contexto final\n */\nconst ctx = {\n  fecha_actual: now.toISOString(),\n  usuario,\n  salud_datos: dataHealth,\n  tareas: {\n    total: tareas.length,\n    vencidas,\n    por_vencer_3dias: porVencer,\n    completadas_count: tareas.filter(t => t.completada).length,\n    distribucion: tareas.reduce((acc, t) => {\n      acc[t.lista] = (acc[t.lista] || 0) + 1;\n      return acc;\n    }, {}),\n  },\n  github: {\n    commits_back_recientes: bCommits.slice(0, 8).map(c => simplifyCommit(c, 'backend')),\n    commits_front_recientes: fCommits.slice(0, 8).map(c => simplifyCommit(c, 'frontend')),\n    prs_abiertos: prsAbiertos,\n    prs_stale_mas_7d: prsStale,\n  },\n  kpis_ultimo_analisis: kpis,\n  hitos_proximos: hitosActivos.slice(0, 5),\n  historial_resumen: historialResumen,\n  recomendaciones_previas: recomendacionesPrevias,\n  diff_commits: diffInfo,\n};\n\nconst prompt = `Eres asistente experto de gestion del proyecto PetSafe. Copiloto del gestor para decisiones.\n\nREGLAS:\n1. SOLO respondes sobre el proyecto (Trello, GitHub, tareas, commits, PRs, equipo, riesgos, hitos, KPIs). Si no: responde EXACTAMENTE \"No es una pregunta relacionada con el proyecto.\"\n2. Espanol, texto plano, sin markdown, sin asteriscos, sin emojis, maximo 1800 caracteres.\n3. Siempre basado en datos reales del contexto. Si falta dato o una fuente vino vacia/incompleta, dilo explicitamente.\n4. Si preguntan que hacer, riesgos, decisiones: usa DIAGNOSTICO / RIESGOS / ACCIONES RECOMENDADAS.\n5. Si piden review de codigo y hay diff_commits, analiza calidad, bugs potenciales, buenas practicas.\n6. Si la pregunta es simple (ej \"hay vencidas?\"), responde directo.\n7. Considera hitos proximos y dias hasta fin para contextualizar urgencia.\n8. Menciona recomendaciones previas no aplicadas si son relevantes.\n9. No inventes datos faltantes. Si salud_datos.faltantes contiene elementos relevantes, consideralos en la respuesta.\n\nCONTEXTO (fecha ${now.toISOString()}):\n${JSON.stringify(ctx, null, 2)}\n\nPREGUNTA DE ${usuario}:\n${pregunta || 'Pregunta no disponible'}`;\n\nreturn [{\n  json: {\n    prompt,\n    gemini_key: geminiKey,\n    pregunta,\n    usuario,\n  }\n}];"
+      },
+      "id": "cac5ac9b-4eaf-4885-abde-c51855621a2a",
+      "name": "Construir Contexto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "method": "=POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key={{ $json.gemini_key }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ contents: [{ parts: [{ text: $json.prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 2048 } }) }}",
+        "options": {}
+      },
+      "id": "bc83a97f-2195-45d0-b145-99a367273a75",
+      "name": "Gemini Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        368,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO recomendaciones (fecha, tipo, pregunta, respuesta, usuario, aplicada) VALUES (NOW(), 'chat', '{{ $node[\"Construir Contexto\"].json.pregunta.replace(/'/g, \"''\") }}', '{{ $node[\"Gemini Chat\"].json.candidates[0].content.parts[0].text.replace(/'/g, \"''\") }}', '{{ $node[\"Construir Contexto\"].json.usuario.replace(/'/g, \"''\") }}', false);",
+        "options": {}
+      },
+      "id": "f03c241f-f84b-41d1-8bdb-197fca571dbd",
+      "name": "Guardar Q&A",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        608,
+        1040
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $node['Gemini Chat'].json.candidates[0].content.parts[0].text }}",
+        "options": {}
+      },
+      "id": "7459666c-562e-4c51-abfe-3bd6374b17af",
+      "name": "Resp Chat",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        848,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT nombre, tipo, fecha_inicio, fecha_fin, responsable, completado FROM hitos_proyecto WHERE fecha_fin >= CURRENT_DATE - INTERVAL '7 days' ORDER BY fecha_fin ASC LIMIT 10;",
+        "options": {}
+      },
+      "id": "e4956b88-1020-4005-a13f-c64752145d19",
+      "name": "PG Hitos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -864,
+        1360
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.comando.error }}",
+        "options": {}
+      },
+      "id": "f313176c-bed6-4fe5-961d-4edd784cbaf6",
+      "name": "Resp Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -864,
+        1584
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Comandos disponibles:\n- `!ayuda`: Muestra este mensaje.\n- `!kpis`: Muestra los KPIs actuales del proyecto.\n- `!reporte [dias]`: Genera un reporte en PDF de los ultimos 7 dias (o los dias que especifiques).\n- `!riesgos`: Analiza y muestra los riesgos actuales del proyecto.\n- `!hitos`: Muestra los proximos hitos del proyecto.\n- `!revisar <backend|frontend>`: Pide una revision del ultimo commit del repositorio especificado.\n\nEventos en tiempo real (webhooks):\n- Trello: `POST /webhook/trello-event`\n- GitHub: `POST /webhook/github-event`",
+        "options": {}
+      },
+      "id": "dde3c0c6-fdb2-4639-a9ae-9345054f63fa",
+      "name": "Resp Ayuda",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -848,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trello-event",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "4042d8f2-0f87-4646-af3b-dc3b8c3feefc",
+      "name": "Trello Event Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1552,
+        -736
+      ],
+      "webhookId": "75a8cc16-b29e-40c1-acf4-df57fecb1f0a"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || {};\nconst action = body.action || {};\nconst data = action.data || {};\nconst type = action.type || 'unknown';\nconst actor = action.memberCreator?.fullName || action.memberCreator?.username || 'desconocido';\nconst boardName = data.board?.name || body.model?.name || 'tablero';\nconst card = data.card || {};\nconst cardName = card.name || 'tarjeta sin nombre';\nconst cardUrl = card.shortUrl || card.url || body.model?.url || null;\n\nlet ignored = false;\nlet tipo = 'trello_evento';\nlet titulo = 'Evento Trello';\nlet descripcion = \"Evento \" + type + \" en \" + boardName + \".\";\n\nif (type === 'updateCard' && data.listBefore && data.listAfter) {\n  tipo = 'trello_card_move';\n  titulo = 'Tarjeta movida';\n  descripcion = actor + \" movio \" + cardName + \" de \" + data.listBefore.name + \" a \" + data.listAfter.name + \".\";\n} else if (type === 'commentCard') {\n  tipo = 'trello_comment';\n  titulo = 'Comentario en tarjeta';\n  descripcion = actor + \" comento en \" + cardName + \".\";\n} else if (type === 'createCard') {\n  tipo = 'trello_card_created';\n  titulo = 'Tarjeta creada';\n  descripcion = actor + \" creo la tarjeta \" + cardName + \".\";\n} else if (type === 'updateCard' && Object.prototype.hasOwnProperty.call(data.old || {}, 'due')) {\n  tipo = 'trello_due_changed';\n  titulo = 'Fecha limite actualizada';\n  descripcion = actor + \" actualizo fecha limite de \" + cardName + \".\";\n} else {\n  // Eventos como completado/PDF ya se cubren en Workflow 3 para evitar duplicados.\n  ignored = true;\n  titulo = 'Evento Trello ignorado';\n  descripcion = \"Evento \" + type + \" no se procesa aqui para evitar duplicar otros workflows.\";\n}\n\nconst detalle = {\n  action_type: type,\n  actor,\n  board_name: boardName,\n  card_id: card.id || null,\n  card_name: cardName,\n  card_url: cardUrl,\n  list_before: data.listBefore?.name || null,\n  list_after: data.listAfter?.name || null,\n  comment: data.text || null,\n  due: card.due || null,\n  date: action.date || null\n};\n\nconst discord_content = \"[PetSafe/Trello] \" + titulo + \"\\n\" + descripcion + (cardUrl ? \"\\n\" + cardUrl : \"\");\n\nreturn [{\n  json: {\n    source: 'trello',\n    ignored,\n    tipo,\n    titulo,\n    descripcion,\n    detalle,\n    detalle_json: JSON.stringify(detalle || {}),\n    discord_content\n  }\n}];"
+      },
+      "id": "a4fa5b9e-6227-49d5-b1ea-5e5d68bb5191",
+      "name": "Normalizar Evento Trello",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1312,
+        -736
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "if-trello-not-ignored",
+              "leftValue": "={{ $json.ignored }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4f7f2cd7-a7b0-47d9-9d72-11673013915b",
+      "name": "IF Evento Trello Relevante",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1088,
+        -736
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "id": "6642ea40-434e-4017-acfa-2b3998b85faf",
+      "name": "Discord Evento Trello",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -704,
+        -1024
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO eventos_detectados (tipo, descripcion, detalle, notificado) VALUES ('{{ ($json.tipo || \"trello_evento\").replace(/'/g, \"''\") }}', '{{ ($json.descripcion || \"\").replace(/'/g, \"''\") }}', '{{ ($json.detalle_json || \"{}\").replace(/'/g, \"''\") }}'::jsonb, TRUE);",
+        "options": {}
+      },
+      "id": "ac0d0e0c-9d85-401b-a901-f5037b392296",
+      "name": "PG Insert Evento Trello",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -704,
+        -656
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok (trello procesado)",
+        "options": {}
+      },
+      "id": "6bb972a1-0470-4383-b75b-fded9059d5d7",
+      "name": "Resp Trello Procesado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -704,
+        -832
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok (trello ignorado)",
+        "options": {}
+      },
+      "id": "d34a8fd7-716d-4f18-9298-1282f8cb3615",
+      "name": "Resp Trello Ignorado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -704,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "github-event",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "7d10ea46-d10b-4d46-a1c2-e194d32a0fb6",
+      "name": "GitHub Event Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        -112
+      ],
+      "webhookId": "f483de4b-4b89-4edf-ad52-29f662f2f5d7"
+    },
+    {
+      "parameters": {
+        "jsCode": "const headers = $json.headers || {};\nconst body = $json.body || {};\n\nconst getHeader = (name) => {\n  const key = Object.keys(headers).find(k => k.toLowerCase() === name.toLowerCase());\n  return key ? headers[key] : '';\n};\n\nconst event = String(getHeader('x-github-event') || '').toLowerCase();\nconst action = body.action || '';\nconst repo = body.repository?.full_name || 'repo/desconocido';\nconst actor = body.sender?.login || body.pusher?.name || 'desconocido';\n\nlet ignored = false;\nlet tipo = 'github_evento';\nlet titulo = 'Evento GitHub';\nlet descripcion = \"Evento \" + (event || \"desconocido\") + \" en \" + repo + \".\";\nlet url = body.repository?.html_url || null;\nlet branch = null;\nlet prNumber = null;\n\nif (event === 'pull_request') {\n  const pr = body.pull_request || {};\n  prNumber = body.number || pr.number || null;\n  const prTitle = pr.title || 'PR sin titulo';\n  url = pr.html_url || url;\n\n  if (action === 'opened' || action === 'reopened') {\n    tipo = 'github_pr_opened';\n    titulo = 'PR abierto';\n    descripcion = actor + \" abrio PR #\" + prNumber + \": \" + prTitle + \".\";\n  } else if (action === 'ready_for_review') {\n    tipo = 'github_pr_ready';\n    titulo = 'PR listo para revision';\n    descripcion = actor + \" marco PR #\" + prNumber + \" listo para revision.\";\n  } else if (action === 'synchronize') {\n    tipo = 'github_pr_updated';\n    titulo = 'PR actualizado';\n    descripcion = actor + \" actualizo PR #\" + prNumber + \": \" + prTitle + \".\";\n  } else if (action === 'closed' && pr.merged) {\n    tipo = 'github_pr_merged';\n    titulo = 'PR mergeado';\n    descripcion = actor + \" mergeo PR #\" + prNumber + \": \" + prTitle + \".\";\n  } else if (action === 'closed') {\n    tipo = 'github_pr_closed';\n    titulo = 'PR cerrado';\n    descripcion = actor + \" cerro PR #\" + prNumber + \": \" + prTitle + \".\";\n  } else {\n    ignored = true;\n    titulo = 'Evento GitHub ignorado';\n    descripcion = \"Evento pull_request/\" + action + \" no se procesa en este workflow.\";\n  }\n} else if (event === 'push') {\n  const ref = body.ref || '';\n  branch = ref.replace('refs/heads/', '') || ref;\n  const commits = Array.isArray(body.commits) ? body.commits : [];\n  const commitCount = commits.length;\n  url = body.compare || url;\n\n  if (branch === 'main' || branch === 'master') {\n    ignored = true;\n    tipo = 'github_push_main_ignored';\n    titulo = 'Push principal ignorado';\n    descripcion = actor + \" hizo push a \" + branch + \" (\" + commitCount + \" commits). Lo gestiona Workflow 3 Delta Detector.\";\n  } else {\n    tipo = 'github_push_branch';\n    titulo = 'Push en rama de trabajo';\n    descripcion = actor + \" hizo push a \" + branch + \" (\" + commitCount + \" commits).\";\n  }\n} else {\n  ignored = true;\n  titulo = 'Evento GitHub ignorado';\n  descripcion = \"Evento \" + (event || \"desconocido\") + \" no se procesa en este workflow.\";\n}\n\nconst detalle = {\n  event,\n  action,\n  repo,\n  actor,\n  branch,\n  pr_number: prNumber,\n  url,\n  received_at: new Date().toISOString()\n};\n\nconst discord_content = \"[PetSafe/GitHub] \" + titulo + \"\\n\" + descripcion + (url ? \"\\n\" + url : \"\");\n\nreturn [{\n  json: {\n    source: 'github',\n    ignored,\n    tipo,\n    titulo,\n    descripcion,\n    detalle,\n    detalle_json: JSON.stringify(detalle || {}),\n    discord_content\n  }\n}];"
+      },
+      "id": "703c1bdc-38f2-4f00-8c50-2da72a80e324",
+      "name": "Normalizar Evento GitHub",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1744,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "if-github-not-ignored",
+              "leftValue": "={{ $json.ignored }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e7dbf5fb-96b9-4a74-8abe-4ed9e3c57029",
+      "name": "IF Evento GitHub Relevante",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1520,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "id": "9b8ff32e-8fa6-4c7d-bdb2-2fabdcc301ab",
+      "name": "Discord Evento GitHub",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1248,
+        48
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO eventos_detectados (tipo, descripcion, detalle, notificado) VALUES ('{{ ($json.tipo || \"github_evento\").replace(/'/g, \"''\") }}', '{{ ($json.descripcion || \"\").replace(/'/g, \"''\") }}', '{{ ($json.detalle_json || \"{}\").replace(/'/g, \"''\") }}'::jsonb, TRUE);",
+        "options": {}
+      },
+      "id": "1c231246-a553-4c00-a971-da8b75dd156c",
+      "name": "PG Insert Evento GitHub",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -1232,
+        -128
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok (github procesado)",
+        "options": {}
+      },
+      "id": "073de830-b87e-4ca9-b551-2971812a613c",
+      "name": "Resp GitHub Procesado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -1232,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok (github ignorado)",
+        "options": {}
+      },
+      "id": "960ee257-c5bf-430f-9560-2dc19c9e6211",
+      "name": "Resp GitHub Ignorado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -1248,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "if-es-ayuda",
+              "leftValue": "={{ $json.tipo === 'ayuda' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b9b9ae7e-086c-47be-a946-8ff24a1476ca",
+      "name": "IF Es Ayuda",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "if-es-error",
+              "leftValue": "={{ $json.tipo === 'error' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7205047b-17e0-4389-968f-0b462bdfe6b8",
+      "name": "IF Es Error",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "if-es-reporte",
+              "leftValue": "={{ $json.tipo === 'reporte' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6ed6b139-8865-4c6e-864a-dea59f7cabe2",
+      "name": "IF Es Reporte",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "if-es-kpis",
+              "leftValue": "={{ $json.tipo === 'kpis' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d9921037-efde-4de5-8e39-8f5433a5dc81",
+      "name": "IF Es KPIs",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        816
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Discord Webhook": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router Comandos": {
+      "main": [
+        [
+          {
+            "node": "IF Es Ayuda",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Tipo": {
+      "main": [
+        [
+          {
+            "node": "Trigger Reporte PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres Ultimo KPI",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Trello Cards",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trello Lists",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trello Members",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Back Commits",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Front Commits",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Back PRs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Front PRs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Historial",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Recomendaciones",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Hitos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resp Ayuda",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resp Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Reporte PDF": {
+      "main": [
+        [
+          {
+            "node": "Resp Reporte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear KPIs": {
+      "main": [
+        [
+          {
+            "node": "Resp KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trello Cards": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trello Lists": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Trello Members": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "GH Back Commits": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "GH Front Commits": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "GH Back PRs": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "GH Front PRs": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 6
+          }
+        ]
+      ]
+    },
+    "PG Historial": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 7
+          }
+        ]
+      ]
+    },
+    "PG Recomendaciones": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 8
+          }
+        ]
+      ]
+    },
+    "Merge Chat": {
+      "main": [
+        [
+          {
+            "node": "IF Necesita Diff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Necesita Diff": {
+      "main": [
+        [
+          {
+            "node": "Diff Backend",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Diff Frontend",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Construir Contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Diff Backend": {
+      "main": [
+        [
+          {
+            "node": "Construir Contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Diff Frontend": {
+      "main": [
+        [
+          {
+            "node": "Construir Contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Contexto": {
+      "main": [
+        [
+          {
+            "node": "Gemini Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Chat": {
+      "main": [
+        [
+          {
+            "node": "Guardar Q&A",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar Q&A": {
+      "main": [
+        [
+          {
+            "node": "Resp Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Router Comandos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Ultimo KPI": {
+      "main": [
+        [
+          {
+            "node": "Formatear KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PG Hitos": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 9
+          }
+        ]
+      ]
+    },
+    "Trello Event Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Evento Trello",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Evento Trello": {
+      "main": [
+        [
+          {
+            "node": "IF Evento Trello Relevante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Evento Trello Relevante": {
+      "main": [
+        [
+          {
+            "node": "Discord Evento Trello",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Insert Evento Trello",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Resp Trello Procesado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resp Trello Ignorado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub Event Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Evento GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Evento GitHub": {
+      "main": [
+        [
+          {
+            "node": "IF Evento GitHub Relevante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Evento GitHub Relevante": {
+      "main": [
+        [
+          {
+            "node": "Discord Evento GitHub",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Insert Evento GitHub",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Resp GitHub Procesado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resp GitHub Ignorado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Es Ayuda": {
+      "main": [
+        [
+          {
+            "node": "Resp Ayuda",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF Es Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Es Error": {
+      "main": [
+        [
+          {
+            "node": "Resp Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF Es Reporte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Es Reporte": {
+      "main": [
+        [
+          {
+            "node": "Trigger Reporte PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF Es KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Es KPIs": {
+      "main": [
+        [
+          {
+            "node": "Postgres Ultimo KPI",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Trello Cards",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trello Lists",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trello Members",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Back Commits",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Front Commits",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Back PRs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Front PRs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Historial",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Recomendaciones",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Hitos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e4da55d4-28e9-408e-9b9a-e4c15890ccd0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "ePBXQgBFS8BKvIPS",
+  "tags": []
+}

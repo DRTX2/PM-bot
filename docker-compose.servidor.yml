@@ -1,0 +1,67 @@
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: agente_db
+    environment:
+      POSTGRES_USER: agente
+      POSTGRES_PASSWORD: agente123
+      POSTGRES_DB: proyecto_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agente -d proyecto_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  n8n:
+    image: n8nio/n8n
+    container_name: n8n
+    ports:
+      - "5678:5678"
+    env_file:
+      - .env
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin123
+      - N8N_HOST=${SERVER_HOST:-209.126.86.27}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - N8N_SECURE_COOKIE=false
+      - WEBHOOK_URL=http://${SERVER_HOST:-209.126.86.27}:5678/
+      - NODE_ENV=production
+      - TZ=America/Guayaquil
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      # n8n usa Postgres como base interna (workflows, credenciales, ejecuciones)
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=proyecto_db
+      - DB_POSTGRESDB_USER=agente
+      - DB_POSTGRESDB_PASSWORD=agente123
+      - DB_POSTGRESDB_SCHEMA=n8n
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gotenberg:
+        condition: service_started
+    restart: always
+
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: gotenberg
+    ports:
+      - "3000:3000"
+    restart: always
+
+volumes:
+  postgres_data:
+  n8n_data:

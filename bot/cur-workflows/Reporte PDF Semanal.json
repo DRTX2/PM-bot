@@ -1,0 +1,877 @@
+{
+  "name": "Reporte PDF Semanal",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 18 * * 5"
+            }
+          ]
+        }
+      },
+      "id": "68ead5d2-d8a4-460b-a166-a6516ea48d5a",
+      "name": "Schedule Viernes 18:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -480,
+        208
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "3de68882-d036-43e8-b480-887c34112859",
+      "name": "On-Demand Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "w4c01",
+              "name": "GITHUB_TOKEN",
+              "value": "={{ $env.GITHUB_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "w4c01b",
+              "name": "GITHUB_TOKEN_BACKEND",
+              "value": "={{ $env.GITHUB_TOKEN_BACKEND || $env.GITHUB_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "w4c01f",
+              "name": "GITHUB_TOKEN_FRONTEND",
+              "value": "={{ $env.GITHUB_TOKEN_FRONTEND || $env.GITHUB_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "w4c02",
+              "name": "GITHUB_OWNER_BACKEND",
+              "value": "={{ $env.GITHUB_OWNER_BACKEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w4c02f",
+              "name": "GITHUB_OWNER_FRONTEND",
+              "value": "={{ $env.GITHUB_OWNER_FRONTEND || $env.GITHUB_OWNER || $env.GITHUB_OWNER_BACKEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w4c03",
+              "name": "GITHUB_REPO_BACKEND",
+              "value": "={{ $env.GITHUB_REPO_BACKEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w4c04",
+              "name": "GITHUB_REPO_FRONTEND",
+              "value": "={{ $env.GITHUB_REPO_FRONTEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w4c05",
+              "name": "GEMINI_API_KEY",
+              "value": "={{ $env.GEMINI_API_KEY }}",
+              "type": "string"
+            },
+            {
+              "id": "w4c06",
+              "name": "DISCORD_WEBHOOK_URL",
+              "value": "={{ $env.DISCORD_WEBHOOK_URL }}",
+              "type": "string"
+            },
+            {
+              "id": "w4c07",
+              "name": "GOTENBERG_URL",
+              "value": "={{ $env.GOTENBERG_URL || 'http://gotenberg:3000' }}",
+              "type": "string"
+            },
+            {
+              "id": "w4c08",
+              "name": "SMTP_FROM_NAME",
+              "value": "={{ $env.SMTP_FROM_NAME }}",
+              "type": "string"
+            },
+            {
+              "id": "w4c09",
+              "name": "SMTP_FROM_EMAIL",
+              "value": "={{ $env.SMTP_FROM_EMAIL }}",
+              "type": "string"
+            },
+            {
+              "id": "w4c10",
+              "name": "rango_dias",
+              "value": "={{ $json.rango_dias || 7 }}",
+              "type": "number"
+            },
+            {
+              "id": "w4c11",
+              "name": "fecha_desde",
+              "value": "={{ new Date(Date.now() - ($json.rango_dias || 7) * 86400000).toISOString() }}",
+              "type": "string"
+            },
+            {
+              "id": "w4c12",
+              "name": "fecha_hoy",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5420948c-f6db-49bc-98db-180693c3803b",
+      "name": "Configuración",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -240,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT fecha_ejecucion, hay_problemas, total_tareas, tareas_completadas, tareas_vencidas, progreso_pct, cantidad_problemas, severidad_maxima, kpis_json FROM analisis_proyecto WHERE fecha_ejecucion >= NOW() - ($1 || ' days')::interval ORDER BY fecha_ejecucion DESC;",
+        "options": {
+          "queryReplacement": "={{ $node[\"Configuración\"].json.rango_dias }}"
+        }
+      },
+      "id": "653d4ec0-3b8a-46ff-a4ff-42ed02d6ceca",
+      "name": "PG Análisis 7d",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        -400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM analisis_proyecto ORDER BY fecha_ejecucion DESC LIMIT 1;",
+        "options": {}
+      },
+      "id": "11090c98-1840-40f5-ad3f-763d49593cc2",
+      "name": "PG Último Análisis",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        -208
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT DISTINCT ON (card_id) card_id, card_nombre, lista_nombre, miembro_nombre, fecha_vencimiento FROM estado_tareas WHERE completada = FALSE AND fecha_vencimiento < NOW() ORDER BY card_id, fecha DESC;",
+        "options": {}
+      },
+      "id": "6b8dbf1b-697f-42e6-b587-f130fe096efa",
+      "name": "PG Tareas Vencidas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        -16
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT nombre, tipo, fecha_inicio, fecha_fin, responsable, completado FROM hitos_proyecto WHERE fecha_fin >= CURRENT_DATE AND fecha_fin <= CURRENT_DATE + INTERVAL '30 days' ORDER BY fecha_fin ASC;",
+        "options": {}
+      },
+      "id": "d95072b4-3879-410c-aa18-0a07875e740a",
+      "name": "PG Hitos Próximos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        176
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT fecha, tipo, descripcion FROM eventos_detectados WHERE fecha >= NOW() - ($1 || ' days')::interval ORDER BY fecha DESC LIMIT 100;",
+        "options": {
+          "queryReplacement": "={{ $node[\"Configuración\"].json.rango_dias }}"
+        }
+      },
+      "id": "be4bdee6-75ac-4543-9ab4-a3369b79c4af",
+      "name": "PG Eventos 7d",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        336
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT fecha, tipo, descripcion FROM recomendaciones WHERE aplicada = FALSE AND tipo = 'alerta_ia' AND fecha >= NOW() - ($1 || ' days')::interval ORDER BY fecha DESC LIMIT 20;",
+        "options": {
+          "queryReplacement": "={{ $node[\"Configuración\"].json.rango_dias }}"
+        }
+      },
+      "id": "1c911f98-7ec7-4ace-9342-5b349f207a1c",
+      "name": "PG Recomendaciones",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        512
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT email, nombre FROM destinatarios_reporte WHERE activo = TRUE;",
+        "options": {}
+      },
+      "id": "719f1260-6be5-4f59-b0c4-aec03c9ad590",
+      "name": "PG Destinatarios",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        672
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuración\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Configuración\"].json.GITHUB_REPO_BACKEND }}/commits",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "since",
+              "value": "={{ $node[\"Configuración\"].json.fecha_desde }}"
+            },
+            {
+              "name": "per_page",
+              "value": "100"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Configuración\"].json.GITHUB_TOKEN_BACKEND || $node[\"Configuración\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0146c535-98fa-422e-a9ac-952edfc2e310",
+      "name": "GitHub Back 7d",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuración\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Configuración\"].json.GITHUB_REPO_FRONTEND }}/commits",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "since",
+              "value": "={{ $node[\"Configuración\"].json.fecha_desde }}"
+            },
+            {
+              "name": "per_page",
+              "value": "100"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Configuración\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Configuración\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "82bfe3bc-3b22-4a66-9470-d8d609112440",
+      "name": "GitHub Front 7d",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        976
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 9
+      },
+      "id": "e1941b0d-c1a8-498e-9669-e80910b4d7ff",
+      "name": "Merge Reporte",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        288,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process heterogeneous array from Merge node\nconst items = $input.all().map(i => i.json);\n\nlet analisis7d = [], ultimo = null, vencidas = [], hitos = [], eventos = [], recos = [], destinatarios = [], backCommits = [], frontCommits = [];\n\n// Helper: detect object type by structure\nconst detectType = (obj) => {\n  if (!obj || typeof obj !== 'object') return 'unknown';\n  \n  if (obj.progreso_pct !== undefined) return 'analisis';\n  if (obj.card_id && obj.card_nombre) return 'tarea';\n  if (obj.email && obj.nombre) return 'destinatario';\n  if (obj.sha && obj.commit) return 'commit';\n  // CORRECCIÓN AQUÍ:\n  if (obj.fecha_fin && obj.tipo && !obj.card_id) return 'hito'; \n  if (obj.descripcion && obj.tipo) {\n      // Diferenciar entre evento y recomendación por contenido o tabla si es posible\n      return obj.aplicada !== undefined ? 'recomendacion' : 'evento';\n  }\n  \n  return 'unknown';\n};\n\n// Segregate: Merge data is heterogeneous array\nfor (const obj of items) {\n  const type = detectType(obj);\n  \n  if (type === 'analisis') {\n    analisis7d.push(obj);\n  } else if (type === 'tarea') {\n    vencidas.push(obj);\n  } else if (type === 'destinatario') {\n    destinatarios.push(obj);\n  } else if (type === 'commit') {\n    // Guess backend vs frontend by repo in commit message or branch hint\n    const msg = obj.commit?.message || '';\n    if (msg.toLowerCase().includes('front') || msg.toLowerCase().includes('ui') || msg.toLowerCase().includes('component')) {\n      frontCommits.push(obj);\n    } else {\n      backCommits.push(obj);\n    }\n  } else if (type === 'hito') {\n    hitos.push(obj);\n  } else if (type === 'recomendacion') {\n    recos.push(obj);\n  } else if (type === 'evento') {\n    eventos.push(obj);\n  }\n}\n\n// Sort análisis by date DESC to get latest first\nanalisis7d.sort((a, b) => new Date(b.fecha_ejecucion) - new Date(a.fecha_ejecucion));\nultimo = analisis7d[0] || {};\n\n// Parse KPIs if string\nconst k = ultimo.kpis_json || {};\nconst kpis = typeof k === 'string' ? JSON.parse(k) : k;\n\n// Calculate trend\nconst tendencia = analisis7d.length > 1 ? {\n  progreso_inicial: analisis7d[analisis7d.length - 1]?.progreso_pct || 0,\n  progreso_final: analisis7d[0]?.progreso_pct || 0,\n  delta: (analisis7d[0]?.progreso_pct || 0) - (analisis7d[analisis7d.length - 1]?.progreso_pct || 0),\n  ejecuciones: analisis7d.length\n} : null;\n\nconst prompt = `Genera un RESUMEN EJECUTIVO del reporte semanal del proyecto PetSafe (sistema veterinario). Usa tono profesional en español. Estructura:\n\n1. ESTADO GENERAL (1 párrafo, 3-4 frases)\n2. LOGROS DE LA SEMANA (bullets, máx 4)\n3. RIESGOS CRÍTICOS (bullets con prioridad A/M/B, máx 4)\n4. PRÓXIMOS PASOS (bullets accionables, máx 4)\n\nDatos:\n${JSON.stringify({\n  kpis,\n  tendencia,\n  ultimo: {\n    progreso_pct: ultimo.progreso_pct,\n    total_tareas: ultimo.total_tareas,\n    tareas_completadas: ultimo.tareas_completadas,\n    tareas_vencidas: ultimo.tareas_vencidas,\n    cantidad_problemas: ultimo.cantidad_problemas\n  },\n  vencidas_count: vencidas.length,\n  hitos_proximos: hitos.slice(0, 3),\n  commits: { back: backCommits.length, front: frontCommits.length },\n  eventos_count: eventos.length\n})}\n\nResponde SOLO con HTML válido usando <h3>, <p>, <ul>, <li>, <strong>. Sin backticks ni markdown.`;\n\nconst data = {\n  fecha_reporte: new Date().toISOString(),\n  fecha_reporte_local: new Date().toLocaleString('es-EC', { timeZone: 'America/Guayaquil' }),\n  rango_dias: $node['Configuración'].json.rango_dias,\n  ultimo_analisis: ultimo,\n  kpis,\n  tendencia,\n  analisis_historia: analisis7d,\n  tareas_vencidas: vencidas,\n  hitos_proximos: hitos,\n  eventos_recientes: eventos,\n  recomendaciones_pendientes: recos,\n  destinatarios: destinatarios.map(d => d.email),\n  destinatarios_info: destinatarios,\n  commits_back: backCommits.map(c => ({ sha: (c.sha || '').substring(0,7), autor: c.commit?.author?.name, fecha: c.commit?.author?.date, mensaje: (c.commit?.message || '').split('\\n')[0] })),\n  commits_front: frontCommits.map(c => ({ sha: (c.sha || '').substring(0,7), autor: c.commit?.author?.name, fecha: c.commit?.author?.date, mensaje: (c.commit?.message || '').split('\\n')[0] })),\n  total_commits_back: backCommits.length,\n  total_commits_front: frontCommits.length,\n  gemini_key: $env.GEMINI_API_KEY,\n  prompt\n};\n\nreturn [{ json: data }];\n"
+      },
+      "id": "efdb0de7-c496-4fe4-ba2c-6ea3fcba3308",
+      "name": "Build Report Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key={{ $json.gemini_key }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ contents: [{ parts: [{ text: $json.prompt }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 1200 } }) }}",
+        "options": {}
+      },
+      "id": "ed405250-5b15-4453-9b13-1c0581797bbb",
+      "name": "Gemini Executive Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const gem = $json;\nconst data = $node['Build Report Data'].json;\nconst summaryHtml = gem?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || \n  `<p><strong>Estado del proyecto:</strong> Progreso ${data.ultimo_analisis.progreso_pct || 0}% · Equipo activo · ${data.tareas_vencidas.length} tareas vencidas · Proyección: ${data.kpis.proyeccion_a_tiempo ? 'A tiempo' : 'En riesgo'}</p>\n   <p><strong>Focus:</strong> ${data.kpis.dias_hasta_fin} días hasta fin. Velocidad ${data.kpis.velocidad_tareas_por_dia || 0}/día.</p>`; \n\nconst fmt = (d) => d ? new Date(d).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }) : '-';\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));\n\nconst k = data.kpis || {};\nconst rowsKpis = [\n  ['Progreso general', `${data.ultimo_analisis.progreso_pct || 0}%`],\n  ['Velocidad (tareas/sem)', k.velocidad_semana ?? '-'],\n  ['% Tareas a tiempo', (k.pct_a_tiempo != null ? k.pct_a_tiempo + '%' : '-')],\n  ['Commits/día (back)', k.commits_por_dia_back ?? '-'],\n  ['Commits/día (front)', k.commits_por_dia_front ?? '-'],\n  ['PR open time (h) back', k.pr_open_time_back ?? '-'],\n  ['PR open time (h) front', k.pr_open_time_front ?? '-'],\n  ['PR merge ratio', k.pr_merge_ratio ?? '-'],\n  ['Días restantes', k.dias_hasta_fin ?? '-'],\n  ['Proyección a tiempo', k.proyeccion_a_tiempo ? 'Sí' : 'En riesgo']\n];\n\nconst trHtml = (arr) => arr.map(r => `<tr><td>${esc(r[0])}</td><td><strong>${esc(r[1])}</strong></td></tr>`).join('');\n\nconst vencidasHtml = data.tareas_vencidas.length ? `<table><thead><tr><th>Tarea</th><th>Lista</th><th>Responsable</th><th>Vencida el</th></tr></thead><tbody>${data.tareas_vencidas.map(v => `<tr><td>${esc(v.card_nombre)}</td><td>${esc(v.lista_nombre)}</td><td>${esc(v.miembro_nombre || '-')}</td><td>${fmt(v.fecha_vencimiento)}</td></tr>`).join('')}</tbody></table>` : '<p><em>Sin tareas vencidas.</em></p>';\n\nconst hitosHtml = data.hitos_proximos.length ? `<table><thead><tr><th>Hito</th><th>Tipo</th><th>Fecha</th><th>Responsable</th></tr></thead><tbody>${data.hitos_proximos.map(h => `<tr><td>${esc(h.nombre)}</td><td>${esc(h.tipo)}</td><td>${fmt(h.fecha_fin)}</td><td>${esc(h.responsable || '-')}</td></tr>`).join('')}</tbody></table>` : '';\n\nconst commitsHtml = (arr, titulo) => {\n  if (!arr.length) return '';\n  const lines = arr.slice(0, 10).map(c => {\n    const author = esc(c.autor).split(' ')[0];\n    const msg = esc(c.mensaje).slice(0, 70);\n    const date = fmt(c.fecha);\n    return `<div style=\"margin-bottom:3mm; font-size:9.5pt;\"><code>${esc(c.sha)}</code> ${author}: ${msg} · ${date}</div>`;\n  }).join('');\n  return `<h4>${titulo}</h4>${lines}`;\n};\n\nconst eventosHtml = data.eventos_recientes.length ? `<ul>${data.eventos_recientes.slice(0, 15).map(e => `<li>${fmt(e.fecha)} — <strong>${esc(e.tipo)}</strong>: ${esc(e.descripcion)}</li>`).join('')}</ul>` : '';\n\nconst recosHtml = data.recomendaciones_pendientes.length ? `<ul>${data.recomendaciones_pendientes.slice(0, 10).map(r => `<li>${fmt(r.fecha)} — ${esc((r.descripcion || '').substring(0, 300))}</li>`).join('')}</ul>` : '';\n\nconst tendenciaHtml = data.tendencia ? `<p>Progreso: <strong>${data.tendencia.progreso_inicial}%</strong> → <strong>${data.tendencia.progreso_final}%</strong> (Δ ${data.tendencia.delta >= 0 ? '+' : ''}${data.tendencia.delta} pts · ${data.tendencia.ejecuciones} ejecuciones)</p>` : '<p><em>Datos insuficientes para tendencia.</em></p>';\n\nconst html = `<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n<meta charset=\"utf-8\"/>\n<title>Reporte Semanal PetSafe</title>\n<style>\n  @page { margin: 22mm 18mm; }\n  body { font-family: 'Helvetica', Arial, sans-serif; color: #222; font-size: 11pt; line-height: 1.4; }\n  .portada { text-align: center; padding: 40mm 0 30mm; border-bottom: 3px solid #1e40af; margin-bottom: 20mm; }\n  .portada h1 { color: #1e40af; font-size: 28pt; margin: 0 0 6mm; }\n  .portada h2 { color: #555; font-size: 14pt; font-weight: normal; margin: 0 0 10mm; }\n  .portada .meta { color: #777; font-size: 10pt; }\n  h2 { color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 2mm; margin-top: 12mm; font-size: 14pt; }\n  h3 { color: #333; font-size: 12pt; margin-top: 6mm; }\n  h4 { color: #555; font-size: 11pt; margin-top: 4mm; }\n  table { width: 100%; border-collapse: collapse; margin: 4mm 0; font-size: 10pt; }\n  th { background: #1e40af; color: white; padding: 2mm; text-align: left; }\n  td { padding: 2mm; border-bottom: 1px solid #ddd; }\n  tr:nth-child(even) td { background: #f7f7fb; }\n  ul { margin: 2mm 0; padding-left: 6mm; }\n  li { margin-bottom: 1mm; }\n  code { background: #eef; padding: 0 1mm; border-radius: 2px; font-size: 9pt; }\n  .footer { margin-top: 20mm; padding-top: 3mm; border-top: 1px solid #ccc; color: #888; font-size: 9pt; text-align: center; }\n  .badge { display: inline-block; padding: 1mm 3mm; border-radius: 3px; font-size: 9pt; font-weight: bold; }\n  .badge-ok { background: #16a34a; color: white; }\n  .badge-warn { background: #eab308; color: white; }\n  .badge-err { background: #dc2626; color: white; }\n</style>\n</head>\n<body>\n<div class=\"portada\">\n  <h1>🐾 PetSafe</h1>\n  <h2>Reporte Semanal de Gestión</h2>\n  <div class=\"meta\">Generado: ${esc(data.fecha_reporte_local)}<br/>Rango: últimos ${data.rango_dias} días</div>\n</div>\n\n<h2>1. Resumen Ejecutivo</h2>\n${summaryHtml}\n\n<h2>2. KPIs del Proyecto</h2>\n<table><thead><tr><th>Indicador</th><th>Valor</th></tr></thead><tbody>${trHtml(rowsKpis)}</tbody></table>\n\n<h2>3. Tendencia Semanal</h2>\n${tendenciaHtml}\n\n<h2>4. Tareas Vencidas</h2>\n${vencidasHtml}\n\n${data.hitos_proximos.length ? '<h2>5. Hitos Próximos (30 días)</h2>' : ''}\n${hitosHtml}\n\n<h2>6. Actividad Git</h2>\n${commitsHtml(data.commits_back, 'Backend')}\n${commitsHtml(data.commits_front, 'Frontend')}\n\n${data.eventos_recientes.length ? '<h2>7. Eventos Detectados</h2>' : ''}\n${eventosHtml}\n\n${data.recomendaciones_pendientes.length ? '<h2>8. Recomendaciones Pendientes (IA)</h2>' : ''}\n${recosHtml}\n\n<div class=\"footer\">🤖 Reporte generado automáticamente por n8n + Gemini · PetSafe PM Assistant</div>\n</body>\n</html>`;\n\nconst fileName = `reporte-petsafe-${new Date().toISOString().slice(0,10)}.html`;\nconst summaryText = `Reporte semanal PetSafe: progreso ${data.ultimo_analisis.progreso_pct || 0}%, ${data.tareas_vencidas.length} tareas vencidas, ${data.total_commits_back + data.total_commits_front} commits, ${data.eventos_recientes.length} eventos.`;\n\nreturn [{\n  json: {\n    summaryText,\n    destinatarios: data.destinatarios,\n    destinatarios_info: data.destinatarios_info,\n    rango_dias: data.rango_dias,\n    fecha_reporte_local: data.fecha_reporte_local\n  },\n  binary: {\n    data: {\n      data: Buffer.from(html).toString('base64'),\n      mimeType: 'text/html',\n      fileName: 'index.html'\n    }\n  }\n}];\n"
+      },
+      "id": "bf743b83-2c23-447b-9de9-210706989682",
+      "name": "Build HTML + Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $node[\"Configuración\"].json.GOTENBERG_URL }}/forms/chromium/convert/html",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "files",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "pdf"
+            }
+          }
+        }
+      },
+      "id": "412b4d05-8437-4540-b535-2c3e989f5dda",
+      "name": "Gotenberg HTML→PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1168,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const meta = $node['Build HTML + Binary'].json;\nconst fileName = `reporte-petsafe-${new Date().toISOString().slice(0,10)}.pdf`;\nconst pdfBin = $binary.pdf;\nreturn [{\n  json: { ...meta, fileName },\n  binary: { pdf: { ...pdfBin, fileName, mimeType: 'application/pdf' } }\n}];\n"
+      },
+      "id": "ea87512a-beb2-4e83-95cb-86697ec222bd",
+      "name": "Rename PDF",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1392,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $node[\"Configuración\"].json.DISCORD_WEBHOOK_URL }}",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "payload_json",
+              "value": "={{ JSON.stringify({ content: '📄 **Reporte semanal PetSafe**\\n' + $json.summaryText, username: 'PetSafe Reports' }) }}"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "pdf"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "724b0df5-054d-48af-a989-96311ec7c48f",
+      "name": "Discord Upload PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1632,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $node[\"Configuración\"].json.SMTP_FROM_NAME }} <{{ $node[\"Configuración\"].json.SMTP_FROM_EMAIL }}>",
+        "toEmail": "={{ $json.destinatarios.join(',') }}",
+        "subject": "=📊 Reporte Semanal PetSafe — {{ $json.fecha_reporte_local }}",
+        "html": "=<p>Hola,</p><p>Adjunto el reporte semanal de gestión del proyecto <strong>PetSafe</strong>.</p><p><em>{{ $json.summaryText }}</em></p><p>Rango: últimos {{ $json.rango_dias }} días.</p><p>— PetSafe PM Assistant</p>",
+        "options": {
+          "attachments": "pdf"
+        }
+      },
+      "id": "b347c5a1-d17c-42b0-9693-ba33e5bb860d",
+      "name": "SMTP Enviar Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1632,
+        592
+      ],
+      "webhookId": "a4d370cb-12c7-4c71-a6d4-09a15504d5fa",
+      "credentials": {
+        "smtp": {
+          "id": "a8FFW4GlCOssGKKe",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO reportes_generados (tipo, rango_dias, enviado_discord, enviado_email, destinatarios, resumen) VALUES ($1, $2, TRUE, TRUE, string_to_array($3, '|'), $4);",
+        "options": {
+          "queryReplacement": "={{ [\n  'semanal',\n  Number($json.rango_dias || 7),\n  ($json.destinatarios || []).join('|'),\n  String($json.summaryText || '').replace(/,/g, ';')\n] }}"
+        }
+      },
+      "id": "cc0fb0f0-979f-428d-bc29-890adb838388",
+      "name": "PG Log Reporte",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1632,
+        752
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "__rl": true,
+          "value": "1494441816911773737",
+          "mode": "list",
+          "cachedResultName": "Petsafe",
+          "cachedResultUrl": "https://discord.com/channels/1494441816911773737"
+        },
+        "channelId": {
+          "__rl": true,
+          "value": "1494442482673651933",
+          "mode": "list",
+          "cachedResultName": "alertas-proyecto",
+          "cachedResultUrl": "https://discord.com/channels/1494441816911773737/1494442482673651933"
+        },
+        "content": "={{ JSON.stringify({ content: '📄 **Reporte semanal PetSafe**\\n' + $json.summaryText, username: 'PetSafe Reports' }) }}",
+        "options": {},
+        "embeds": {
+          "values": []
+        },
+        "files": {
+          "values": [
+            {
+              "inputFieldName": "pdf"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1632,
+        240
+      ],
+      "id": "85e8d0b9-ccec-41d6-b3c9-a2b09467eece",
+      "name": "Discord Upload PDF2",
+      "webhookId": "53dccc43-33ee-4262-9b5f-977452f39ccf",
+      "credentials": {
+        "discordBotApi": {
+          "id": "zFc4flszXSfcReRJ",
+          "name": "Discord Bot account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Viernes 18:00": {
+      "main": [
+        [
+          {
+            "node": "Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "On-Demand Trigger": {
+      "main": [
+        [
+          {
+            "node": "Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuración": {
+      "main": [
+        [
+          {
+            "node": "PG Análisis 7d",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Último Análisis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Tareas Vencidas",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Hitos Próximos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Eventos 7d",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Recomendaciones",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Destinatarios",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitHub Back 7d",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitHub Front 7d",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PG Análisis 7d": {
+      "main": [
+        [
+          {
+            "node": "Merge Reporte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PG Último Análisis": {
+      "main": [
+        [
+          {
+            "node": "Merge Reporte",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "PG Tareas Vencidas": {
+      "main": [
+        [
+          {
+            "node": "Merge Reporte",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "PG Hitos Próximos": {
+      "main": [
+        [
+          {
+            "node": "Merge Reporte",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "PG Eventos 7d": {
+      "main": [
+        [
+          {
+            "node": "Merge Reporte",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "PG Recomendaciones": {
+      "main": [
+        [
+          {
+            "node": "Merge Reporte",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "PG Destinatarios": {
+      "main": [
+        [
+          {
+            "node": "Merge Reporte",
+            "type": "main",
+            "index": 6
+          }
+        ]
+      ]
+    },
+    "GitHub Back 7d": {
+      "main": [
+        [
+          {
+            "node": "Merge Reporte",
+            "type": "main",
+            "index": 7
+          }
+        ]
+      ]
+    },
+    "GitHub Front 7d": {
+      "main": [
+        [
+          {
+            "node": "Merge Reporte",
+            "type": "main",
+            "index": 8
+          }
+        ]
+      ]
+    },
+    "Merge Reporte": {
+      "main": [
+        [
+          {
+            "node": "Build Report Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report Data": {
+      "main": [
+        [
+          {
+            "node": "Gemini Executive Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Executive Summary": {
+      "main": [
+        [
+          {
+            "node": "Build HTML + Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build HTML + Binary": {
+      "main": [
+        [
+          {
+            "node": "Gotenberg HTML→PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gotenberg HTML→PDF": {
+      "main": [
+        [
+          {
+            "node": "Rename PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rename PDF": {
+      "main": [
+        [
+          {
+            "node": "Discord Upload PDF",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SMTP Enviar Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Log Reporte",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Discord Upload PDF2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discord Upload PDF": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "51acfa1f-a5aa-4fd9-9f04-f9877166160b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "joddDTQkcp6U7mT9",
+  "tags": []
+}

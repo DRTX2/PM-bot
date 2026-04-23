@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: chatwoot_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: chatwoot
+      POSTGRES_USER: chatwoot
+      POSTGRES_PASSWORD: chatwoot
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:latest
+    container_name: chatwoot_redis
+    restart: unless-stopped
+
+  chatwoot:
+    image: chatwoot/chatwoot:v3.9.0
+    container_name: chatwoot
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "3000:3000"
+    command: bundle exec rails server -b 0.0.0.0 -p 3000
+    environment:
+      RAILS_ENV: production
+      NODE_ENV: production
+      INSTALLATION_ENV: docker
+
+      POSTGRES_HOST: postgres
+      POSTGRES_DATABASE: chatwoot
+      POSTGRES_USERNAME: chatwoot
+      POSTGRES_PASSWORD: chatwoot
+
+      REDIS_URL: redis://redis:6379
+
+      SECRET_KEY_BASE: d3f9b7a6c8e14c0b9f8a2e7d4c1a6b5e9f0a8c7d6e5b4a3c2f1e0d9a8b7c6e5
+      FRONTEND_URL: http://localhost:3000
+      DEFAULT_LOCALE: es
+    volumes:
+      - chatwoot_data:/app/storage
+
+volumes:
+  postgres_data:
+  chatwoot_data:
+networks:
+  default:
+      name: automatizacion
+      external: true
