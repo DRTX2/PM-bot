@@ -289,62 +289,46 @@
       ]
     },
     {
-      "parameters": {
-        "url": "=https://api.trello.com/1/boards/{{ $node[\"Config\"].json.TRELLO_BOARD_ID }}/cards",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "key",
-              "value": "={{ $node[\"Config\"].json.TRELLO_API_KEY }}"
-            },
-            {
-              "name": "token",
-              "value": "={{ $node[\"Config\"].json.TRELLO_TOKEN }}"
-            },
-            {
-              "name": "fields",
-              "value": "name,desc,due,dueComplete,idMembers,idList,dateLastActivity,labels"
-            }
-          ]
-        },
-        "options": {}
-      },
       "id": "3bf15ad0-f7c3-44da-9c6c-35138047896d",
       "name": "Trello Cards",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.trello",
+      "typeVersion": 1,
       "position": [
         -864,
         640
-      ]
+      ],
+      "parameters": {
+        "resource": "card",
+        "operation": "getAll",
+        "limit": 100
+      },
+      "credentials": {
+        "trelloApi": {
+          "id": "",
+          "name": "Trello account"
+        }
+      }
     },
     {
-      "parameters": {
-        "url": "=https://api.trello.com/1/boards/{{ $node[\"Config\"].json.TRELLO_BOARD_ID }}/lists",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "key",
-              "value": "={{ $node[\"Config\"].json.TRELLO_API_KEY }}"
-            },
-            {
-              "name": "token",
-              "value": "={{ $node[\"Config\"].json.TRELLO_TOKEN }}"
-            }
-          ]
-        },
-        "options": {}
-      },
       "id": "65970b84-efa7-49eb-8623-59e1c72789f8",
       "name": "Trello Lists",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.trello",
+      "typeVersion": 1,
       "position": [
         -864,
         720
-      ]
+      ],
+      "parameters": {
+        "resource": "list",
+        "operation": "getAll",
+        "limit": 100
+      },
+      "credentials": {
+        "trelloApi": {
+          "id": "",
+          "name": "Trello account"
+        }
+      }
     },
     {
       "parameters": {
@@ -651,7 +635,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const now = new Date();\nconst MS_PER_DAY = 86400000;\n\n/**\n * Helpers generales\n */\nfunction isValidDate(d) {\n  return d instanceof Date && !Number.isNaN(d.getTime());\n}\n\nfunction parseDate(value) {\n  if (!value) return null;\n  const d = new Date(value);\n  return isValidDate(d) ? d : null;\n}\n\nfunction safeString(value, fallback = '') {\n  return typeof value === 'string' ? value : fallback;\n}\n\nfunction safeArray(value) {\n  return Array.isArray(value) ? value : [];\n}\n\nfunction truncate(value, max) {\n  const str = safeString(value, '');\n  return str.length > max ? str.slice(0, max) : str;\n}\n\nfunction getFirstJson(nodeName, fallback = null) {\n  try {\n    const item = $(nodeName).first();\n    return item && item.json ? item.json : fallback;\n  } catch (e) {\n    return fallback;\n  }\n}\n\nfunction getAllJson(nodeName) {\n  try {\n    const items = $(nodeName).all();\n    return Array.isArray(items) ? items.map(i => i?.json || {}) : [];\n  } catch (e) {\n    return [];\n  }\n}\n\nfunction daysBetween(from, to) {\n  if (!isValidDate(from) || !isValidDate(to)) return null;\n  return Math.floor((to - from) / MS_PER_DAY);\n}\n\nfunction coalesce(...values) {\n  for (const v of values) {\n    if (v !== undefined && v !== null && v !== '') return v;\n  }\n  return null;\n}\n\n/**\n * Inputs base\n */\nconst router = getFirstJson('Router Comandos', {});\nconst config = getFirstJson('Config', {});\n\nconst pregunta = safeString(router.pregunta, '').trim();\nconst usuario = safeString(router.usuario, 'desconocido');\nconst needDiff = !!router.necesita_diff;\nconst geminiKey = safeString(config.GEMINI_API_KEY, '');\n\n/**\n * Inputs de nodos fuente\n */\nconst cards = getAllJson('Trello Cards');\nconst lists = getAllJson('Trello Lists');\nconst members = getAllJson('Trello Members');\nconst bCommits = getAllJson('GH Back Commits');\nconst fCommits = getAllJson('GH Front Commits');\nconst bPRs = getAllJson('GH Back PRs');\nconst fPRs = getAllJson('GH Front PRs');\nconst historial = getAllJson('PG Historial');\nconst recos = getAllJson('PG Recomendaciones');\nconst hitos = getAllJson('PG Hitos');\n\nlet diffBack = null;\nlet diffFront = null;\n\n// Mejora: Obtener solo el diff necesario según el comando\nif (needDiff) {\n  const repo = router.comando?.params?.repo; // 'backend', 'frontend', o undefined\n\n  // Si el comando es específico para un repo, solo pedimos ese.\n  // Si no es específico (pregunta general sobre código), pedimos ambos.\n  if (!repo || repo === 'backend') {\n    diffBack = getFirstJson('Diff Backend', null);\n  }\n  if (!repo || repo === 'frontend') {\n    diffFront = getFirstJson('Diff Frontend', null);\n  }\n}\n\n/**\n * Índices auxiliares\n */\nconst listaById = {};\nfor (const l of lists) {\n  const id = safeString(l?.id, '');\n  if (id) {\n    listaById[id] = coalesce(l?.name, 'desconocida');\n  }\n}\n\nconst memberById = {};\nfor (const m of members) {\n  const id = safeString(m?.id, '');\n  if (id) {\n    memberById[id] = coalesce(m?.fullName, m?.username, id);\n  }\n}\n\n/**\n * Normalización Trello\n */\nconst tareas = cards.map((c, index) => {\n  const dueDate = parseDate(c?.due);\n  const completada = !!c?.dueComplete;\n  const vencida = !!(dueDate && !completada && dueDate < now);\n  const diasRest = dueDate ? daysBetween(now, dueDate) : null;\n\n  const idMembers = safeArray(c?.idMembers);\n  const responsables = idMembers.map(id => memberById[id] || String(id));\n\n  return {\n    nombre: coalesce(c?.name, `tarjeta_sin_nombre_${index + 1}`),\n    lista: listaById[c?.idList] || 'desconocida',\n    completada,\n    fecha_limite: dueDate ? dueDate.toISOString() : null,\n    dias_restantes: diasRest,\n    vencida,\n    responsables,\n  };\n});\n\nconst vencidas = tareas.filter(t => t.vencida);\n\nconst porVencer = tareas.filter(t =>\n  !t.completada &&\n  !t.vencida &&\n  typeof t.dias_restantes === 'number' &&\n  t.dias_restantes >= 0 &&\n  t.dias_restantes <= 3\n);\n\n/**\n * Historial: ordenar explícitamente por fecha desc\n */\nconst historialOrdenado = [...historial].sort((a, b) => {\n  const da = parseDate(a?.fecha_ejecucion);\n  const db = parseDate(b?.fecha_ejecucion);\n  const ta = da ? da.getTime() : 0;\n  const tb = db ? db.getTime() : 0;\n  return tb - ta;\n});\n\nconst ultimoAnalisis = historialOrdenado[0] || null;\nconst kpis = ultimoAnalisis?.kpis_json ?? null;\n\n/**\n * GitHub PRs\n */\nfunction simplifyPR(p, repo) {\n  const createdAt = parseDate(p?.created_at);\n  const diasAbierto = createdAt ? daysBetween(createdAt, now) : null;\n\n  return {\n    repo,\n    numero: p?.number ?? null,\n    titulo: coalesce(p?.title, 'PR sin titulo'),\n    estado: coalesce(p?.state, 'desconocido'),\n    autor: coalesce(p?.user?.login, 'desconocido'),\n    creado: createdAt ? createdAt.toISOString() : null,\n    dias_abierto: diasAbierto,\n  };\n}\n\nconst prsAbiertos = [\n  ...bPRs.map(p => simplifyPR(p, 'backend')),\n  ...fPRs.map(p => simplifyPR(p, 'frontend')),\n].filter(p => p.estado === 'open');\n\nconst prsStale = prsAbiertos.filter(p =>\n  typeof p.dias_abierto === 'number' && p.dias_abierto > 7\n);\n\n/**\n * GitHub Commits\n */\nfunction simplifyCommit(c, repo) {\n  const message = coalesce(c?.commit?.message, '');\n  const firstLine = safeString(message, '').split('\\n')[0];\n  const authorDate = parseDate(c?.commit?.author?.date);\n\n  return {\n    repo,\n    sha: truncate(coalesce(c?.sha, ''), 7),\n    mensaje: truncate(firstLine, 300),\n    autor: coalesce(c?.commit?.author?.name, 'desconocido'),\n    fecha: authorDate ? authorDate.toISOString() : null,\n  };\n}\n\n/**\n * Diffs\n */\nfunction shapeDiff(d, repo) {\n  if (!d || typeof d !== 'object') return null;\n\n  const files = safeArray(d?.files).map(f => ({\n    archivo: coalesce(f?.filename, 'archivo_desconocido'),\n    cambios: typeof f?.changes === 'number' ? f.changes : null,\n    patch: truncate(coalesce(f?.patch, ''), 1200),\n  }));\n\n  return {\n    repo,\n    sha: truncate(coalesce(d?.sha, ''), 7),\n    mensaje: truncate(coalesce(d?.commit?.message, ''), 800),\n    autor: coalesce(d?.commit?.author?.name, 'desconocido'),\n    archivos: files,\n  };\n}\n\nlet diffInfo = null;\nif (diffBack || diffFront) {\n  diffInfo = {\n    backend: shapeDiff(diffBack, 'backend'),\n    frontend: shapeDiff(diffFront, 'frontend'),\n  };\n}\n\n/**\n * Hitos\n */\nconst hitosActivos = hitos\n  .map(h => {\n    const fechaFin = parseDate(h?.fecha_fin);\n    return {\n      nombre: coalesce(h?.nombre, 'hito_sin_nombre'),\n      tipo: coalesce(h?.tipo, 'desconocido'),\n      fecha_fin: fechaFin ? fechaFin.toISOString().slice(0, 10) : null,\n      dias_faltan: fechaFin ? daysBetween(now, fechaFin) : null,\n      responsable: coalesce(h?.responsable, 'desconocido'),\n      _fechaFinObj: fechaFin,\n    };\n  })\n  .filter(h => h._fechaFinObj && h._fechaFinObj >= now)\n  .sort((a, b) => a._fechaFinObj - b._fechaFinObj)\n  .map(({ _fechaFinObj, ...rest }) => rest);\n\n/**\n * Resúmenes saneados\n */\nconst historialResumen = historialOrdenado.map(h => {\n  const fecha = parseDate(h?.fecha_ejecucion);\n  return {\n    fecha: fecha ? fecha.toISOString() : null,\n    problemas: h?.hay_problemas ?? null,\n    vencidas: h?.tareas_vencidas ?? null,\n    progreso: h?.progreso_pct ?? null,\n  };\n});\n\nconst recomendacionesPrevias = recos\n  .map(r => {\n    const fecha = parseDate(r?.fecha);\n    return {\n      pregunta: truncate(coalesce(r?.pregunta, ''), 120),\n      respuesta: truncate(coalesce(r?.respuesta, ''), 250),\n      aplicada: r?.aplicada ?? null,\n      fecha: fecha ? fecha.toISOString() : coalesce(r?.fecha, null),\n    };\n  })\n  .filter(r => r.pregunta || r.respuesta);\n\n/**\n * Salud de datos para que Gemini sepa qué faltó\n */\nconst dataHealth = {\n  router_ok: !!pregunta,\n  config_ok: !!geminiKey,\n  fuentes: {\n    trello_cards: cards.length,\n    trello_lists: lists.length,\n    trello_members: members.length,\n    gh_back_commits: bCommits.length,\n    gh_front_commits: fCommits.length,\n    gh_back_prs: bPRs.length,\n    gh_front_prs: fPRs.length,\n    pg_historial: historial.length,\n    pg_recomendaciones: recos.length,\n    pg_hitos: hitos.length,\n    diff_backend_disponible: !!diffBack,\n    diff_frontend_disponible: !!diffFront,\n  },\n  faltantes: [\n    !pregunta ? 'Router Comandos.pregunta faltante' : null,\n    !usuario ? 'Router Comandos.usuario faltante' : null,\n    !geminiKey ? 'Config.GEMINI_API_KEY faltante' : null,\n    cards.length === 0 ? 'Sin tarjetas Trello' : null,\n    historial.length === 0 ? 'Sin historial previo' : null,\n    hitos.length === 0 ? 'Sin hitos' : null,\n    needDiff && !diffBack && !diffFront ? 'Se pidio diff pero no llegaron diffs' : null,\n  ].filter(Boolean),\n};\n\n/**\n * Contexto final\n */\nconst ctx = {\n  fecha_actual: now.toISOString(),\n  usuario,\n  salud_datos: dataHealth,\n  tareas: {\n    total: tareas.length,\n    vencidas,\n    por_vencer_3dias: porVencer,\n    completadas_count: tareas.filter(t => t.completada).length,\n    distribucion: tareas.reduce((acc, t) => {\n      acc[t.lista] = (acc[t.lista] || 0) + 1;\n      return acc;\n    }, {}),\n  },\n  github: {\n    commits_back_recientes: bCommits.slice(0, 8).map(c => simplifyCommit(c, 'backend')),\n    commits_front_recientes: fCommits.slice(0, 8).map(c => simplifyCommit(c, 'frontend')),\n    prs_abiertos: prsAbiertos,\n    prs_stale_mas_7d: prsStale,\n  },\n  kpis_ultimo_analisis: kpis,\n  hitos_proximos: hitosActivos.slice(0, 5),\n  historial_resumen: historialResumen,\n  recomendaciones_previas: recomendacionesPrevias,\n  diff_commits: diffInfo,\n};\n\nconst prompt = `Eres asistente experto de gestion del proyecto PetSafe. Copiloto del gestor para decisiones.\n\nREGLAS:\n1. SOLO respondes sobre el proyecto (Trello, GitHub, tareas, commits, PRs, equipo, riesgos, hitos, KPIs). Si no: responde EXACTAMENTE \"No es una pregunta relacionada con el proyecto.\"\n2. Espanol, texto plano, sin markdown, sin asteriscos, sin emojis, maximo 1800 caracteres.\n3. Siempre basado en datos reales del contexto. Si falta dato o una fuente vino vacia/incompleta, dilo explicitamente.\n4. Si preguntan que hacer, riesgos, decisiones: usa DIAGNOSTICO / RIESGOS / ACCIONES RECOMENDADAS.\n5. Si piden review de codigo y hay diff_commits, analiza calidad, bugs potenciales, buenas practicas.\n6. Si la pregunta es simple (ej \"hay vencidas?\"), responde directo.\n7. Considera hitos proximos y dias hasta fin para contextualizar urgencia.\n8. Menciona recomendaciones previas no aplicadas si son relevantes.\n9. No inventes datos faltantes. Si salud_datos.faltantes contiene elementos relevantes, consideralos en la respuesta.\n\nCONTEXTO (fecha ${now.toISOString()}):\n${JSON.stringify(ctx, null, 2)}\n\nPREGUNTA DE ${usuario}:\n${pregunta || 'Pregunta no disponible'}`;\n\nreturn [{\n  json: {\n    prompt,\n    gemini_key: geminiKey,\n    pregunta,\n    usuario,\n  }\n}];"
+        "jsCode": "const now = new Date();\nconst MS_PER_DAY = 86400000;\n\n/**\n * Helpers generales\n */\nfunction isValidDate(d) {\n  return d instanceof Date && !Number.isNaN(d.getTime());\n}\n\nfunction parseDate(value) {\n  if (!value) return null;\n  const d = new Date(value);\n  return isValidDate(d) ? d : null;\n}\n\nfunction safeString(value, fallback = '') {\n  return typeof value === 'string' ? value : fallback;\n}\n\nfunction safeArray(value) {\n  return Array.isArray(value) ? value : [];\n}\n\nfunction truncate(value, max) {\n  const str = safeString(value, '');\n  return str.length > max ? str.slice(0, max) : str;\n}\n\nfunction getFirstJson(nodeName, fallback = null) {\n  try {\n    const item = $(nodeName).first();\n    return item && item.json ? item.json : fallback;\n  } catch (e) {\n    return fallback;\n  }\n}\n\nfunction getAllJson(nodeName) {\n  try {\n    const items = $(nodeName).all();\n    return Array.isArray(items) ? items.map(i => i?.json || {}) : [];\n  } catch (e) {\n    return [];\n  }\n}\n\nfunction daysBetween(from, to) {\n  if (!isValidDate(from) || !isValidDate(to)) return null;\n  return Math.floor((to - from) / MS_PER_DAY);\n}\n\nfunction coalesce(...values) {\n  for (const v of values) {\n    if (v !== undefined && v !== null && v !== '') return v;\n  }\n  return null;\n}\n\n/**\n * Inputs base\n */\nconst router = getFirstJson('Router Comandos', {});\nconst config = getFirstJson('Config', {});\n\nconst pregunta = safeString(router.pregunta, '').trim();\nconst usuario = safeString(router.usuario, 'desconocido');\nconst needDiff = !!router.necesita_diff;\nconst geminiKey = safeString(config.GEMINI_API_KEY, '');\n\n/**\n * Inputs de nodos fuente\n */\nconst cards = getAllJson('Trello Cards');\nconst lists = getAllJson('Trello Lists');\nconst members = getAllJson('Trello Members');\nconst bCommits = getAllJson('GH Back Commits');\nconst fCommits = getAllJson('GH Front Commits');\nconst bPRs = getAllJson('GH Back PRs');\nconst fPRs = getAllJson('GH Front PRs');\nconst historial = getAllJson('PG Historial');\nconst recos = getAllJson('PG Recomendaciones');\nconst hitos = getAllJson('PG Hitos');\n\nlet diffBack = null;\nlet diffFront = null;\n\n// Mejora: Obtener solo el diff necesario según el comando\nif (needDiff) {\n  const repo = router.comando?.params?.repo; // 'backend', 'frontend', o undefined\n\n  // Si el comando es específico para un repo, solo pedimos ese.\n  // Si no es específico (pregunta general sobre código), pedimos ambos.\n  if (!repo || repo === 'backend') {\n    diffBack = getFirstJson('Diff Backend', null);\n  }\n  if (!repo || repo === 'frontend') {\n    diffFront = getFirstJson('Diff Frontend', null);\n  }\n}\n\n/**\n * Índices auxiliares\n */\nconst listaById = {};\nfor (const l of lists) {\n  const id = safeString(l?.id, '');\n  if (id) {\n    listaById[id] = coalesce(l?.name, 'desconocida');\n  }\n}\n\nconst memberById = {};\nfor (const m of members) {\n  const id = safeString(m?.id, '');\n  if (id) {\n    memberById[id] = coalesce(m?.fullName, m?.username, id);\n  }\n}\n\n/**\n * Normalización Trello\n */\nconst tareas = cards.map((c, index) => {\n  const dueDate = parseDate(c?.due);\n  const completada = !!c?.dueComplete;\n  const vencida = !!(dueDate && !completada && dueDate < now);\n  const diasRest = dueDate ? daysBetween(now, dueDate) : null;\n\n  const idMembers = safeArray(c?.idMembers);\n  const responsables = idMembers.map(id => memberById[id] || String(id));\n\n  return {\n    nombre: coalesce(c?.name, `tarjeta_sin_nombre_${index + 1}`),\n    lista: listaById[c?.idList] || 'desconocida',\n    completada,\n    fecha_limite: dueDate ? dueDate.toISOString() : null,\n    dias_restantes: diasRest,\n    vencida,\n    responsables,\n  };\n});\n\nconst vencidas = tareas.filter(t => t.vencida);\n\nconst porVencer = tareas.filter(t =>\n  !t.completada &&\n  !t.vencida &&\n  typeof t.dias_restantes === 'number' &&\n  t.dias_restantes >= 0 &&\n  t.dias_restantes <= 3\n);\n\n/**\n * Historial: ordenar explícitamente por fecha desc\n */\nconst historialOrdenado = [...historial].sort((a, b) => {\n  const da = parseDate(a?.fecha_ejecucion);\n  const db = parseDate(b?.fecha_ejecucion);\n  const ta = da ? da.getTime() : 0;\n  const tb = db ? db.getTime() : 0;\n  return tb - ta;\n});\n\nconst ultimoAnalisis = historialOrdenado[0] || null;\nconst kpis = ultimoAnalisis?.kpis_json ?? null;\n\n/**\n * GitHub PRs\n */\nfunction simplifyPR(p, repo) {\n  const createdAt = parseDate(p?.created_at);\n  const diasAbierto = createdAt ? daysBetween(createdAt, now) : null;\n\n  return {\n    repo,\n    numero: p?.number ?? null,\n    titulo: coalesce(p?.title, 'PR sin titulo'),\n    estado: coalesce(p?.state, 'desconocido'),\n    autor: coalesce(p?.user?.login, 'desconocido'),\n    creado: createdAt ? createdAt.toISOString() : null,\n    dias_abierto: diasAbierto,\n  };\n}\n\nconst prsAbiertos = [\n  ...bPRs.map(p => simplifyPR(p, 'backend')),\n  ...fPRs.map(p => simplifyPR(p, 'frontend')),\n].filter(p => p.estado === 'open');\n\nconst prsStale = prsAbiertos.filter(p =>\n  typeof p.dias_abierto === 'number' && p.dias_abierto > 7\n);\n\n/**\n * GitHub Commits\n */\nfunction simplifyCommit(c, repo) {\n  const message = coalesce(c?.commit?.message, '');\n  const firstLine = safeString(message, '').split('\\n')[0];\n  const authorDate = parseDate(c?.commit?.author?.date);\n\n  return {\n    repo,\n    sha: truncate(coalesce(c?.sha, ''), 7),\n    mensaje: truncate(firstLine, 300),\n    autor: coalesce(c?.commit?.author?.name, 'desconocido'),\n    fecha: authorDate ? authorDate.toISOString() : null,\n  };\n}\n\n/**\n * Diffs\n */\nfunction shapeDiff(d, repo) {\n  if (!d || typeof d !== 'object') return null;\n\n  const files = safeArray(d?.files).map(f => ({\n    archivo: coalesce(f?.filename, 'archivo_desconocido'),\n    cambios: typeof f?.changes === 'number' ? f.changes : null,\n    patch: truncate(coalesce(f?.patch, ''), 1200),\n  }));\n\n  return {\n    repo,\n    sha: truncate(coalesce(d?.sha, ''), 7),\n    mensaje: truncate(coalesce(d?.commit?.message, ''), 800),\n    autor: coalesce(d?.commit?.author?.name, 'desconocido'),\n    archivos: files,\n  };\n}\n\nlet diffInfo = null;\nif (diffBack || diffFront) {\n  diffInfo = {\n    backend: shapeDiff(diffBack, 'backend'),\n    frontend: shapeDiff(diffFront, 'frontend'),\n  };\n}\n\n/**\n * Hitos\n */\nconst hitosActivos = hitos\n  .map(h => {\n    const fechaFin = parseDate(h?.fecha_fin);\n    return {\n      nombre: coalesce(h?.nombre, 'hito_sin_nombre'),\n      tipo: coalesce(h?.tipo, 'desconocido'),\n      fecha_fin: fechaFin ? fechaFin.toISOString().slice(0, 10) : null,\n      dias_faltan: fechaFin ? daysBetween(now, fechaFin) : null,\n      responsable: coalesce(h?.responsable, 'desconocido'),\n      _fechaFinObj: fechaFin,\n    };\n  })\n  .filter(h => h._fechaFinObj && h._fechaFinObj >= now)\n  .sort((a, b) => a._fechaFinObj - b._fechaFinObj)\n  .map(({ _fechaFinObj, ...rest }) => rest);\n\n/**\n * Resúmenes saneados\n */\nconst historialResumen = historialOrdenado.map(h => {\n  const fecha = parseDate(h?.fecha_ejecucion);\n  return {\n    fecha: fecha ? fecha.toISOString() : null,\n    problemas: h?.hay_problemas ?? null,\n    vencidas: h?.tareas_vencidas ?? null,\n    progreso: h?.progreso_pct ?? null,\n  };\n});\n\nconst recomendacionesPrevias = recos\n  .map(r => {\n    const fecha = parseDate(r?.fecha);\n    return {\n      pregunta: truncate(coalesce(r?.pregunta, ''), 120),\n      respuesta: truncate(coalesce(r?.respuesta, ''), 250),\n      aplicada: r?.aplicada ?? null,\n      fecha: fecha ? fecha.toISOString() : coalesce(r?.fecha, null),\n    };\n  })\n  .filter(r => r.pregunta || r.respuesta);\n\n/**\n * Salud de datos para que Gemini sepa qué faltó\n */\nconst dataHealth = {\n  router_ok: !!pregunta,\n  config_ok: !!geminiKey,\n  fuentes: {\n    trello_cards: cards.length,\n    trello_lists: lists.length,\n    trello_members: members.length,\n    gh_back_commits: bCommits.length,\n    gh_front_commits: fCommits.length,\n    gh_back_prs: bPRs.length,\n    gh_front_prs: fPRs.length,\n    pg_historial: historial.length,\n    pg_recomendaciones: recos.length,\n    pg_hitos: hitos.length,\n    diff_backend_disponible: !!diffBack,\n    diff_frontend_disponible: !!diffFront,\n  },\n  faltantes: [\n    !pregunta ? 'Router Comandos.pregunta faltante' : null,\n    !usuario ? 'Router Comandos.usuario faltante' : null,\n    !geminiKey ? 'Config.GEMINI_API_KEY faltante' : null,\n    cards.length === 0 ? 'Sin tarjetas Trello' : null,\n    historial.length === 0 ? 'Sin historial previo' : null,\n    hitos.length === 0 ? 'Sin hitos' : null,\n    needDiff && !diffBack && !diffFront ? 'Se pidio diff pero no llegaron diffs' : null,\n  ].filter(Boolean),\n};\n\n/**\n * Contexto final\n */\nconst ctx = {\n  fecha_actual: now.toISOString(),\n  usuario,\n  salud_datos: dataHealth,\n  tareas: {\n    total: tareas.length,\n    vencidas,\n    por_vencer_3dias: porVencer,\n    completadas_count: tareas.filter(t => t.completada).length,\n    distribucion: tareas.reduce((acc, t) => {\n      acc[t.lista] = (acc[t.lista] || 0) + 1;\n      return acc;\n    }, {}),\n  },\n  github: {\n    commits_back_recientes: bCommits.slice(0, 8).map(c => simplifyCommit(c, 'backend')),\n    commits_front_recientes: fCommits.slice(0, 8).map(c => simplifyCommit(c, 'frontend')),\n    prs_abiertos: prsAbiertos,\n    prs_stale_mas_7d: prsStale,\n  },\n  kpis_ultimo_analisis: kpis,\n  hitos_proximos: hitosActivos.slice(0, 5),\n  historial_resumen: historialResumen,\n  recomendaciones_previas: recomendacionesPrevias,\n  diff_commits: diffInfo,\n};\n\nconst prompt = `Eres un PROJECT MANAGER EXPERTO (PM/Agente de IA) del proyecto PetSafe. Tu objetivo es maximizar la eficiencia, reducir riesgos y facilitar la toma de decisiones estratégicas de alto nivel.\n\nREGLAS:\n1. SOLO respondes sobre el proyecto (Trello, GitHub, tareas, commits, PRs, equipo, riesgos, hitos, KPIs). Si no: responde EXACTAMENTE \"No es una pregunta relacionada con el proyecto.\"\n2. Espanol, texto plano, sin markdown, sin asteriscos, sin emojis, maximo 1800 caracteres.\n3. Siempre basado en datos reales del contexto. Si falta dato o una fuente vino vacia/incompleta, dilo explicitamente.\n4. RECOMENDACIONES ESTRATÉGICAS: En lugar de dar consejos genéricos, asigna acciones concretas a personas específicas basándote en la carga de trabajo y los cuellos de botella detectados. Prioriza el ROI del esfuerzo.\n5. Si piden review de codigo y hay diff_commits, analiza calidad, bugs potenciales, buenas practicas.\n6. Si la pregunta es simple (ej \"hay vencidas?\"), responde directo.\n7. Considera hitos proximos y dias hasta fin para contextualizar urgencia.\n8. Menciona recomendaciones previas no aplicadas si son relevantes.\n9. No inventes datos faltantes. Si salud_datos.faltantes contiene elementos relevantes, consideralos en la respuesta.\n\nCONTEXTO (fecha ${now.toISOString()}):\n${JSON.stringify(ctx, null, 2)}\n\nPREGUNTA DE ${usuario}:\n${pregunta || 'Pregunta no disponible'}`;\n\nreturn [{\n  json: {\n    prompt,\n    gemini_key: geminiKey,\n    pregunta,\n    usuario,\n  }\n}];"
       },
       "id": "cac5ac9b-4eaf-4885-abde-c51855621a2a",
       "name": "Construir Contexto",
@@ -663,27 +647,30 @@
       ]
     },
     {
-      "parameters": {
-        "method": "=POST",
-        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key={{ $json.gemini_key }}",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ ({ contents: [{ parts: [{ text: $json.prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 2048 } }) }}",
-        "options": {}
-      },
       "id": "bc83a97f-2195-45d0-b145-99a367273a75",
       "name": "Gemini Chat",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.googleGemini",
+      "typeVersion": 1,
       "position": [
         368,
         1040
-      ]
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "generate",
+        "prompt": "={{ $json.prompt }}"
+      },
+      "credentials": {
+        "googleGeminiApi": {
+          "id": "",
+          "name": "Google Gemini account"
+        }
+      }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO recomendaciones (fecha, tipo, pregunta, respuesta, usuario, aplicada) VALUES (NOW(), 'chat', '{{ $node[\"Construir Contexto\"].json.pregunta.replace(/'/g, \"''\") }}', '{{ $node[\"Gemini Chat\"].json.candidates[0].content.parts[0].text.replace(/'/g, \"''\") }}', '{{ $node[\"Construir Contexto\"].json.usuario.replace(/'/g, \"''\") }}', false);",
+        "query": "INSERT INTO recomendaciones (fecha, tipo, pregunta, respuesta, usuario, aplicada) VALUES (NOW(), 'chat', '{{ $node[\"Construir Contexto\"].json.pregunta.replace(/'/g, \"''\") }}', '{{ $node[\"Gemini Chat\"].json.text.replace(/'/g, \"''\") }}', '{{ $node[\"Construir Contexto\"].json.usuario.replace(/'/g, \"''\") }}', false);",
         "options": {}
       },
       "id": "f03c241f-f84b-41d1-8bdb-197fca571dbd",
@@ -705,7 +692,7 @@
     {
       "parameters": {
         "respondWith": "text",
-        "responseBody": "={{ $node['Gemini Chat'].json.candidates[0].content.parts[0].text }}",
+        "responseBody": "={{ $node['Gemini Chat'].json.text }}",
         "options": {}
       },
       "id": "7459666c-562e-4c51-abfe-3bd6374b17af",

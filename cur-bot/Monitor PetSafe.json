@@ -7,18 +7,18 @@
           "interval": [
             {
               "field": "cronExpression",
-              "expression": "0 9 * * *"
+              "expression": "0 9 */2 * *"
             }
           ]
         }
       },
-      "id": "36c0b0b0-f4df-4876-afda-a223500bc816",
+      "id": "095bd747-86d8-4a87-a444-43a8e8054939",
       "name": "Schedule Trigger",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
       "position": [
-        -288,
-        272
+        -976,
+        -64
       ]
     },
     {
@@ -101,56 +101,80 @@
         },
         "options": {}
       },
-      "id": "4f38fc37-d630-41a3-97b6-f1898b6248cd",
+      "id": "7e2b0474-e249-4fab-b339-2bb1509bc917",
       "name": "Configuración",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -64,
-        272
+        -752,
+        -64
       ]
     },
     {
-      "id": "2e1a0c10-9747-4c2c-b55e-dcbd522aec47",
-      "name": "Trello Cards",
-      "type": "n8n-nodes-base.trello",
-      "typeVersion": 1,
-      "position": [
-        192,
-        -368
-      ],
       "parameters": {
-        "resource": "card",
-        "operation": "getAll",
-        "limit": 100
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Configuración\"].json.TRELLO_BOARD_ID }}/cards",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $node[\"Configuración\"].json.TRELLO_API_KEY }}"
+            },
+            {
+              "name": "token",
+              "value": "={{ $node[\"Configuración\"].json.TRELLO_TOKEN }}"
+            },
+            {
+              "name": "fields",
+              "value": "name,desc,due,dueComplete,idMembers,idList,dateLastActivity,labels"
+            },
+            {
+              "name": "attachments",
+              "value": "true"
+            },
+            {
+              "name": "attachment_fields",
+              "value": "name,url,mimeType,isUpload,date"
+            }
+          ]
+        },
+        "options": {}
       },
-      "credentials": {
-        "trelloApi": {
-          "id": "",
-          "name": "Trello account"
-        }
-      }
+      "id": "c9e0c8dc-39a6-4381-abf7-ce8677ca122d",
+      "name": "Trello Cards",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -496,
+        -704
+      ]
     },
     {
-      "id": "c9c1fee8-50ec-4f5b-880e-ab815b3acc94",
-      "name": "Trello Lists",
-      "type": "n8n-nodes-base.trello",
-      "typeVersion": 1,
-      "position": [
-        192,
-        -256
-      ],
       "parameters": {
-        "resource": "list",
-        "operation": "getAll",
-        "limit": 100
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Configuración\"].json.TRELLO_BOARD_ID }}/lists",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $node[\"Configuración\"].json.TRELLO_API_KEY }}"
+            },
+            {
+              "name": "token",
+              "value": "={{ $node[\"Configuración\"].json.TRELLO_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
       },
-      "credentials": {
-        "trelloApi": {
-          "id": "",
-          "name": "Trello account"
-        }
-      }
+      "id": "05a33ffb-5dd5-46d5-b9d4-9c4ae2a74676",
+      "name": "Trello Lists",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -496,
+        -592
+      ]
     },
     {
       "parameters": {
@@ -174,13 +198,13 @@
         },
         "options": {}
       },
-      "id": "c1dda079-34e7-41e6-9dc0-54355ec37cee",
+      "id": "8e23a661-737b-4756-9b0c-5e891a1e655c",
       "name": "Trello Members",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        192,
-        -160
+        -496,
+        -496
       ]
     },
     {
@@ -209,13 +233,13 @@
         },
         "options": {}
       },
-      "id": "c5ab5ac2-509c-4f87-a3fe-4c5f58bfcd2c",
+      "id": "592c788e-de40-4152-bc29-f1f20157e52d",
       "name": "Trello Checklists",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        192,
-        -64
+        -496,
+        -400
       ]
     },
     {
@@ -240,13 +264,13 @@
         },
         "options": {}
       },
-      "id": "7c1d6cb9-6e6d-4329-b1c9-cf0031731211",
+      "id": "f348a999-ae07-40b0-a429-e6ea475f65dc",
       "name": "GitHub Back Commits",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        192,
-        32
+        -496,
+        -304
       ]
     },
     {
@@ -271,13 +295,13 @@
         },
         "options": {}
       },
-      "id": "787c8172-3f76-46b3-8a28-4d48cf6a73c7",
+      "id": "9f41b3f2-9bda-4663-86e6-4e7c619bc941",
       "name": "GitHub Front Commits",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        192,
-        144
+        -496,
+        -192
       ]
     },
     {
@@ -302,13 +326,13 @@
         },
         "options": {}
       },
-      "id": "1ff43c2f-f9ad-43ad-9990-3a93a8398c1f",
+      "id": "63098357-f1a1-4332-993f-6505b3375f4c",
       "name": "GitHub Back PRs",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        192,
-        240
+        -496,
+        -96
       ]
     },
     {
@@ -333,13 +357,13 @@
         },
         "options": {}
       },
-      "id": "8b1eb2e2-551f-4044-b9cf-52143b017bc9",
+      "id": "5217cd37-1307-4f86-9337-1beac511b0a7",
       "name": "GitHub Front PRs",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        192,
-        336
+        -496,
+        0
       ]
     },
     {
@@ -364,13 +388,13 @@
         },
         "options": {}
       },
-      "id": "700d2011-8497-44eb-8162-d1f8edcbe6d1",
+      "id": "37922579-cd59-4239-aded-c51b7b33a364",
       "name": "GitHub Back CI Runs",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        192,
-        432
+        -496,
+        96
       ]
     },
     {
@@ -395,13 +419,13 @@
         },
         "options": {}
       },
-      "id": "86c636c2-68c5-4a36-aa23-e71ef9559dc7",
+      "id": "e2c07879-bf64-4097-b301-d95aac497a4e",
       "name": "GitHub Front CI Runs",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        192,
-        544
+        -496,
+        208
       ]
     },
     {
@@ -410,13 +434,13 @@
         "query": "SELECT id, fecha_ejecucion, hay_problemas, total_tareas, tareas_vencidas, progreso_pct, kpis_json FROM analisis_proyecto ORDER BY fecha_ejecucion DESC LIMIT 10;",
         "options": {}
       },
-      "id": "173e4b01-f8c7-4b93-a044-25c6f773c03a",
+      "id": "a9a667e4-a1e4-45cf-b40f-620081564f9c",
       "name": "Postgres Historial",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        192,
-        640
+        -496,
+        304
       ],
       "credentials": {
         "postgres": {
@@ -431,13 +455,13 @@
         "query": "SELECT nombre, tipo, fecha_inicio, fecha_fin, responsable, completado FROM hitos_proyecto ORDER BY fecha_fin ASC;",
         "options": {}
       },
-      "id": "9106c55d-541e-47f3-87ab-edbce8d27292",
+      "id": "ee4bf501-9802-4625-b643-aabe000fe464",
       "name": "Postgres Hitos",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        192,
-        736
+        -496,
+        400
       ],
       "credentials": {
         "postgres": {
@@ -450,26 +474,26 @@
       "parameters": {
         "numberInputs": 12
       },
-      "id": "5d9cc377-a952-4128-9c35-b672dc4b1a68",
+      "id": "557d884d-4689-4298-bfb9-92bf1dc775e8",
       "name": "Merge Datos",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
       "position": [
-        480,
-        144
+        -208,
+        -192
       ]
     },
     {
       "parameters": {
         "jsCode": "const now = new Date();\nconst items = $input.all().map(i => i.json);\n\nconst MEMBER_MAP = {\n  'Fernando Joel Bonilla Guerrero': { github: 'JoelBonillaG', initials: 'FG' },\n  'Joel Bonilla': { github: 'JoelBonillaG', initials: 'FG' },\n  'David Manjarres': { github: 'DRTX2', initials: 'DM' },\n  'David Oswaldo Manjarres Quintero': { github: 'DRTX2', initials: 'DM' },\n  'David Josue Barragan Pozo': { github: 'DavidJosueP2', initials: 'DP' },\n  'David Josué Barragán Pozo': { github: 'DavidJosueP2', initials: 'DP' },\n  'David Barragán Pozo': { github: 'DavidJosueP2', initials: 'DP' },\n  'David Barragan Pozo': { github: 'DavidJosueP2', initials: 'DP' },\n  'Josue Joel Garcia Abata': { github: 'JosueGarciaAbata', initials: 'JA' },\n  'Josué Joel García Abata': { github: 'JosueGarciaAbata', initials: 'JA' },\n  'Josué García Abata': { github: 'JosueGarciaAbata', initials: 'JA' },\n  'Josue Garcia Abata': { github: 'JosueGarciaAbata', initials: 'JA' }\n};\n\nfunction resolveMember(fullName) {\n  if (!fullName) return { github: null, initials: '??' };\n  if (MEMBER_MAP[fullName]) return MEMBER_MAP[fullName];\n  const norm = fullName.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  for (const [k, v] of Object.entries(MEMBER_MAP)) {\n    if (k.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '') === norm) return v;\n  }\n  const parts = fullName.split(' ').filter(Boolean);\n  const initials = (parts[0]?.[0] || '?') + (parts[parts.length - 1]?.[0] || '');\n  return { github: null, initials: initials.toUpperCase() };\n}\n\nconst backRepo = $node['Configuración'].json.GITHUB_REPO_BACKEND;\nconst frontRepo = $node['Configuración'].json.GITHUB_REPO_FRONTEND;\n\nlet cards = [], lists = [], members = [], historial = [], hitos = [], checklists = [];\nlet bRuns = [], fRuns = [];\n\nitems.forEach(d => {\n  if (!d || typeof d !== 'object') return;\n  if (d.workflow_runs !== undefined && Array.isArray(d.workflow_runs)) {\n    const first = d.workflow_runs[0];\n    const repoName = first?.repository?.name || first?.head_repository?.name || '';\n    if (repoName === backRepo) bRuns = d.workflow_runs;\n    else if (repoName === frontRepo) fRuns = d.workflow_runs;\n    else if (!bRuns.length) bRuns = d.workflow_runs;\n    else fRuns = d.workflow_runs;\n    return;\n  }\n  if (d.idCard && Array.isArray(d.checkItems)) { checklists.push(d); return; }\n  if (d.nombre && d.tipo && d.fecha_fin !== undefined) { hitos.push(d); return; }\n  if (d.fecha_ejecucion !== undefined) { historial.push(d); return; }\n  if (d.id && d.name && d.idList !== undefined && d.due !== undefined) { cards.push(d); return; }\n  if (d.id && d.name && d.closed !== undefined && !d.idList) { lists.push(d); return; }\n  if (d.id && (d.fullName || d.username) && !d.idList && !d.name) { members.push(d); return; }\n});\n\nconst allCommits = items.filter(d => d && d.sha && d.commit);\nconst bCommits = allCommits.filter(c => c.url && c.url.includes('/' + backRepo + '/'));\nconst fCommits = allCommits.filter(c => c.url && c.url.includes('/' + frontRepo + '/'));\n\nconst allPRs = items.filter(d => d && d.number && d.state && d.html_url?.includes('/pull/'));\nconst bPRs = allPRs.filter(p => p.base?.repo?.name === backRepo);\nconst fPRs = allPRs.filter(p => p.base?.repo?.name === frontRepo);\n\nconst listaById = {};\nlists.forEach(l => { listaById[l.id] = l.name; });\nconst miembroById = {};\nmembers.forEach(m => { miembroById[m.id] = m.fullName || m.username; });\n\nconst checklistsByCard = {};\nchecklists.forEach(ch => {\n  if (!checklistsByCard[ch.idCard]) checklistsByCard[ch.idCard] = [];\n  checklistsByCard[ch.idCard].push(ch);\n});\n\nfunction normFase(s) {\n  return (s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n}\n\nconst tareasRaw = cards.map(c => {\n  const due = c.due ? new Date(c.due) : null;\n  const vencida = due && !c.dueComplete && due < now;\n  const diasRestantes = due ? Math.floor((due - now) / 86400000) : null;\n  const atts = c.attachments || [];\n  const enlaces = atts.filter(a => a.url && a.isUpload === false).map(a => ({ name: a.name || a.url, url: a.url }));\n  const archivos = atts.filter(a => a.isUpload === true).map(a => ({ name: a.name, url: a.url, mimeType: a.mimeType || '' }));\n  const pdfs = archivos.filter(a => (a.mimeType || '').includes('pdf') || (a.name || '').toLowerCase().endsWith('.pdf'));\n  const chArr = checklistsByCard[c.id] || [];\n  const chTotal = chArr.reduce((s, ch) => s + (ch.checkItems?.length || 0), 0);\n  const chDone = chArr.reduce((s, ch) => s + (ch.checkItems?.filter(i => i.state === 'complete').length || 0), 0);\n  const daysSince = c.dateLastActivity ? Math.floor((now - new Date(c.dateLastActivity)) / 86400000) : null;\n  const responsables = (c.idMembers || []).map(id => miembroById[id] || id);\n  return {\n    id: c.id,\n    nombre: c.name,\n    lista: listaById[c.idList] || 'desconocida',\n    completada: !!c.dueComplete,\n    fecha_limite: c.due,\n    dias_restantes: diasRestantes,\n    vencida: !!vencida,\n    responsables,\n    responsables_ids: c.idMembers || [],\n    adjuntos_count: atts.length,\n    enlaces,\n    archivos,\n    pdfs_count: pdfs.length,\n    checklist_total: chTotal,\n    checklist_done: chDone,\n    checklist_pct: chTotal > 0 ? Math.round(chDone / chTotal * 100) : null,\n    dias_sin_actividad: daysSince,\n    dateLastActivity: c.dateLastActivity,\n    stale: daysSince !== null && daysSince > 5 && !c.dueComplete,\n    sin_asignar: (c.idMembers || []).length === 0,\n    sin_fecha: !c.due\n  };\n});\n\nconst tareas = tareasRaw.filter(t => t.nombre && t.nombre.trim() !== '.');\n\nconst fases = {};\nfor (const t of tareas) {\n  const key = normFase(t.lista);\n  if (!fases[key]) fases[key] = { nombre: t.lista, tareas: [], completadas: 0, vencidas: 0, pendientes: 0 };\n  fases[key].tareas.push(t);\n  if (t.completada) fases[key].completadas++;\n  else if (t.vencida) fases[key].vencidas++;\n  else fases[key].pendientes++;\n}\nfor (const f of Object.values(fases)) {\n  f.total = f.tareas.length;\n  f.pct = f.total > 0 ? Math.round(f.completadas / f.total * 100) : 0;\n  if (f.vencidas > 0) f.semaforo = 'rojo';\n  else if (f.pct >= 80) f.semaforo = 'verde';\n  else if (f.pct >= 40) f.semaforo = 'amarillo';\n  else f.semaforo = 'gris';\n}\n\nconst vencidas = tareas.filter(t => t.vencida);\nconst completadas = tareas.filter(t => t.completada);\nconst pendientes = tareas.filter(t => !t.completada && !t.vencida);\nconst stales = tareas.filter(t => t.stale);\nconst sinAsignar = tareas.filter(t => t.sin_asignar);\nconst sinFecha = tareas.filter(t => t.sin_fecha);\nconst progreso = tareas.length > 0 ? Math.round(completadas.length / tareas.length * 100) : 0;\n\nconst sevenDaysAgo = new Date(now - 7 * 86400000);\nconst fourteenDaysAgo = new Date(now - 14 * 86400000);\nconst thirtyDaysAgo = new Date(now - 30 * 86400000);\n\nconst completadas7d = completadas.filter(t => t.dateLastActivity && new Date(t.dateLastActivity) >= sevenDaysAgo).length;\nconst velocidad = (completadas7d / 7).toFixed(2);\nconst aTiempo = completadas.filter(t => !t.fecha_limite || new Date(t.fecha_limite) >= new Date(t.dateLastActivity || 0)).length;\nconst pctATiempo = completadas.length > 0 ? Math.round(aTiempo / completadas.length * 100) : 100;\n\nconst commitsRecent = [...bCommits, ...fCommits].filter(c => c.commit?.author?.date && new Date(c.commit.author.date) >= fourteenDaysAgo);\nconst commitsPorDia = (commitsRecent.length / 14).toFixed(2);\n\nconst prsAbiertos = [...bPRs, ...fPRs].filter(p => p.state === 'open');\nconst prOpenTimes = prsAbiertos.map(p => (now - new Date(p.created_at)) / 86400000);\nconst avgPROpenDays = prOpenTimes.length > 0 ? (prOpenTimes.reduce((a, b) => a + b, 0) / prOpenTimes.length).toFixed(1) : '0';\nconst prsRecientes = [...bPRs, ...fPRs].filter(p => new Date(p.created_at) >= thirtyDaysAgo);\nconst mergeados = prsRecientes.filter(p => p.merged_at).length;\nconst cerrados = prsRecientes.filter(p => p.state === 'closed').length;\nconst mergeRatio = cerrados > 0 ? Math.round(mergeados / cerrados * 100) : 0;\n\nconst convRegex = /^(feat|fix|docs|style|refactor|test|chore|perf|ci|build)(\\(.+\\))?:/i;\nconst convCommits = commitsRecent.filter(c => convRegex.test((c.commit?.message || '').split('\\n')[0]));\nconst pctConv = commitsRecent.length > 0 ? Math.round(convCommits.length / commitsRecent.length * 100) : 0;\n\nconst authorsRecent = new Set(commitsRecent.map(c => c.author?.login || c.commit?.author?.email || '?').filter(x => x !== '?'));\nconst busFactor = authorsRecent.size;\n\nconst lastBackCommit = bCommits[0]?.commit?.author?.date;\nconst lastFrontCommit = fCommits[0]?.commit?.author?.date;\nconst silenceBack = lastBackCommit ? Math.floor((now - new Date(lastBackCommit)) / 86400000) : null;\nconst silenceFront = lastFrontCommit ? Math.floor((now - new Date(lastFrontCommit)) / 86400000) : null;\n\nconst bLastRun = bRuns[0];\nconst fLastRun = fRuns[0];\nconst ciBack = bLastRun ? { status: bLastRun.conclusion || bLastRun.status, date: bLastRun.updated_at, name: bLastRun.name, url: bLastRun.html_url, branch: bLastRun.head_branch, actor: bLastRun.actor?.login } : null;\nconst ciFront = fLastRun ? { status: fLastRun.conclusion || fLastRun.status, date: fLastRun.updated_at, name: fLastRun.name, url: fLastRun.html_url, branch: fLastRun.head_branch, actor: fLastRun.actor?.login } : null;\n\nconst hoyStr = now.toISOString().slice(0, 10);\nconst proximos = hitos.filter(h => h.fecha_fin >= hoyStr && !h.completado).slice(0, 5).map(h => ({\n  nombre: h.nombre, tipo: h.tipo, fecha_fin: h.fecha_fin,\n  dias_faltan: Math.floor((new Date(h.fecha_fin) - now) / 86400000),\n  responsable: h.responsable\n}));\nconst fin = hitos.find(h => h.tipo === 'entrega_final');\nconst diasHastaFin = fin ? Math.floor((new Date(fin.fecha_fin) - now) / 86400000) : null;\n\nlet proyeccion = 'sin datos';\nif (diasHastaFin !== null && pendientes.length > 0) {\n  const necesaria = pendientes.length / Math.max(diasHastaFin, 1);\n  if (parseFloat(velocidad) >= necesaria) proyeccion = 'on-track';\n  else if (parseFloat(velocidad) >= necesaria * 0.7) proyeccion = 'riesgo';\n  else proyeccion = 'retrasado';\n}\n\nconst workPerPerson = {};\nfor (const t of tareas) {\n  for (const r of t.responsables) {\n    const m = resolveMember(r);\n    if (!workPerPerson[r]) workPerPerson[r] = { trello_name: r, initials: m.initials, github: m.github, tareas_total: 0, tareas_done: 0, tareas_pending: 0, tareas_overdue: 0, commits_14d: 0 };\n    workPerPerson[r].tareas_total++;\n    if (t.completada) workPerPerson[r].tareas_done++;\n    else if (t.vencida) workPerPerson[r].tareas_overdue++;\n    else workPerPerson[r].tareas_pending++;\n  }\n}\nfor (const c of commitsRecent) {\n  const login = c.author?.login;\n  if (!login) continue;\n  for (const p of Object.values(workPerPerson)) {\n    if (p.github === login) p.commits_14d++;\n  }\n}\nconst ranking = Object.values(workPerPerson).sort((a, b) => (b.tareas_done + b.commits_14d) - (a.tareas_done + a.commits_14d));\n\nlet tendencia = 'sin historial suficiente';\nif (historial.length >= 3) {\n  const conProblemas = historial.filter(h => h.hay_problemas).length;\n  tendencia = conProblemas >= 3 ? conProblemas + '/' + historial.length + ' con problemas' : 'estable';\n}\n\nlet diffPrev = null;\nif (historial.length > 0) {\n  const prev = historial[0];\n  const prevKpis = (typeof prev.kpis_json === 'string' ? JSON.parse(prev.kpis_json) : prev.kpis_json) || {};\n  diffPrev = {\n    progreso: progreso - (prev.progreso_pct || 0),\n    vencidas: vencidas.length - (prev.tareas_vencidas || 0),\n    commits_14d: commitsRecent.length - (prevKpis.commits_14d || 0)\n  };\n}\n\nfunction formatCommits(list, limit) {\n  return list.slice(0, limit).map(c => ({\n    sha: (c.sha || '').slice(0, 7),\n    autor: c.commit?.author?.name || c.author?.login || '?',\n    login: c.author?.login || null,\n    mensaje: (c.commit?.message || '').split('\\n')[0].slice(0, 120),\n    fecha: c.commit?.author?.date,\n    url: c.html_url\n  }));\n}\nconst topBack = formatCommits(bCommits, 5);\nconst topFront = formatCommits(fCommits, 5);\n\nconst kpis = {\n  velocidad_tareas_por_dia: parseFloat(velocidad),\n  completadas_7d: completadas7d,\n  pct_a_tiempo: pctATiempo,\n  progreso_sprint_pct: progreso,\n  commits_por_dia: parseFloat(commitsPorDia),\n  commits_14d: commitsRecent.length,\n  pct_commits_convencionales: pctConv,\n  bus_factor_14d: busFactor,\n  silencio_back_dias: silenceBack,\n  silencio_front_dias: silenceFront,\n  pr_open_time_dias: parseFloat(avgPROpenDays),\n  pr_merge_ratio_30d: mergeRatio,\n  dias_hasta_fin: diasHastaFin,\n  proyeccion\n};\n\nconst problemas = [];\nif (vencidas.length > 0) problemas.push({ tipo: 'tareas_vencidas', severidad: 'alta', count: vencidas.length });\nif (proyeccion === 'retrasado') problemas.push({ tipo: 'proyeccion_retraso', severidad: 'alta' });\nif (proyeccion === 'riesgo') problemas.push({ tipo: 'proyeccion_riesgo', severidad: 'media' });\nif (parseFloat(avgPROpenDays) > 7 && prsAbiertos.length > 0) problemas.push({ tipo: 'pr_stale', severidad: 'media', count: prsAbiertos.filter(p => (now - new Date(p.updated_at)) / 86400000 > 7).length });\nif (parseFloat(commitsPorDia) < 0.5 && diasHastaFin !== null && diasHastaFin < 45) problemas.push({ tipo: 'baja_actividad', severidad: 'media' });\nif (ciBack && ciBack.status === 'failure') problemas.push({ tipo: 'ci_back_roto', severidad: 'alta' });\nif (ciFront && ciFront.status === 'failure') problemas.push({ tipo: 'ci_front_roto', severidad: 'alta' });\nif (stales.length > 3) problemas.push({ tipo: 'cards_stale', severidad: 'media', count: stales.length });\nif (busFactor < 2 && commitsRecent.length > 0 && diasHastaFin !== null && diasHastaFin < 45) problemas.push({ tipo: 'bus_factor_bajo', severidad: 'media' });\nif (sinAsignar.length > 0) problemas.push({ tipo: 'cards_sin_asignar', severidad: 'baja', count: sinAsignar.length });\n\nconst sev = problemas.map(p => p.severidad);\nconst severidadMax = sev.includes('alta') ? 'alta' : sev.includes('media') ? 'media' : 'baja';\n\nreturn [{\n  json: {\n    fecha: now.toISOString(),\n    hay_problemas: problemas.length > 0,\n    total_tarjetas: tareas.length,\n    total_completadas: completadas.length,\n    total_pendientes: pendientes.length,\n    tareas_vencidas_list: vencidas,\n    tareas_vencidas_count: vencidas.length,\n    progreso_pct: progreso,\n    fases,\n    ranking,\n    cards_stale: stales,\n    cards_sin_asignar: sinAsignar,\n    cards_sin_fecha: sinFecha,\n    kpis,\n    hitos_proximos: proximos,\n    tendencia_historial: tendencia,\n    diff_previa: diffPrev,\n    problemas_detectados: problemas,\n    severidad_max: severidadMax,\n    cantidad_problemas: problemas.length,\n    github: {\n      commits_back: bCommits.length,\n      commits_front: fCommits.length,\n      prs_abiertos_back: bPRs.filter(p => p.state === 'open').length,\n      prs_abiertos_front: fPRs.filter(p => p.state === 'open').length,\n      prs_detalle_abiertos: prsAbiertos.map(p => ({ numero: p.number, titulo: p.title, autor: p.user?.login, dias_abierto: Math.floor((now - new Date(p.created_at)) / 86400000), repo: p.base?.repo?.name, url: p.html_url })),\n      top_commits_back: topBack,\n      top_commits_front: topFront,\n      ci_back: ciBack,\n      ci_front: ciFront,\n      deploy_front_url: 'https://pet-safe-six.vercel.app',\n      back_repo_url: 'https://github.com/' + $node['Configuración'].json.GITHUB_OWNER_BACKEND + '/' + backRepo,\n      front_repo_url: 'https://github.com/' + $node['Configuración'].json.GITHUB_OWNER_FRONTEND + '/' + frontRepo\n    },\n    snapshot_tareas: tareas,\n    gemini_key: $node['Configuración'].json.GEMINI_API_KEY,\n    discord_url: $node['Configuración'].json.DISCORD_WEBHOOK_URL\n  }\n}];"
       },
-      "id": "1ca0aad3-ff88-42d3-9370-1427a44beb0e",
+      "id": "729288ef-2f0b-4db4-8b22-721ac486cc60",
       "name": "Análisis + KPIs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        720,
-        144
+        32,
+        -192
       ]
     },
     {
@@ -478,13 +502,13 @@
         "query": "INSERT INTO analisis_proyecto (fecha_ejecucion, hay_problemas, total_tareas, tareas_completadas, tareas_vencidas, progreso_pct, commits_backend, commits_frontend, prs_abiertos_backend, prs_abiertos_frontend, problemas_detectados, cantidad_problemas, severidad_maxima, kpis_json) VALUES (NOW(), {{ $json.hay_problemas }}, {{ $json.total_tarjetas }}, {{ $json.total_completadas }}, {{ $json.tareas_vencidas_count }}, {{ $json.progreso_pct }}, {{ $json.github.commits_back }}, {{ $json.github.commits_front }}, {{ $json.github.prs_abiertos_back }}, {{ $json.github.prs_abiertos_front }}, '{{ JSON.stringify($json.problemas_detectados).replace(/'/g, \"''\") }}'::jsonb, {{ $json.cantidad_problemas }}, '{{ $json.severidad_max }}', '{{ JSON.stringify($json.kpis).replace(/'/g, \"''\") }}'::jsonb) RETURNING id;",
         "options": {}
       },
-      "id": "3c183f88-31cd-40cc-ac9c-e655feb2c916",
+      "id": "241240f2-907d-4396-8242-7ff600f9d156",
       "name": "Guardar Análisis",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        960,
-        144
+        272,
+        -192
       ],
       "credentials": {
         "postgres": {
@@ -497,13 +521,13 @@
       "parameters": {
         "jsCode": "const analisisId = $json.id;\nconst snapshot = $node['Análisis + KPIs'].json.snapshot_tareas;\n\nconst rows = snapshot.map(t => {\n  const memId = (t.responsables_ids || [])[0] || null;\n  const memName = (t.responsables || [])[0] || null;\n  return {\n    analisis_id: analisisId,\n    card_id: t.id,\n    card_nombre: (t.nombre || '').slice(0, 500),\n    lista_nombre: t.lista,\n    miembro_id: memId,\n    miembro_nombre: memName,\n    fecha_vencimiento: t.fecha_limite,\n    completada: t.completada,\n    tiene_adjuntos: t.adjuntos_count > 0,\n    adjuntos_count: t.adjuntos_count\n  };\n});\n\nreturn rows.map(r => ({ json: r }));"
       },
-      "id": "8ad44a15-46d4-45c8-8a9c-b3b428c3053f",
+      "id": "cf997662-7b32-441b-90eb-dd9b143d73a7",
       "name": "Guardar Snapshot Tareas",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1200,
-        144
+        512,
+        -192
       ]
     },
     {
@@ -524,13 +548,13 @@
         },
         "options": {}
       },
-      "id": "bcf07083-b413-443d-9a7d-50d6b82bfcd3",
+      "id": "bd4a2fed-27f0-423d-9926-5890fd02b5c4",
       "name": "Insert Snapshot",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        1440,
-        144
+        752,
+        -192
       ],
       "credentials": {
         "postgres": {
@@ -561,60 +585,56 @@
         },
         "options": {}
       },
-      "id": "b9e0af42-9241-488e-b023-a64925c1992e",
+      "id": "c90eb29c-3e5f-49f1-a127-ffb3d3952921",
       "name": "IF Hay Problemas",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        960,
-        -64
+        272,
+        -400
       ]
     },
     {
       "parameters": {
-        "jsCode": "const d = $node['Análisis + KPIs'].json;\n\nfunction semEmoji(s) { return ({ verde: '🟢', amarillo: '🟡', rojo: '🔴', gris: '⚪' })[s] || '⚪'; }\n\nfunction renderFase(f) {\n  const lines = [semEmoji(f.semaforo) + ' ' + f.nombre + ' (' + f.completadas + '/' + f.total + ' = ' + f.pct + '%)'];\n  for (const t of f.tareas) {\n    const status = t.completada ? '[✓]' : (t.vencida ? '[✗ VENCIDA]' : '[⏳]');\n    const resp = t.responsables.length > 0 ? t.responsables.join(', ') : 'SIN ASIGNAR';\n    const due = t.fecha_limite ? ' due=' + t.fecha_limite.slice(0, 10) : ' (sin fecha)';\n    const chk = t.checklist_total > 0 ? ' checklist=' + t.checklist_done + '/' + t.checklist_total : '';\n    const adj = t.adjuntos_count > 0 ? ' adj=' + t.adjuntos_count : '';\n    lines.push('  ' + status + ' ' + t.nombre + ' -> ' + resp + due + chk + adj);\n  }\n  return lines.join('\\n');\n}\n\nconst fasesStr = Object.values(d.fases).map(renderFase).join('\\n\\n');\n\nconst commitsBackStr = d.github.top_commits_back.map(c => '  ' + c.sha + ' ' + c.autor + ': ' + c.mensaje + ' (' + (c.fecha || '').slice(0, 10) + ')').join('\\n') || '  (sin commits)';\nconst commitsFrontStr = d.github.top_commits_front.map(c => '  ' + c.sha + ' ' + c.autor + ': ' + c.mensaje + ' (' + (c.fecha || '').slice(0, 10) + ')').join('\\n') || '  (sin commits)';\n\nconst entregables = d.snapshot_tareas\n  .filter(t => (t.archivos.length > 0 || t.enlaces.length > 0) && t.nombre && t.nombre.trim() !== '.')\n  .sort((a, b) => new Date(b.dateLastActivity || 0) - new Date(a.dateLastActivity || 0))\n  .slice(0, 15)\n  .map(t => {\n    const files = t.archivos.map(a => a.name).join(', ');\n    const links = t.enlaces.map(l => (l.name || l.url)).join(', ');\n    const parts = [files, links].filter(Boolean).join(' | ');\n    return '  [' + t.lista + '] ' + t.nombre + ': ' + parts;\n  }).join('\\n') || '  (ninguno)';\n\nconst rankingStr = d.ranking.map(r => '  ' + r.initials + ' ' + r.trello_name + ': ' + r.tareas_done + '✓ / ' + r.tareas_pending + '⏳ / ' + r.tareas_overdue + '✗   commits14d=' + r.commits_14d).join('\\n') || '  (sin datos)';\n\nconst ciBack = d.github.ci_back ? d.github.ci_back.status + ' en ' + d.github.ci_back.branch + ' (' + (d.github.ci_back.date || '').slice(0, 10) + ')' : 'sin datos';\nconst ciFront = d.github.ci_front ? d.github.ci_front.status + ' en ' + d.github.ci_front.branch + ' (' + (d.github.ci_front.date || '').slice(0, 10) + ')' : 'sin datos';\n\nfunction sign(n) { return n >= 0 ? '+' + n : String(n); }\nconst diffStr = d.diff_previa ? 'progreso ' + sign(d.diff_previa.progreso) + '% | vencidas ' + sign(d.diff_previa.vencidas) + ' | commits14d ' + sign(d.diff_previa.commits_14d) : 'sin previa';\n\nconst staleStr = d.cards_stale.slice(0, 5).map(t => t.nombre + '(' + t.dias_sin_actividad + 'd, ' + (t.responsables[0] || 'sin asignar') + ')').join(', ') || 'ninguna';\nconst sinAsignarStr = d.cards_sin_asignar.slice(0, 5).map(t => t.nombre).join(', ') || 'ninguna';\nconst sinFechaStr = d.cards_sin_fecha.slice(0, 5).map(t => t.nombre).join(', ') || 'ninguna';\n\nconst prompt = 'Eres el PROJECT MANAGER ESTRATÉGICO del proyecto PetSafe (clínica veterinaria, NestJS backend + Angular frontend, fin programado 2026-06-10). Analiza estado real y da diagnóstico accionable en español, texto plano, SIN markdown, SIN asteriscos, SIN emojis.\\n\\n' +\n'Estructura OBLIGATORIA, cada sección máx 3 oraciones:\\n' +\n'RESUMEN: estado global (verde/amarillo/rojo) con motivo principal en una línea.\\n' +\n'POR FASE: comenta SOLO las fases con problemas o riesgo, menciona tareas específicas por nombre.\\n' +\n'CARGA EQUIPO: observación sobre distribución de trabajo entre FG, DM, DP, JA.\\n' +\n'RIESGOS: top 3 con severidad y causa (no inventes, usa los datos).\\n' +\n'ACCIONES: 3 directrices ejecutivas con asignación de recursos, basadas en cuellos de botella reales.\\n' +\n'PROYECCION: llegamos al 10-jun-2026? sí/no/riesgo con justificación numérica.\\n\\n' +\n'=== CONTEXTO REAL ===\\n' +\n'Fecha: ' + d.fecha + '\\n' +\n'Progreso global: ' + d.progreso_pct + '% (' + d.total_completadas + '/' + d.total_tarjetas + ')\\n' +\n'Días hasta fin proyecto: ' + d.kpis.dias_hasta_fin + '\\n' +\n'Proyección calculada: ' + d.kpis.proyeccion + '\\n' +\n'Velocidad: ' + d.kpis.velocidad_tareas_por_dia + ' tareas/día (' + d.kpis.completadas_7d + ' completadas últimos 7d)\\n' +\n'Diff vs análisis previo: ' + diffStr + '\\n' +\n'Tendencia histórica: ' + d.tendencia_historial + '\\n\\n' +\n'=== TAREAS POR FASE (completo) ===\\n' +\nfasesStr + '\\n\\n' +\n'=== CARDS PROBLEMÁTICAS ===\\n' +\n'Stale (sin actividad >5d): ' + d.cards_stale.length + ' -> ' + staleStr + '\\n' +\n'Sin asignar: ' + d.cards_sin_asignar.length + ' -> ' + sinAsignarStr + '\\n' +\n'Sin fecha: ' + d.cards_sin_fecha.length + ' -> ' + sinFechaStr + '\\n\\n' +\n'=== GITHUB ===\\n' +\n'Commits 14d back=' + d.github.commits_back + ' front=' + d.github.commits_front + '\\n' +\n'Silencio back=' + d.kpis.silencio_back_dias + 'd front=' + d.kpis.silencio_front_dias + 'd\\n' +\n'% commits convencionales (feat/fix/etc): ' + d.kpis.pct_commits_convencionales + '%\\n' +\n'Bus factor 14d (autores distintos): ' + d.kpis.bus_factor_14d + '\\n' +\n'PRs abiertos: ' + (d.github.prs_abiertos_back + d.github.prs_abiertos_front) + ' (avg ' + d.kpis.pr_open_time_dias + 'd open)\\n' +\n'CI backend: ' + ciBack + '\\n' +\n'CI frontend: ' + ciFront + '\\n' +\n'Deploy front: ' + d.github.deploy_front_url + '\\n\\n' +\n'Top 5 commits backend:\\n' + commitsBackStr + '\\n\\n' +\n'Top 5 commits frontend:\\n' + commitsFrontStr + '\\n\\n' +\n'=== CARGA POR PERSONA ===\\n' +\nrankingStr + '\\n\\n' +\n'=== ENTREGABLES (archivos + enlaces) ===\\n' +\nentregables + '\\n\\n' +\n'=== HITOS PRÓXIMOS ===\\n' +\n(d.hitos_proximos.map(h => h.nombre + ' (' + h.dias_faltan + 'd, resp=' + h.responsable + ')').join('\\n') || '(ninguno)') + '\\n\\n' +\n'Problemas auto-detectados: ' + JSON.stringify(d.problemas_detectados) + '\\n' +\n'Severidad máxima: ' + d.severidad_max;\n\nreturn [{ json: { prompt, gemini_key: d.gemini_key, discord_url: d.discord_url } }];"
+        "jsCode": "const d = $node['Análisis + KPIs'].json;\n\nfunction semEmoji(s) { return ({ verde: '🟢', amarillo: '🟡', rojo: '🔴', gris: '⚪' })[s] || '⚪'; }\n\nfunction renderFase(f) {\n  const lines = [semEmoji(f.semaforo) + ' ' + f.nombre + ' (' + f.completadas + '/' + f.total + ' = ' + f.pct + '%)'];\n  for (const t of f.tareas) {\n    const status = t.completada ? '[✓]' : (t.vencida ? '[✗ VENCIDA]' : '[⏳]');\n    const resp = t.responsables.length > 0 ? t.responsables.join(', ') : 'SIN ASIGNAR';\n    const due = t.fecha_limite ? ' due=' + t.fecha_limite.slice(0, 10) : ' (sin fecha)';\n    const chk = t.checklist_total > 0 ? ' checklist=' + t.checklist_done + '/' + t.checklist_total : '';\n    const adj = t.adjuntos_count > 0 ? ' adj=' + t.adjuntos_count : '';\n    lines.push('  ' + status + ' ' + t.nombre + ' -> ' + resp + due + chk + adj);\n  }\n  return lines.join('\\n');\n}\n\nconst fasesStr = Object.values(d.fases).map(renderFase).join('\\n\\n');\n\nconst commitsBackStr = d.github.top_commits_back.map(c => '  ' + c.sha + ' ' + c.autor + ': ' + c.mensaje + ' (' + (c.fecha || '').slice(0, 10) + ')').join('\\n') || '  (sin commits)';\nconst commitsFrontStr = d.github.top_commits_front.map(c => '  ' + c.sha + ' ' + c.autor + ': ' + c.mensaje + ' (' + (c.fecha || '').slice(0, 10) + ')').join('\\n') || '  (sin commits)';\n\nconst entregables = d.snapshot_tareas\n  .filter(t => (t.archivos.length > 0 || t.enlaces.length > 0) && t.nombre && t.nombre.trim() !== '.')\n  .sort((a, b) => new Date(b.dateLastActivity || 0) - new Date(a.dateLastActivity || 0))\n  .slice(0, 15)\n  .map(t => {\n    const files = t.archivos.map(a => a.name).join(', ');\n    const links = t.enlaces.map(l => (l.name || l.url)).join(', ');\n    const parts = [files, links].filter(Boolean).join(' | ');\n    return '  [' + t.lista + '] ' + t.nombre + ': ' + parts;\n  }).join('\\n') || '  (ninguno)';\n\nconst rankingStr = d.ranking.map(r => '  ' + r.initials + ' ' + r.trello_name + ': ' + r.tareas_done + '✓ / ' + r.tareas_pending + '⏳ / ' + r.tareas_overdue + '✗   commits14d=' + r.commits_14d).join('\\n') || '  (sin datos)';\n\nconst ciBack = d.github.ci_back ? d.github.ci_back.status + ' en ' + d.github.ci_back.branch + ' (' + (d.github.ci_back.date || '').slice(0, 10) + ')' : 'sin datos';\nconst ciFront = d.github.ci_front ? d.github.ci_front.status + ' en ' + d.github.ci_front.branch + ' (' + (d.github.ci_front.date || '').slice(0, 10) + ')' : 'sin datos';\n\nfunction sign(n) { return n >= 0 ? '+' + n : String(n); }\nconst diffStr = d.diff_previa ? 'progreso ' + sign(d.diff_previa.progreso) + '% | vencidas ' + sign(d.diff_previa.vencidas) + ' | commits14d ' + sign(d.diff_previa.commits_14d) : 'sin previa';\n\nconst staleStr = d.cards_stale.slice(0, 5).map(t => t.nombre + '(' + t.dias_sin_actividad + 'd, ' + (t.responsables[0] || 'sin asignar') + ')').join(', ') || 'ninguna';\nconst sinAsignarStr = d.cards_sin_asignar.slice(0, 5).map(t => t.nombre).join(', ') || 'ninguna';\nconst sinFechaStr = d.cards_sin_fecha.slice(0, 5).map(t => t.nombre).join(', ') || 'ninguna';\n\nconst prompt = 'Eres gestor PM del proyecto PetSafe (clínica veterinaria, NestJS backend + Angular frontend, fin programado 2026-06-10). Analiza estado real y da diagnóstico accionable en español, texto plano, SIN markdown, SIN asteriscos, SIN emojis.\\n\\n' +\n'Estructura OBLIGATORIA, cada sección máx 3 oraciones:\\n' +\n'RESUMEN: estado global (verde/amarillo/rojo) con motivo principal en una línea.\\n' +\n'POR FASE: comenta SOLO las fases con problemas o riesgo, menciona tareas específicas por nombre.\\n' +\n'CARGA EQUIPO: observación sobre distribución de trabajo entre FG, DM, DP, JA.\\n' +\n'RIESGOS: top 3 con severidad y causa (no inventes, usa los datos).\\n' +\n'ACCIONES: 3 acciones concretas asignadas por nombre real (ej: Josué revisar PR X, David Barragán desbloquear tarea Y).\\n' +\n'PROYECCION: llegamos al 10-jun-2026? sí/no/riesgo con justificación numérica.\\n\\n' +\n'=== CONTEXTO REAL ===\\n' +\n'Fecha: ' + d.fecha + '\\n' +\n'Progreso global: ' + d.progreso_pct + '% (' + d.total_completadas + '/' + d.total_tarjetas + ')\\n' +\n'Días hasta fin proyecto: ' + d.kpis.dias_hasta_fin + '\\n' +\n'Proyección calculada: ' + d.kpis.proyeccion + '\\n' +\n'Velocidad: ' + d.kpis.velocidad_tareas_por_dia + ' tareas/día (' + d.kpis.completadas_7d + ' completadas últimos 7d)\\n' +\n'Diff vs análisis previo: ' + diffStr + '\\n' +\n'Tendencia histórica: ' + d.tendencia_historial + '\\n\\n' +\n'=== TAREAS POR FASE (completo) ===\\n' +\nfasesStr + '\\n\\n' +\n'=== CARDS PROBLEMÁTICAS ===\\n' +\n'Stale (sin actividad >5d): ' + d.cards_stale.length + ' -> ' + staleStr + '\\n' +\n'Sin asignar: ' + d.cards_sin_asignar.length + ' -> ' + sinAsignarStr + '\\n' +\n'Sin fecha: ' + d.cards_sin_fecha.length + ' -> ' + sinFechaStr + '\\n\\n' +\n'=== GITHUB ===\\n' +\n'Commits 14d back=' + d.github.commits_back + ' front=' + d.github.commits_front + '\\n' +\n'Silencio back=' + d.kpis.silencio_back_dias + 'd front=' + d.kpis.silencio_front_dias + 'd\\n' +\n'% commits convencionales (feat/fix/etc): ' + d.kpis.pct_commits_convencionales + '%\\n' +\n'Bus factor 14d (autores distintos): ' + d.kpis.bus_factor_14d + '\\n' +\n'PRs abiertos: ' + (d.github.prs_abiertos_back + d.github.prs_abiertos_front) + ' (avg ' + d.kpis.pr_open_time_dias + 'd open)\\n' +\n'CI backend: ' + ciBack + '\\n' +\n'CI frontend: ' + ciFront + '\\n' +\n'Deploy front: ' + d.github.deploy_front_url + '\\n\\n' +\n'Top 5 commits backend:\\n' + commitsBackStr + '\\n\\n' +\n'Top 5 commits frontend:\\n' + commitsFrontStr + '\\n\\n' +\n'=== CARGA POR PERSONA ===\\n' +\nrankingStr + '\\n\\n' +\n'=== ENTREGABLES (archivos + enlaces) ===\\n' +\nentregables + '\\n\\n' +\n'=== HITOS PRÓXIMOS ===\\n' +\n(d.hitos_proximos.map(h => h.nombre + ' (' + h.dias_faltan + 'd, resp=' + h.responsable + ')').join('\\n') || '(ninguno)') + '\\n\\n' +\n'Problemas auto-detectados: ' + JSON.stringify(d.problemas_detectados) + '\\n' +\n'Severidad máxima: ' + d.severidad_max;\n\nreturn [{ json: { prompt, gemini_key: d.gemini_key, discord_url: d.discord_url } }];"
       },
-      "id": "46d25fec-8cab-4a12-8d92-67898640076a",
+      "id": "8cdbb7b4-1ebf-417f-b8d4-2247314e30a5",
       "name": "Preparar Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1200,
-        -160
+        512,
+        -496
       ]
     },
     {
-      "id": "17e89ac2-a0b3-40ce-b781-9d7d37de207d",
-      "name": "Gemini Análisis",
-      "type": "n8n-nodes-base.googleGemini",
-      "typeVersion": 1,
-      "position": [
-        1440,
-        -160
-      ],
       "parameters": {
-        "resource": "text",
-        "operation": "generate",
-        "prompt": "={{ $json.prompt }}"
-      },
-      "credentials": {
-        "googleGeminiApi": {
-          "id": "",
-          "name": "Google Gemini account"
+        "promptType": "define",
+        "text": "={{ $json.user_prompt }}",
+        "options": {
+          "systemMessage": "={{ $json.system_prompt }}"
         }
-      }
+      },
+      "id": "cfea979f-dc26-4743-9986-1b416cbbc3b3",
+      "name": "Gemini Análisis",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        752,
+        -496
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const d = $node['Análisis + KPIs'].json;\nconst geminiResp = $node['Gemini Análisis'].json;\nconst iaText = geminiResp?.text?.trim() || '(sin respuesta IA)';\n\nconst colorMap = { alta: 15158332, media: 16761095, baja: 3066993 };\nconst color = colorMap[d.severidad_max] || 3066993;\n\nfunction semEmoji(s) { return ({ verde: '🟢', amarillo: '🟡', rojo: '🔴', gris: '⚪' })[s] || '⚪'; }\n\nconst resumen1 = semEmoji(d.severidad_max === 'alta' ? 'rojo' : d.severidad_max === 'media' ? 'amarillo' : 'verde') + ' **' + d.progreso_pct + '%** progreso · ' + d.total_completadas + '/' + d.total_tarjetas + ' tareas · **' + d.kpis.dias_hasta_fin + 'd** hasta fin';\nconst resumen2 = '📈 Proyección: **' + d.kpis.proyeccion + '** · Velocidad ' + d.kpis.velocidad_tareas_por_dia + '/día · ' + d.kpis.completadas_7d + ' completadas últimos 7d';\nfunction sign(n) { return n >= 0 ? '+' + n : String(n); }\nconst resumen3 = d.diff_previa ? '🔁 vs previa: ' + sign(d.diff_previa.progreso) + '% progreso, ' + sign(d.diff_previa.vencidas) + ' vencidas, ' + sign(d.diff_previa.commits_14d) + ' commits' : '🔁 primera ejecución';\n\nconst descripcion = [resumen1, resumen2, resumen3].join('\\n');\n\nconst fields = [];\n\nconst fasesTxt = Object.values(d.fases).map(f => {\n  const head = semEmoji(f.semaforo) + ' **' + f.nombre + '** ' + f.pct + '% (✓' + f.completadas + ' ⏳' + f.pendientes + ' ✗' + f.vencidas + ')';\n  const tareasFiltered = f.tareas.filter(t => t.nombre && t.nombre.trim() !== '.');\n  const details = tareasFiltered.slice(0, 8).map(t => {\n    const ic = t.completada ? '✓' : (t.vencida ? '🔴' : '⏳');\n    const r = t.responsables[0] ? ' · ' + t.responsables[0].split(' ').slice(0, 2).join(' ') : ' · sin asignar';\n    return ic + ' ' + t.nombre.slice(0, 55) + r;\n  }).join('\\n');\n  return head + '\\n' + details;\n});\nconst fasesFull = fasesTxt.join('\\n\\n');\nfields.push({ name: '📋 Tareas por fase', value: fasesFull.slice(0, 1024), inline: false });\n\nif (d.cards_stale.length > 0 || d.cards_sin_asignar.length > 0 || d.cards_sin_fecha.length > 0) {\n  const lines = [];\n  if (d.cards_stale.length > 0) lines.push('🕸️ **Stale**: ' + d.cards_stale.slice(0, 3).map(t => t.nombre + '(' + t.dias_sin_actividad + 'd)').join(', '));\n  if (d.cards_sin_asignar.length > 0) lines.push('❓ **Sin asignar**: ' + d.cards_sin_asignar.slice(0, 3).map(t => t.nombre).join(', '));\n  if (d.cards_sin_fecha.length > 0) lines.push('📅 **Sin fecha**: ' + d.cards_sin_fecha.slice(0, 3).map(t => t.nombre).join(', '));\n  fields.push({ name: '⚠️ Cards problemáticas', value: lines.join('\\n').slice(0, 1024), inline: false });\n}\n\nconst commitBack = d.github.top_commits_back.slice(0, 5).map(c => '`' + c.sha + '` ' + c.autor.split(' ')[0] + ': ' + c.mensaje.slice(0, 60) + ' · ' + (c.fecha || '').slice(0, 10)).join('\\n') || '(sin commits)';\nconst commitFront = d.github.top_commits_front.slice(0, 5).map(c => '`' + c.sha + '` ' + c.autor.split(' ')[0] + ': ' + c.mensaje.slice(0, 60) + ' · ' + (c.fecha || '').slice(0, 10)).join('\\n') || '(sin commits)';\nfields.push({ name: '📝 Commits backend (top 5)', value: commitBack.slice(0, 1024), inline: false });\nfields.push({ name: '📝 Commits frontend (top 5)', value: commitFront.slice(0, 1024), inline: false });\n\nconst entregables = d.snapshot_tareas\n  .filter(t => (t.archivos.length > 0 || t.enlaces.length > 0) && t.nombre && t.nombre.trim() !== '.')\n  .sort((a, b) => new Date(b.dateLastActivity || 0) - new Date(a.dateLastActivity || 0))\n  .slice(0, 6);\nif (entregables.length > 0) {\n  const entTxt = entregables.map(t => {\n    const files = t.archivos.slice(0, 2).map(a => '[📄 ' + a.name + '](' + a.url + ')').join(' ');\n    const links = t.enlaces.slice(0, 2).map(l => '[🔗 ' + (l.name || 'link') + '](' + l.url + ')').join(' ');\n    return '**' + t.nombre.slice(0, 40) + '**: ' + [files, links].filter(Boolean).join(' ');\n  }).join('\\n');\n  fields.push({ name: '📎 Entregables recientes', value: entTxt.slice(0, 1024), inline: false });\n}\n\n\n\nconst kpiTxt = '⚡ Velocidad: ' + d.kpis.velocidad_tareas_por_dia + '/día · Bus factor: ' + d.kpis.bus_factor_14d + ' · Conv: ' + d.kpis.pct_commits_convencionales + '%\\n' +\n  '🔇 Silencio back: ' + d.kpis.silencio_back_dias + 'd · front: ' + d.kpis.silencio_front_dias + 'd\\n' +\n  '🔀 PRs abiertos: ' + (d.github.prs_abiertos_back + d.github.prs_abiertos_front) + ' · avg open ' + d.kpis.pr_open_time_dias + 'd · merge ratio ' + d.kpis.pr_merge_ratio_30d + '%';\nfields.push({ name: '📊 KPIs', value: kpiTxt.slice(0, 1024), inline: false });\n\nconst ciStatusEmoji = s => s === 'success' ? '✅' : s === 'failure' ? '❌' : s === 'in_progress' ? '🟡' : '⚪';\nconst ciBackTxt = d.github.ci_back ? ciStatusEmoji(d.github.ci_back.status) + ' ' + d.github.ci_back.status + ' · `' + d.github.ci_back.branch + '` · [run](' + d.github.ci_back.url + ')' : '(sin datos)';\nconst ciFrontTxt = d.github.ci_front ? ciStatusEmoji(d.github.ci_front.status) + ' ' + d.github.ci_front.status + ' · `' + d.github.ci_front.branch + '` · [run](' + d.github.ci_front.url + ')' : '(sin datos)';\nfields.push({ name: '🔧 CI', value: 'Backend: ' + ciBackTxt + '\\nFrontend: ' + ciFrontTxt + '\\n🌐 Deploy front: ' + d.github.deploy_front_url, inline: false });\n\nif (d.hitos_proximos.length > 0) {\n  const hitTxt = d.hitos_proximos.slice(0, 4).map(h => '📅 **' + h.nombre + '** en ' + h.dias_faltan + 'd (' + h.responsable + ')').join('\\n');\n  fields.push({ name: '🎯 Hitos próximos', value: hitTxt.slice(0, 1024), inline: false });\n}\n\nconst iaResumen = iaText.length > 1000 ? iaText.slice(0, 1000) + '…' : iaText;\nfields.push({ name: '🤖 Diagnóstico IA (Gemini)', value: iaResumen, inline: false });\n\nconst payload = {\n  username: 'Monitor PetSafe',\n  embeds: [{\n    title: '📊 Estado proyecto PetSafe — ' + new Date().toLocaleDateString('es-ES'),\n    description: descripcion.slice(0, 4000),\n    color,\n    fields,\n    footer: { text: 'Monitor automático · ' + d.severidad_max.toUpperCase() + ' · ' + d.cantidad_problemas + ' problemas' },\n    timestamp: d.fecha\n  }]\n};\n\nreturn [{ json: { discord_payload: payload, ia_text: iaText } }];"
+        "jsCode": "const d = $node['Análisis + KPIs'].json;\nconst geminiResp = $node['Gemini Análisis'].json;\nconst iaText = geminiResp?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '(sin respuesta IA)';\n\nconst colorMap = { alta: 15158332, media: 16761095, baja: 3066993 };\nconst color = colorMap[d.severidad_max] || 3066993;\n\nfunction semEmoji(s) { return ({ verde: '🟢', amarillo: '🟡', rojo: '🔴', gris: '⚪' })[s] || '⚪'; }\n\nconst resumen1 = semEmoji(d.severidad_max === 'alta' ? 'rojo' : d.severidad_max === 'media' ? 'amarillo' : 'verde') + ' **' + d.progreso_pct + '%** progreso · ' + d.total_completadas + '/' + d.total_tarjetas + ' tareas · **' + d.kpis.dias_hasta_fin + 'd** hasta fin';\nconst resumen2 = '📈 Proyección: **' + d.kpis.proyeccion + '** · Velocidad ' + d.kpis.velocidad_tareas_por_dia + '/día · ' + d.kpis.completadas_7d + ' completadas últimos 7d';\nfunction sign(n) { return n >= 0 ? '+' + n : String(n); }\nconst resumen3 = d.diff_previa ? '🔁 vs previa: ' + sign(d.diff_previa.progreso) + '% progreso, ' + sign(d.diff_previa.vencidas) + ' vencidas, ' + sign(d.diff_previa.commits_14d) + ' commits' : '🔁 primera ejecución';\n\nconst descripcion = [resumen1, resumen2, resumen3].join('\\n');\n\nconst fields = [];\n\nconst fasesTxt = Object.values(d.fases).map(f => {\n  const head = semEmoji(f.semaforo) + ' **' + f.nombre + '** ' + f.pct + '% (✓' + f.completadas + ' ⏳' + f.pendientes + ' ✗' + f.vencidas + ')';\n  const tareasFiltered = f.tareas.filter(t => t.nombre && t.nombre.trim() !== '.');\n  const details = tareasFiltered.slice(0, 8).map(t => {\n    const ic = t.completada ? '✓' : (t.vencida ? '🔴' : '⏳');\n    const r = t.responsables[0] ? ' · ' + t.responsables[0].split(' ').slice(0, 2).join(' ') : ' · sin asignar';\n    return ic + ' ' + t.nombre.slice(0, 55) + r;\n  }).join('\\n');\n  return head + '\\n' + details;\n});\nconst fasesFull = fasesTxt.join('\\n\\n');\nfields.push({ name: '📋 Tareas por fase', value: fasesFull.slice(0, 1024), inline: false });\n\nif (d.cards_stale.length > 0 || d.cards_sin_asignar.length > 0 || d.cards_sin_fecha.length > 0) {\n  const lines = [];\n  if (d.cards_stale.length > 0) lines.push('🕸️ **Stale**: ' + d.cards_stale.slice(0, 3).map(t => t.nombre + '(' + t.dias_sin_actividad + 'd)').join(', '));\n  if (d.cards_sin_asignar.length > 0) lines.push('❓ **Sin asignar**: ' + d.cards_sin_asignar.slice(0, 3).map(t => t.nombre).join(', '));\n  if (d.cards_sin_fecha.length > 0) lines.push('📅 **Sin fecha**: ' + d.cards_sin_fecha.slice(0, 3).map(t => t.nombre).join(', '));\n  fields.push({ name: '⚠️ Cards problemáticas', value: lines.join('\\n').slice(0, 1024), inline: false });\n}\n\nconst commitBack = d.github.top_commits_back.slice(0, 5).map(c => '`' + c.sha + '` ' + c.autor.split(' ')[0] + ': ' + c.mensaje.slice(0, 60) + ' · ' + (c.fecha || '').slice(0, 10)).join('\\n') || '(sin commits)';\nconst commitFront = d.github.top_commits_front.slice(0, 5).map(c => '`' + c.sha + '` ' + c.autor.split(' ')[0] + ': ' + c.mensaje.slice(0, 60) + ' · ' + (c.fecha || '').slice(0, 10)).join('\\n') || '(sin commits)';\nfields.push({ name: '📝 Commits backend (top 5)', value: commitBack.slice(0, 1024), inline: false });\nfields.push({ name: '📝 Commits frontend (top 5)', value: commitFront.slice(0, 1024), inline: false });\n\nconst entregables = d.snapshot_tareas\n  .filter(t => (t.archivos.length > 0 || t.enlaces.length > 0) && t.nombre && t.nombre.trim() !== '.')\n  .sort((a, b) => new Date(b.dateLastActivity || 0) - new Date(a.dateLastActivity || 0))\n  .slice(0, 6);\nif (entregables.length > 0) {\n  const entTxt = entregables.map(t => {\n    const files = t.archivos.slice(0, 2).map(a => '[📄 ' + a.name + '](' + a.url + ')').join(' ');\n    const links = t.enlaces.slice(0, 2).map(l => '[🔗 ' + (l.name || 'link') + '](' + l.url + ')').join(' ');\n    return '**' + t.nombre.slice(0, 40) + '**: ' + [files, links].filter(Boolean).join(' ');\n  }).join('\\n');\n  fields.push({ name: '📎 Entregables recientes', value: entTxt.slice(0, 1024), inline: false });\n}\n\n\n\nconst kpiTxt = '⚡ Velocidad: ' + d.kpis.velocidad_tareas_por_dia + '/día · Bus factor: ' + d.kpis.bus_factor_14d + ' · Conv: ' + d.kpis.pct_commits_convencionales + '%\\n' +\n  '🔇 Silencio back: ' + d.kpis.silencio_back_dias + 'd · front: ' + d.kpis.silencio_front_dias + 'd\\n' +\n  '🔀 PRs abiertos: ' + (d.github.prs_abiertos_back + d.github.prs_abiertos_front) + ' · avg open ' + d.kpis.pr_open_time_dias + 'd · merge ratio ' + d.kpis.pr_merge_ratio_30d + '%';\nfields.push({ name: '📊 KPIs', value: kpiTxt.slice(0, 1024), inline: false });\n\nconst ciStatusEmoji = s => s === 'success' ? '✅' : s === 'failure' ? '❌' : s === 'in_progress' ? '🟡' : '⚪';\nconst ciBackTxt = d.github.ci_back ? ciStatusEmoji(d.github.ci_back.status) + ' ' + d.github.ci_back.status + ' · `' + d.github.ci_back.branch + '` · [run](' + d.github.ci_back.url + ')' : '(sin datos)';\nconst ciFrontTxt = d.github.ci_front ? ciStatusEmoji(d.github.ci_front.status) + ' ' + d.github.ci_front.status + ' · `' + d.github.ci_front.branch + '` · [run](' + d.github.ci_front.url + ')' : '(sin datos)';\nfields.push({ name: '🔧 CI', value: 'Backend: ' + ciBackTxt + '\\nFrontend: ' + ciFrontTxt + '\\n🌐 Deploy front: ' + d.github.deploy_front_url, inline: false });\n\nif (d.hitos_proximos.length > 0) {\n  const hitTxt = d.hitos_proximos.slice(0, 4).map(h => '📅 **' + h.nombre + '** en ' + h.dias_faltan + 'd (' + h.responsable + ')').join('\\n');\n  fields.push({ name: '🎯 Hitos próximos', value: hitTxt.slice(0, 1024), inline: false });\n}\n\nconst iaResumen = iaText.length > 1000 ? iaText.slice(0, 1000) + '…' : iaText;\nfields.push({ name: '🤖 Diagnóstico IA (Gemini)', value: iaResumen, inline: false });\n\nconst payload = {\n  username: 'Monitor PetSafe',\n  embeds: [{\n    title: '📊 Estado proyecto PetSafe — ' + new Date().toLocaleDateString('es-ES'),\n    description: descripcion.slice(0, 4000),\n    color,\n    fields,\n    footer: { text: 'Monitor automático · ' + d.severidad_max.toUpperCase() + ' · ' + d.cantidad_problemas + ' problemas' },\n    timestamp: d.fecha\n  }]\n};\n\nreturn [{ json: { discord_payload: payload, ia_text: iaText } }];"
       },
-      "id": "e01235e0-fb31-4c47-99c5-67e9435958ce",
+      "id": "2ec1d0e0-b1f0-4eb4-a6a1-f59d4a3fa7f3",
       "name": "Build Discord Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1680,
-        -160
+        992,
+        -496
       ]
     },
     {
@@ -623,13 +643,13 @@
         "query": "UPDATE analisis_proyecto SET recomendaciones_ia = '{{ $json.ia_text.replace(/'/g, \"''\") }}' WHERE id = (SELECT MAX(id) FROM analisis_proyecto);",
         "options": {}
       },
-      "id": "c1f15751-b93b-43e4-a0d1-766ad441ca1e",
+      "id": "ffec871b-cd89-436d-acb3-a8b492d6bfa4",
       "name": "Guardar Recomendación IA",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        1920,
-        -16
+        1232,
+        -352
       ],
       "credentials": {
         "postgres": {
@@ -647,37 +667,24 @@
         "jsonBody": "={{ JSON.stringify($json.discord_payload) }}",
         "options": {}
       },
-      "id": "e29c2642-3f64-408f-b9fc-e617de140526",
+      "id": "5735c3ae-da23-47a7-8b4b-22b1d8342b50",
       "name": "Discord Alerta",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1920,
-        -240
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const d = $node['Análisis + KPIs'].json;\nconst fases = d.fases || {};\nconst tareas = d.snapshot_tareas || [];\nconst kpis = d.kpis || {};\n\n// Cuellos de botella\nconst bottlenecks = [];\nfor (const [fname, f] of Object.entries(fases)) {\n  if (f.pct < 50 && f.total > 2) {\n    bottlenecks.push({\n      fase: fname,\n      bloqueadas: f.pendientes,\n      porcentaje: f.pct,\n      severidad: f.pct < 20 ? 'CRITICO' : 'ALTO'\n    });\n  }\n}\n\n// Proyección mejorada\nconst diasFin = d.kpis.dias_hasta_fin || 30;\nconst porcentajeFin = d.progreso_pct || 0;\nconst requiredBurnRate = (100 - porcentajeFin) / diasFin;\nconst burnRate = d.kpis.velocidad_tareas_por_dia || 0;\n\nconst riesgo = {\n  proyeccion: d.kpis.proyeccion,\n  dias_restantes: diasFin,\n  progreso_actual: porcentajeFin,\n  burn_rate_actual: burnRate,\n  burn_rate_requerido: parseFloat(requiredBurnRate.toFixed(2)),\n  riesgo_nivel: burnRate < requiredBurnRate * 0.7 ? 'CRITICO' : burnRate < requiredBurnRate ? 'ALTO' : 'BAJO'\n};\n\n// Personas críticas\nconst rankingCritico = d.ranking.slice(0, 3).map(r => ({\n  initials: r.initials,\n  nombre: r.trello_name,\n  carga: r.tareas_total,\n  completadas: r.tareas_done,\n  activo: r.commits_14d > 0\n}));\n\nreturn [{ json: {\n  cuellos_botella: bottlenecks,\n  riesgo,\n  personas_criticas: rankingCritico\n}}];"
-      },
-      "id": "2f39d715-e048-41cc-b50b-43928b9fe337",
-      "name": "Analisis Impacto",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        720,
-        -64
+        1232,
+        -576
       ]
     },
     {
       "parameters": {},
-      "id": "e9e6a33e-a352-4236-9d4f-437849f5019e",
+      "id": "2afa7718-038e-42c7-8c80-2793f9bfa739",
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
       "position": [
-        -288,
-        -16
+        -976,
+        -352
       ]
     },
     {
@@ -694,13 +701,13 @@
         },
         "options": {}
       },
-      "id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+      "id": "2a590c7c-6cad-461d-9c3c-dd687f6b7328",
       "name": "Formatear Error",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -64,
-        -16
+        -752,
+        -352
       ]
     },
     {
@@ -712,14 +719,169 @@
         "jsonBody": "={{ ({ content: $json.mensaje_error }) }}",
         "options": {}
       },
-      "id": "b2c3d4e5-f6a7-8901-2345-67890abcdef1",
+      "id": "2566bc16-5f79-4383-a907-05130cb590b5",
       "name": "Alerta a Discord",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        192,
-        -16
+        -496,
+        -352
       ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-1.5-pro",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "gemini-model-mon",
+      "name": "Google Gemini Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "aFcqI71CduhYfRTh",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "key": "mon:full_data",
+        "options": {}
+      },
+      "id": "cd821673-141d-47cb-955e-9512e101327c",
+      "name": "Redis Check Mon Cache",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -532,
+        -64
+      ],
+      "credentials": {
+        "redis": {
+          "id": "jAyEo3o5v0RaQJoI",
+          "name": "Redis account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "476cfb33-9c4c-44ee-a594-b898eb47d54f",
+              "leftValue": "={{ $json.value !== null && $json.value !== undefined && $json.value !== '' }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "47f79831-90ff-438b-a07c-a2e02fb91612",
+      "name": "IF Mon Cached",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -332,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.value;\nlet items;\ntry { items = JSON.parse(raw); } catch(e) { items = []; }\nif (!Array.isArray(items)) items = [items];\nreturn items.map(j => ({ json: j }));"
+      },
+      "id": "24e23cdf-8b28-416e-8011-163ec9d05a85",
+      "name": "Parse Mon Cache",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -132,
+        -214
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "mon:full_data",
+        "value": "={{ JSON.stringify($input.all().map(i => i.json)) }}",
+        "expire": true,
+        "ttl": 600,
+        "keyType": "string"
+      },
+      "id": "8a12cce9-26cc-4f5b-aecb-c48407f3a405",
+      "name": "Redis Store Mon Cache",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -178,
+        -12
+      ],
+      "credentials": {
+        "redis": {
+          "id": "jAyEo3o5v0RaQJoI",
+          "name": "Redis account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "6b645b87-993e-473b-bbec-774813d9fa1a",
+      "name": "Wait APIs Settle",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -388,
+        -192
+      ],
+      "webhookId": "3514c489-78ca-4acd-84e3-e571840521c3"
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "mon:last_report",
+        "value": "={{ $node['Build Discord Payload'].json.embed_json }}",
+        "expire": true,
+        "ttl": 172800,
+        "keyType": "string"
+      },
+      "id": "03f5e85f-bf8d-44b2-8100-495736d3607f",
+      "name": "Redis Store Last Report",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1472,
+        -576
+      ],
+      "credentials": {
+        "redis": {
+          "id": "jAyEo3o5v0RaQJoI",
+          "name": "Redis account"
+        }
+      },
+      "continueOnFail": true
     }
   ],
   "pinData": {},
@@ -739,62 +901,7 @@
       "main": [
         [
           {
-            "node": "Trello Cards",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Trello Lists",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Trello Members",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Trello Checklists",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "GitHub Back Commits",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "GitHub Front Commits",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "GitHub Back PRs",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "GitHub Front PRs",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "GitHub Back CI Runs",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "GitHub Front CI Runs",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Postgres Historial",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Postgres Hitos",
+            "node": "Redis Check Mon Cache",
             "type": "main",
             "index": 0
           }
@@ -805,7 +912,7 @@
       "main": [
         [
           {
-            "node": "Merge Datos",
+            "node": "Wait APIs Settle",
             "type": "main",
             "index": 0
           }
@@ -816,7 +923,7 @@
       "main": [
         [
           {
-            "node": "Merge Datos",
+            "node": "Wait APIs Settle",
             "type": "main",
             "index": 1
           }
@@ -827,7 +934,7 @@
       "main": [
         [
           {
-            "node": "Merge Datos",
+            "node": "Wait APIs Settle",
             "type": "main",
             "index": 2
           }
@@ -838,7 +945,7 @@
       "main": [
         [
           {
-            "node": "Merge Datos",
+            "node": "Wait APIs Settle",
             "type": "main",
             "index": 3
           }
@@ -849,7 +956,7 @@
       "main": [
         [
           {
-            "node": "Merge Datos",
+            "node": "Wait APIs Settle",
             "type": "main",
             "index": 4
           }
@@ -860,7 +967,7 @@
       "main": [
         [
           {
-            "node": "Merge Datos",
+            "node": "Wait APIs Settle",
             "type": "main",
             "index": 5
           }
@@ -871,7 +978,7 @@
       "main": [
         [
           {
-            "node": "Merge Datos",
+            "node": "Wait APIs Settle",
             "type": "main",
             "index": 6
           }
@@ -882,7 +989,7 @@
       "main": [
         [
           {
-            "node": "Merge Datos",
+            "node": "Wait APIs Settle",
             "type": "main",
             "index": 7
           }
@@ -893,7 +1000,7 @@
       "main": [
         [
           {
-            "node": "Merge Datos",
+            "node": "Wait APIs Settle",
             "type": "main",
             "index": 8
           }
@@ -904,7 +1011,7 @@
       "main": [
         [
           {
-            "node": "Merge Datos",
+            "node": "Wait APIs Settle",
             "type": "main",
             "index": 9
           }
@@ -915,7 +1022,7 @@
       "main": [
         [
           {
-            "node": "Merge Datos",
+            "node": "Wait APIs Settle",
             "type": "main",
             "index": 10
           }
@@ -926,7 +1033,7 @@
       "main": [
         [
           {
-            "node": "Merge Datos",
+            "node": "Wait APIs Settle",
             "type": "main",
             "index": 11
           }
@@ -937,7 +1044,7 @@
       "main": [
         [
           {
-            "node": "Análisis + KPIs",
+            "node": "Redis Store Mon Cache",
             "type": "main",
             "index": 0
           }
@@ -1052,6 +1159,145 @@
           }
         ]
       ]
+    },
+    "Google Gemini Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Gemini Análisis",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis Check Mon Cache": {
+      "main": [
+        [
+          {
+            "node": "IF Mon Cached",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Mon Cached": {
+      "main": [
+        [
+          {
+            "node": "Parse Mon Cache",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Trello Cards",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trello Lists",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trello Members",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trello Checklists",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitHub Back Commits",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitHub Front Commits",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitHub Back PRs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitHub Front PRs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitHub Back CI Runs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitHub Front CI Runs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Postgres Historial",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Postgres Hitos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Mon Cache": {
+      "main": [
+        [
+          {
+            "node": "Análisis + KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait APIs Settle": {
+      "main": [
+        [
+          {
+            "node": "Merge Datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis Store Mon Cache": {
+      "main": [
+        [
+          {
+            "node": "Análisis + KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discord Alerta": {
+      "main": [
+        [
+          {
+            "node": "Redis Store Last Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
@@ -1059,7 +1305,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "2cf4b3f8-2310-4a68-86b6-d91353f8dd9c",
+  "versionId": "b2823fc0-7fd4-43b5-a5a8-faa79f8332a4",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"

@@ -399,29 +399,26 @@
       ]
     },
     {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key={{ $json.gemini_key }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ contents: [{ parts: [{ text: $json.prompt }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 1200 } }) }}",
+        "options": {}
+      },
       "id": "ed405250-5b15-4453-9b13-1c0581797bbb",
       "name": "Gemini Executive Summary",
-      "type": "n8n-nodes-base.googleGemini",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         720,
         560
-      ],
-      "parameters": {
-        "resource": "text",
-        "operation": "generate",
-        "prompt": "={{ $json.prompt }}"
-      },
-      "credentials": {
-        "googleGeminiApi": {
-          "id": "",
-          "name": "Google Gemini account"
-        }
-      }
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const gem = $json;\nconst data = $node['Build Report Data'].json;\nconst summaryHtml = gem?.text?.trim() || \n  `<p><strong>Estado del proyecto:</strong> Progreso ${data.ultimo_analisis.progreso_pct || 0}% · Equipo activo · ${data.tareas_vencidas.length} tareas vencidas · Proyección: ${data.kpis.proyeccion_a_tiempo ? 'A tiempo' : 'En riesgo'}</p>\n   <p><strong>Focus:</strong> ${data.kpis.dias_hasta_fin} días hasta fin. Velocidad ${data.kpis.velocidad_tareas_por_dia || 0}/día.</p>`; \n\nconst fmt = (d) => d ? new Date(d).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }) : '-';\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));\n\nconst k = data.kpis || {};\nconst rowsKpis = [\n  ['Progreso general', `${data.ultimo_analisis.progreso_pct || 0}%`],\n  ['Velocidad (tareas/sem)', k.velocidad_semana ?? '-'],\n  ['% Tareas a tiempo', (k.pct_a_tiempo != null ? k.pct_a_tiempo + '%' : '-')],\n  ['Commits/día (back)', k.commits_por_dia_back ?? '-'],\n  ['Commits/día (front)', k.commits_por_dia_front ?? '-'],\n  ['PR open time (h) back', k.pr_open_time_back ?? '-'],\n  ['PR open time (h) front', k.pr_open_time_front ?? '-'],\n  ['PR merge ratio', k.pr_merge_ratio ?? '-'],\n  ['Días restantes', k.dias_hasta_fin ?? '-'],\n  ['Proyección a tiempo', k.proyeccion_a_tiempo ? 'Sí' : 'En riesgo']\n];\n\nconst trHtml = (arr) => arr.map(r => `<tr><td>${esc(r[0])}</td><td><strong>${esc(r[1])}</strong></td></tr>`).join('');\n\nconst vencidasHtml = data.tareas_vencidas.length ? `<table><thead><tr><th>Tarea</th><th>Lista</th><th>Responsable</th><th>Vencida el</th></tr></thead><tbody>${data.tareas_vencidas.map(v => `<tr><td>${esc(v.card_nombre)}</td><td>${esc(v.lista_nombre)}</td><td>${esc(v.miembro_nombre || '-')}</td><td>${fmt(v.fecha_vencimiento)}</td></tr>`).join('')}</tbody></table>` : '<p><em>Sin tareas vencidas.</em></p>';\n\nconst hitosHtml = data.hitos_proximos.length ? `<table><thead><tr><th>Hito</th><th>Tipo</th><th>Fecha</th><th>Responsable</th></tr></thead><tbody>${data.hitos_proximos.map(h => `<tr><td>${esc(h.nombre)}</td><td>${esc(h.tipo)}</td><td>${fmt(h.fecha_fin)}</td><td>${esc(h.responsable || '-')}</td></tr>`).join('')}</tbody></table>` : '';\n\nconst commitsHtml = (arr, titulo) => {\n  if (!arr.length) return '';\n  const lines = arr.slice(0, 10).map(c => {\n    const author = esc(c.autor).split(' ')[0];\n    const msg = esc(c.mensaje).slice(0, 70);\n    const date = fmt(c.fecha);\n    return `<div style=\"margin-bottom:3mm; font-size:9.5pt;\"><code>${esc(c.sha)}</code> ${author}: ${msg} · ${date}</div>`;\n  }).join('');\n  return `<h4>${titulo}</h4>${lines}`;\n};\n\nconst eventosHtml = data.eventos_recientes.length ? `<ul>${data.eventos_recientes.slice(0, 15).map(e => `<li>${fmt(e.fecha)} — <strong>${esc(e.tipo)}</strong>: ${esc(e.descripcion)}</li>`).join('')}</ul>` : '';\n\nconst recosHtml = data.recomendaciones_pendientes.length ? `<ul>${data.recomendaciones_pendientes.slice(0, 10).map(r => `<li>${fmt(r.fecha)} — ${esc((r.descripcion || '').substring(0, 300))}</li>`).join('')}</ul>` : '';\n\nconst tendenciaHtml = data.tendencia ? `<p>Progreso: <strong>${data.tendencia.progreso_inicial}%</strong> → <strong>${data.tendencia.progreso_final}%</strong> (Δ ${data.tendencia.delta >= 0 ? '+' : ''}${data.tendencia.delta} pts · ${data.tendencia.ejecuciones} ejecuciones)</p>` : '<p><em>Datos insuficientes para tendencia.</em></p>';\n\nconst html = `<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n<meta charset=\"utf-8\"/>\n<title>Reporte Semanal PetSafe</title>\n<style>\n  @page { margin: 22mm 18mm; }\n  body { font-family: 'Helvetica', Arial, sans-serif; color: #222; font-size: 11pt; line-height: 1.4; }\n  .portada { text-align: center; padding: 40mm 0 30mm; border-bottom: 3px solid #1e40af; margin-bottom: 20mm; }\n  .portada h1 { color: #1e40af; font-size: 28pt; margin: 0 0 6mm; }\n  .portada h2 { color: #555; font-size: 14pt; font-weight: normal; margin: 0 0 10mm; }\n  .portada .meta { color: #777; font-size: 10pt; }\n  h2 { color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 2mm; margin-top: 12mm; font-size: 14pt; }\n  h3 { color: #333; font-size: 12pt; margin-top: 6mm; }\n  h4 { color: #555; font-size: 11pt; margin-top: 4mm; }\n  table { width: 100%; border-collapse: collapse; margin: 4mm 0; font-size: 10pt; }\n  th { background: #1e40af; color: white; padding: 2mm; text-align: left; }\n  td { padding: 2mm; border-bottom: 1px solid #ddd; }\n  tr:nth-child(even) td { background: #f7f7fb; }\n  ul { margin: 2mm 0; padding-left: 6mm; }\n  li { margin-bottom: 1mm; }\n  code { background: #eef; padding: 0 1mm; border-radius: 2px; font-size: 9pt; }\n  .footer { margin-top: 20mm; padding-top: 3mm; border-top: 1px solid #ccc; color: #888; font-size: 9pt; text-align: center; }\n  .badge { display: inline-block; padding: 1mm 3mm; border-radius: 3px; font-size: 9pt; font-weight: bold; }\n  .badge-ok { background: #16a34a; color: white; }\n  .badge-warn { background: #eab308; color: white; }\n  .badge-err { background: #dc2626; color: white; }\n</style>\n</head>\n<body>\n<div class=\"portada\">\n  <h1>🐾 PetSafe</h1>\n  <h2>Reporte Semanal de Gestión</h2>\n  <div class=\"meta\">Generado: ${esc(data.fecha_reporte_local)}<br/>Rango: últimos ${data.rango_dias} días</div>\n</div>\n\n<h2>1. Resumen Ejecutivo</h2>\n${summaryHtml}\n\n<h2>2. KPIs del Proyecto</h2>\n<table><thead><tr><th>Indicador</th><th>Valor</th></tr></thead><tbody>${trHtml(rowsKpis)}</tbody></table>\n\n<h2>3. Tendencia Semanal</h2>\n${tendenciaHtml}\n\n<h2>4. Tareas Vencidas</h2>\n${vencidasHtml}\n\n${data.hitos_proximos.length ? '<h2>5. Hitos Próximos (30 días)</h2>' : ''}\n${hitosHtml}\n\n<h2>6. Actividad Git</h2>\n${commitsHtml(data.commits_back, 'Backend')}\n${commitsHtml(data.commits_front, 'Frontend')}\n\n${data.eventos_recientes.length ? '<h2>7. Eventos Detectados</h2>' : ''}\n${eventosHtml}\n\n${data.recomendaciones_pendientes.length ? '<h2>8. Recomendaciones Pendientes (IA)</h2>' : ''}\n${recosHtml}\n\n<div class=\"footer\">🤖 Reporte generado automáticamente por n8n + Gemini · PetSafe PM Assistant</div>\n</body>\n</html>`;\n\nconst fileName = `reporte-petsafe-${new Date().toISOString().slice(0,10)}.html`;\nconst summaryText = `Reporte semanal PetSafe: progreso ${data.ultimo_analisis.progreso_pct || 0}%, ${data.tareas_vencidas.length} tareas vencidas, ${data.total_commits_back + data.total_commits_front} commits, ${data.eventos_recientes.length} eventos.`;\n\nreturn [{\n  json: {\n    summaryText,\n    destinatarios: data.destinatarios,\n    destinatarios_info: data.destinatarios_info,\n    rango_dias: data.rango_dias,\n    fecha_reporte_local: data.fecha_reporte_local\n  },\n  binary: {\n    data: {\n      data: Buffer.from(html).toString('base64'),\n      mimeType: 'text/html',\n      fileName: 'index.html'\n    }\n  }\n}];\n"
+        "jsCode": "const gem = $json;\nconst data = $node['Build Report Data'].json;\nconst summaryHtml = gem?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || \n  `<p><strong>Estado del proyecto:</strong> Progreso ${data.ultimo_analisis.progreso_pct || 0}% · Equipo activo · ${data.tareas_vencidas.length} tareas vencidas · Proyección: ${data.kpis.proyeccion_a_tiempo ? 'A tiempo' : 'En riesgo'}</p>\n   <p><strong>Focus:</strong> ${data.kpis.dias_hasta_fin} días hasta fin. Velocidad ${data.kpis.velocidad_tareas_por_dia || 0}/día.</p>`; \n\nconst fmt = (d) => d ? new Date(d).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }) : '-';\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));\n\nconst k = data.kpis || {};\nconst rowsKpis = [\n  ['Progreso general', `${data.ultimo_analisis.progreso_pct || 0}%`],\n  ['Velocidad (tareas/sem)', k.velocidad_semana ?? '-'],\n  ['% Tareas a tiempo', (k.pct_a_tiempo != null ? k.pct_a_tiempo + '%' : '-')],\n  ['Commits/día (back)', k.commits_por_dia_back ?? '-'],\n  ['Commits/día (front)', k.commits_por_dia_front ?? '-'],\n  ['PR open time (h) back', k.pr_open_time_back ?? '-'],\n  ['PR open time (h) front', k.pr_open_time_front ?? '-'],\n  ['PR merge ratio', k.pr_merge_ratio ?? '-'],\n  ['Días restantes', k.dias_hasta_fin ?? '-'],\n  ['Proyección a tiempo', k.proyeccion_a_tiempo ? 'Sí' : 'En riesgo']\n];\n\nconst trHtml = (arr) => arr.map(r => `<tr><td>${esc(r[0])}</td><td><strong>${esc(r[1])}</strong></td></tr>`).join('');\n\nconst vencidasHtml = data.tareas_vencidas.length ? `<table><thead><tr><th>Tarea</th><th>Lista</th><th>Responsable</th><th>Vencida el</th></tr></thead><tbody>${data.tareas_vencidas.map(v => `<tr><td>${esc(v.card_nombre)}</td><td>${esc(v.lista_nombre)}</td><td>${esc(v.miembro_nombre || '-')}</td><td>${fmt(v.fecha_vencimiento)}</td></tr>`).join('')}</tbody></table>` : '<p><em>Sin tareas vencidas.</em></p>';\n\nconst hitosHtml = data.hitos_proximos.length ? `<table><thead><tr><th>Hito</th><th>Tipo</th><th>Fecha</th><th>Responsable</th></tr></thead><tbody>${data.hitos_proximos.map(h => `<tr><td>${esc(h.nombre)}</td><td>${esc(h.tipo)}</td><td>${fmt(h.fecha_fin)}</td><td>${esc(h.responsable || '-')}</td></tr>`).join('')}</tbody></table>` : '';\n\nconst commitsHtml = (arr, titulo) => {\n  if (!arr.length) return '';\n  const lines = arr.slice(0, 10).map(c => {\n    const author = esc(c.autor).split(' ')[0];\n    const msg = esc(c.mensaje).slice(0, 70);\n    const date = fmt(c.fecha);\n    return `<div style=\"margin-bottom:3mm; font-size:9.5pt;\"><code>${esc(c.sha)}</code> ${author}: ${msg} · ${date}</div>`;\n  }).join('');\n  return `<h4>${titulo}</h4>${lines}`;\n};\n\nconst eventosHtml = data.eventos_recientes.length ? `<ul>${data.eventos_recientes.slice(0, 15).map(e => `<li>${fmt(e.fecha)} — <strong>${esc(e.tipo)}</strong>: ${esc(e.descripcion)}</li>`).join('')}</ul>` : '';\n\nconst recosHtml = data.recomendaciones_pendientes.length ? `<ul>${data.recomendaciones_pendientes.slice(0, 10).map(r => `<li>${fmt(r.fecha)} — ${esc((r.descripcion || '').substring(0, 300))}</li>`).join('')}</ul>` : '';\n\nconst tendenciaHtml = data.tendencia ? `<p>Progreso: <strong>${data.tendencia.progreso_inicial}%</strong> → <strong>${data.tendencia.progreso_final}%</strong> (Δ ${data.tendencia.delta >= 0 ? '+' : ''}${data.tendencia.delta} pts · ${data.tendencia.ejecuciones} ejecuciones)</p>` : '<p><em>Datos insuficientes para tendencia.</em></p>';\n\nconst html = `<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n<meta charset=\"utf-8\"/>\n<title>Reporte Semanal PetSafe</title>\n<style>\n  @page { margin: 22mm 18mm; }\n  body { font-family: 'Helvetica', Arial, sans-serif; color: #222; font-size: 11pt; line-height: 1.4; }\n  .portada { text-align: center; padding: 40mm 0 30mm; border-bottom: 3px solid #1e40af; margin-bottom: 20mm; }\n  .portada h1 { color: #1e40af; font-size: 28pt; margin: 0 0 6mm; }\n  .portada h2 { color: #555; font-size: 14pt; font-weight: normal; margin: 0 0 10mm; }\n  .portada .meta { color: #777; font-size: 10pt; }\n  h2 { color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 2mm; margin-top: 12mm; font-size: 14pt; }\n  h3 { color: #333; font-size: 12pt; margin-top: 6mm; }\n  h4 { color: #555; font-size: 11pt; margin-top: 4mm; }\n  table { width: 100%; border-collapse: collapse; margin: 4mm 0; font-size: 10pt; }\n  th { background: #1e40af; color: white; padding: 2mm; text-align: left; }\n  td { padding: 2mm; border-bottom: 1px solid #ddd; }\n  tr:nth-child(even) td { background: #f7f7fb; }\n  ul { margin: 2mm 0; padding-left: 6mm; }\n  li { margin-bottom: 1mm; }\n  code { background: #eef; padding: 0 1mm; border-radius: 2px; font-size: 9pt; }\n  .footer { margin-top: 20mm; padding-top: 3mm; border-top: 1px solid #ccc; color: #888; font-size: 9pt; text-align: center; }\n  .badge { display: inline-block; padding: 1mm 3mm; border-radius: 3px; font-size: 9pt; font-weight: bold; }\n  .badge-ok { background: #16a34a; color: white; }\n  .badge-warn { background: #eab308; color: white; }\n  .badge-err { background: #dc2626; color: white; }\n</style>\n</head>\n<body>\n<div class=\"portada\">\n  <h1>🐾 PetSafe</h1>\n  <h2>Reporte Semanal de Gestión</h2>\n  <div class=\"meta\">Generado: ${esc(data.fecha_reporte_local)}<br/>Rango: últimos ${data.rango_dias} días</div>\n</div>\n\n<h2>1. Resumen Ejecutivo</h2>\n${summaryHtml}\n\n<h2>2. KPIs del Proyecto</h2>\n<table><thead><tr><th>Indicador</th><th>Valor</th></tr></thead><tbody>${trHtml(rowsKpis)}</tbody></table>\n\n<h2>3. Tendencia Semanal</h2>\n${tendenciaHtml}\n\n<h2>4. Tareas Vencidas</h2>\n${vencidasHtml}\n\n${data.hitos_proximos.length ? '<h2>5. Hitos Próximos (30 días)</h2>' : ''}\n${hitosHtml}\n\n<h2>6. Actividad Git</h2>\n${commitsHtml(data.commits_back, 'Backend')}\n${commitsHtml(data.commits_front, 'Frontend')}\n\n${data.eventos_recientes.length ? '<h2>7. Eventos Detectados</h2>' : ''}\n${eventosHtml}\n\n${data.recomendaciones_pendientes.length ? '<h2>8. Recomendaciones Pendientes (IA)</h2>' : ''}\n${recosHtml}\n\n<div class=\"footer\">🤖 Reporte generado automáticamente por n8n + Gemini · PetSafe PM Assistant</div>\n</body>\n</html>`;\n\nconst fileName = `reporte-petsafe-${new Date().toISOString().slice(0,10)}.html`;\nconst summaryText = `Reporte semanal PetSafe: progreso ${data.ultimo_analisis.progreso_pct || 0}%, ${data.tareas_vencidas.length} tareas vencidas, ${data.total_commits_back + data.total_commits_front} commits, ${data.eventos_recientes.length} eventos.`;\n\nreturn [{\n  json: {\n    summaryText,\n    destinatarios: data.destinatarios,\n    destinatarios_info: data.destinatarios_info,\n    rango_dias: data.rango_dias,\n    fecha_reporte_local: data.fecha_reporte_local\n  },\n  binary: {\n    data: {\n      data: Buffer.from(html).toString('base64'),\n      mimeType: 'text/html',\n      fileName: 'index.html'\n    }\n  }\n}];\n"
       },
       "id": "bf743b83-2c23-447b-9de9-210706989682",
       "name": "Build HTML + Binary",
@@ -602,47 +599,6 @@
           "name": "Discord Bot account"
         }
       }
-    },
-    {
-      "parameters": {},
-      "id": "a1b2c3d4-e5f6-7890-1234-abcdef123456",
-      "name": "Error Trigger",
-      "type": "n8n-nodes-base.errorTrigger",
-      "typeVersion": 1,
-      "position": [
-        -480,
-        672
-      ]
-    },
-    {
-      "parameters": {
-        "responseCode": 200,
-        "data": "={{ ({ text: '✅ Reporte PDF generado y enviado al canal + email.' }) }}",
-        "options": {}
-      },
-      "id": "b2c3d4e5-f6a7-8901-2345-bcdef1234567",
-      "name": "Respuesta a Chat",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [
-        1872,
-        432
-      ]
-    },
-    {
-      "parameters": {
-        "responseCode": 200,
-        "data": "={{ ({ text: `❌ Error al generar el reporte: ${$json.error.message}` }) }}",
-        "options": {}
-      },
-      "id": "c3d4e5f6-a7b8-9012-3456-cdef12345678",
-      "name": "Respuesta de Error a Chat",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [
-        -240,
-        672
-      ]
     }
   ],
   "pinData": {},
@@ -891,30 +847,18 @@
             "node": "PG Log Reporte",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Discord Upload PDF2",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
     },
     "Discord Upload PDF": {
       "main": [
-        [
-          {
-            "node": "Respuesta a Chat",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Error Trigger": {
-      "main": [
-        [
-          {
-            "node": "Respuesta de Error a Chat",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        []
       ]
     }
   },

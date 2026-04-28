@@ -343,29 +343,38 @@
       ]
     },
     {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{ $node[\"Configuración\"].json.GEMINI_API_KEY }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
       "id": "3c8a725f-afd3-42a8-ac98-62b72ac58fe0",
       "name": "Gemini Event Analysis",
-      "type": "n8n-nodes-base.googleGemini",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         -496,
         112
-      ],
-      "parameters": {
-        "resource": "text",
-        "operation": "generate",
-        "prompt": "={{ $json.prompt }}"
-      },
-      "credentials": {
-        "googleGeminiApi": {
-          "id": "",
-          "name": "Google Gemini account"
-        }
-      }
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const ev = $node['Split Events'].json;\nconst gem = $json;\nconst analysis = gem?.text?.trim() || '';\n\nlet extra = '';\nif (ev.detalle?.url) extra = `\\n🔗 ${ev.detalle.url}`;\nif (ev.detalle?.pdfs?.length) extra = '\\n' + ev.detalle.pdfs.map(p => `📄 [${p.name}](${p.url})`).join('\\n');\n\nconst content = `${ev.emoji} **${ev.titulo}**\\n${ev.descripcion}${extra}\\n\\n🤖 ${analysis}`;\n\nreturn [{ json: {\n  ...ev,\n  analysis,\n  content,\n  detalle_json: JSON.stringify(ev.detalle || {})\n}}];\n"
+        "jsCode": "const ev = $node['Split Events'].json;\nconst gem = $json;\nconst analysis = gem?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';\n\nlet extra = '';\nif (ev.detalle?.url) extra = `\\n🔗 ${ev.detalle.url}`;\nif (ev.detalle?.pdfs?.length) extra = '\\n' + ev.detalle.pdfs.map(p => `📄 [${p.name}](${p.url})`).join('\\n');\n\nconst content = `${ev.emoji} **${ev.titulo}**\\n${ev.descripcion}${extra}\\n\\n🤖 ${analysis}`;\n\nreturn [{ json: {\n  ...ev,\n  analysis,\n  content,\n  detalle_json: JSON.stringify(ev.detalle || {})\n}}];\n"
       },
       "id": "d4ba5390-166e-41ae-bb55-cddce5c15709",
       "name": "Build Discord Msg",

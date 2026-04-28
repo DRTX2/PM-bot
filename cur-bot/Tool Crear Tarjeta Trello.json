@@ -1,0 +1,117 @@
+{
+  "name": "Tool - Crear Tarjeta Trello",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-1",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [ 0, 0 ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "1", "name": "TRELLO_API_KEY", "value": "={{ $env.TRELLO_API_KEY }}", "type": "string" },
+            { "id": "2", "name": "TRELLO_TOKEN", "value": "={{ $env.TRELLO_TOKEN }}", "type": "string" },
+            { "id": "3", "name": "TRELLO_BOARD_ID", "value": "={{ $env.TRELLO_BOARD_ID }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config-1",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [ 200, 0 ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.trello.com/1/boards/{{ $node['Config'].json.TRELLO_BOARD_ID }}/lists?key={{ $node['Config'].json.TRELLO_API_KEY }}&token={{ $node['Config'].json.TRELLO_TOKEN }}",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": []},
+        "options": {}
+      },
+      "id": "get-lists",
+      "name": "Get Lists",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 400, 0 ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.trello.com/1/boards/{{ $node['Config'].json.TRELLO_BOARD_ID }}/members?key={{ $node['Config'].json.TRELLO_API_KEY }}&token={{ $node['Config'].json.TRELLO_TOKEN }}",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": []},
+        "options": {}
+      },
+      "id": "get-members",
+      "name": "Get Members",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 600, 0 ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const trigger = $node['Execute Workflow Trigger'].json;\nconst lists = $node['Get Lists'].all().map(i => i.json);\nconst members = $node['Get Members'].all().map(i => i.json);\n\nconst requestedList = (trigger.lista || trigger.query?.lista || '').toLowerCase();\nlet listId = null;\nif (requestedList) {\n  for(const l of lists) {\n    if(l.name.toLowerCase().includes(requestedList) || requestedList.includes(l.name.toLowerCase())) {\n      listId = l.id; break;\n    }\n  }\n}\nif (!listId && lists.length > 0) listId = lists[0].id;\n\nconst requestedMember = (trigger.miembro || trigger.query?.miembro || '').toLowerCase();\nlet memberId = null;\nif(requestedMember) {\n  for(const m of members) {\n    const fullName = (m.fullName||'').toLowerCase();\n    const username = (m.username||'').toLowerCase();\n    if(fullName.includes(requestedMember) || requestedMember.includes(fullName) || username.includes(requestedMember)) {\n      memberId = m.id; break;\n    }\n  }\n}\n\nreturn [{\n  json: {\n    name: trigger.nombre || trigger.query?.nombre || 'Nueva Tarea sin título',\n    desc: trigger.descripcion || trigger.query?.descripcion || '',\n    idList: listId,\n    idMembers: memberId ? [memberId] : [],\n    lista_encontrada: listId !== null,\n    miembro_encontrado: memberId !== null\n  }\n}];"
+      },
+      "id": "matcher-1",
+      "name": "Matcher",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 800, 0 ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.trello.com/1/cards",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "name", "value": "={{ $json.name }}" },
+            { "name": "desc", "value": "={{ $json.desc }}" },
+            { "name": "idList", "value": "={{ $json.idList }}" },
+            { "name": "idMembers", "value": "={{ $json.idMembers.join(',') }}" },
+            { "name": "key", "value": "={{ $node['Config'].json.TRELLO_API_KEY }}" },
+            { "name": "token", "value": "={{ $node['Config'].json.TRELLO_TOKEN }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {"parameters": []},
+        "options": {}
+      },
+      "id": "create-card",
+      "name": "Create Card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [ 1000, 0 ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nreturn [{\n  json: {\n    response: `Tarjeta creada exitosamente con ID ${res.id}. URL: ${res.shortUrl}`\n  }\n}];"
+      },
+      "id": "format-output",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 1200, 0 ]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": { "main": [ [ { "node": "Config", "type": "main", "index": 0 } ] ] },
+    "Config": { "main": [ [ { "node": "Get Lists", "type": "main", "index": 0 } ] ] },
+    "Get Lists": { "main": [ [ { "node": "Get Members", "type": "main", "index": 0 } ] ] },
+    "Get Members": { "main": [ [ { "node": "Matcher", "type": "main", "index": 0 } ] ] },
+    "Matcher": { "main": [ [ { "node": "Create Card", "type": "main", "index": 0 } ] ] },
+    "Create Card": { "main": [ [ { "node": "Format Output", "type": "main", "index": 0 } ] ] }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "tool-crear-tarjeta",
+  "tags": []
+}
