@@ -1,0 +1,2439 @@
+{
+  "name": "Chat Discord PetSafe",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "discord-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "506c20a7-73fc-4c9f-9d6e-d445002b6186",
+      "name": "Discord Webhook1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        33952,
+        30624
+      ],
+      "webhookId": "41c5ae04-e86b-4f83-8a5a-fa75e6bd59dc"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "w2c01",
+              "name": "TRELLO_API_KEY",
+              "value": "={{ $env.TRELLO_API_KEY }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c02",
+              "name": "TRELLO_TOKEN",
+              "value": "={{ $env.TRELLO_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c03",
+              "name": "TRELLO_BOARD_ID",
+              "value": "={{ $env.TRELLO_BOARD_ID }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c04",
+              "name": "GITHUB_TOKEN",
+              "value": "={{ $env.GITHUB_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c04b",
+              "name": "GITHUB_TOKEN_BACKEND",
+              "value": "={{ $env.GITHUB_TOKEN_BACKEND || $env.GITHUB_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c04f",
+              "name": "GITHUB_TOKEN_FRONTEND",
+              "value": "={{ $env.GITHUB_TOKEN_FRONTEND || $env.GITHUB_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c05",
+              "name": "GITHUB_OWNER_BACKEND",
+              "value": "={{ $env.GITHUB_OWNER_BACKEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c05f",
+              "name": "GITHUB_OWNER_FRONTEND",
+              "value": "={{ $env.GITHUB_OWNER_FRONTEND || $env.GITHUB_OWNER || $env.GITHUB_OWNER_BACKEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c06",
+              "name": "GITHUB_REPO_BACKEND",
+              "value": "={{ $env.GITHUB_REPO_BACKEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c07",
+              "name": "GITHUB_REPO_FRONTEND",
+              "value": "={{ $env.GITHUB_REPO_FRONTEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c08",
+              "name": "GEMINI_API_KEY",
+              "value": "={{ $env.GEMINI_API_KEY }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c09",
+              "name": "pregunta_usuario",
+              "value": "={{ $json.body.content || 'Dame un resumen' }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c10",
+              "name": "usuario_discord",
+              "value": "={{ $json.body.user || 'desconocido' }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c11",
+              "name": "DISCORD_WEBHOOK_URL",
+              "value": "={{ $env.DISCORD_WEBHOOK_URL }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "25fa71da-c5ae-4ba7-bd5d-765eb8d96f30",
+      "name": "Config1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        34112,
+        30624
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const pregunta = ($node['Config1'].json.pregunta_usuario || '').trim();\nconst low = pregunta.toLowerCase();\n\n// Objeto para almacenar los detalles del comando\nconst comando = {\n  nombre: null,\n  params: {},\n  tipo: 'chat', // Default\n  necesita_diff: false,\n  error: null\n};\n\n// Si no es un comando, es un chat normal\nif (!pregunta.startsWith('!')) {\n  if (pregunta.includes('ha saltado al servidor') || pregunta.includes('joined the server')) {\n    comando.error = 'Ignorado';\n  } else {\n    comando.necesita_diff = /(codig|commit|diff|revisa|calidad|pull request|\\bpr\\b|merge)/.test(low);\n  }\n} else {\n  const partes = pregunta.split(' ');\n  const cmd = partes[0].toLowerCase();\n\n  switch (cmd) {\n    case '!ayuda':\n    case '!help':\n      comando.nombre = 'ayuda';\n      comando.tipo = 'ayuda';\n      break;\n    case '!kpis':\n      comando.nombre = 'kpis';\n      comando.tipo = 'kpis';\n      break;\n    case '!reporte':\n      comando.nombre = 'reporte';\n      comando.tipo = 'reporte';\n      // Opcional: capturar número de días\n      const dias = parseInt(partes[1], 10);\n      if (!isNaN(dias) && dias > 0) {\n        comando.params.dias = dias;\n      } else {\n        comando.params.dias = 7; // Default\n      }\n      break;\n    case '!riesgos':\n      comando.nombre = 'riesgos';\n      comando.tipo = 'chat'; // Usará el flujo de chat pero con un contexto específico\n      break;\n    case '!hitos':\n      comando.nombre = 'hitos';\n      comando.tipo = 'chat'; // Igual que riesgos\n      break;\n    case '!revisar':\n      comando.nombre = 'revisar';\n      comando.tipo = 'chat';\n      comando.necesita_diff = true;\n      const repo = (partes[1] || '').toLowerCase();\n      if (repo === 'backend' || repo === 'frontend') {\n        comando.params.repo = repo;\n      } else {\n        comando.error = 'Debes especificar un repositorio: `!revisar backend` o `!revisar frontend`.';\n      }\n      break;\n    case '!estado':\n      comando.nombre = 'estado'; comando.tipo = 'chat'; comando.formato = 'estado'; break;\n    case '!vencidas':\n      comando.nombre = 'vencidas'; comando.tipo = 'chat'; comando.formato = 'vencidas'; break;\n    case '!miembros':\n      comando.nombre = 'miembros'; comando.tipo = 'chat'; comando.formato = 'miembros'; break;\n    case '!commits':\n      comando.nombre = 'commits'; comando.tipo = 'chat'; comando.formato = 'commits'; break;\n    case '!ci':\n      comando.nombre = 'ci'; comando.tipo = 'chat'; comando.formato = 'ci'; break;\n    case '!progreso':\n      comando.nombre = 'progreso'; comando.tipo = 'chat'; comando.formato = 'progreso'; break;\n        default:\n      comando.error = `Comando \\`${cmd}\\` no reconocido. Usa \\`!ayuda\\` para ver la lista de comandos.`;\n      break;\n  }\n}\n\n// El objeto de salida ahora es más rico en información\nreturn [{\n  json: {\n    pregunta,\n    comando,\n    tipo: comando.error ? 'error' : comando.tipo,\n    necesita_diff: comando.necesita_diff,\n    formato: comando.formato || 'chat',\n    usuario: $node['Config1'].json.usuario_discord\n  }\n}];"
+      },
+      "id": "59de45b2-9ad6-4de2-97da-0d617f57835b",
+      "name": "Router Comandos1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        34768,
+        30640
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.tipo }}",
+                  "operation": "equal",
+                  "value2": "reporte"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.tipo }}",
+                  "operation": "equal",
+                  "value2": "kpis"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.tipo }}",
+                  "operation": "equal",
+                  "value2": "chat"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.tipo }}",
+                  "operation": "equal",
+                  "value2": "ayuda"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.tipo }}",
+                  "operation": "equal",
+                  "value2": "error"
+                }
+              ]
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7b1e0aef-d878-4b5f-b483-9d8350b5ed3f",
+      "name": "Switch Tipo1",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        35504,
+        30864
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "joddDTQkcp6U7mT9",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/joddDTQkcp6U7mT9",
+          "cachedResultName": "Reporte PDF Semanal"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "rango_dias": "={{ ($json.comando && $json.comando.params && $json.comando.params.dias) ? Number($json.comando.params.dias) : 7 }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "9ffba479-7fab-4493-bae9-96b9bc409a14",
+      "name": "Trigger Reporte PDF1",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        35792,
+        30368
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Reporte PDF generado y enviado al canal + email.",
+        "options": {}
+      },
+      "id": "fe2529aa-8984-449f-b8c2-0d6a8b3b7978",
+      "name": "Resp Reporte1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        35968,
+        30368
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT fecha_ejecucion, progreso_pct, tareas_vencidas, kpis_json FROM analisis_proyecto ORDER BY fecha_ejecucion DESC LIMIT 1;",
+        "options": {}
+      },
+      "id": "8d458a36-96b6-4a85-ab61-dafd68c83bf6",
+      "name": "Postgres Ultimo KPI1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        36032,
+        30640
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json || {};\nlet k = row.kpis_json || {};\n\nif (typeof k === 'string') {\n  try {\n    k = JSON.parse(k);\n  } catch (e) {\n    k = {};\n  }\n}\n\nconst val = (v, fallback = 'N/A') => (v === undefined || v === null || v === '') ? fallback : v;\n\nconst lines = [\n  'KPIs PetSafe (' + new Date(row.fecha_ejecucion).toLocaleString('es-EC') + ')',\n  '',\n  'Progreso sprint: ' + val(row.progreso_pct, 0) + '%',\n  'Tareas vencidas: ' + val(row.tareas_vencidas, 0),\n  'Velocidad: ' + val(k.velocidad_tareas_por_dia, 0) + ' tareas/dia (completadas 7d: ' + val(k.completadas_7d, 0) + ')',\n  '% a tiempo: ' + val(k.pct_a_tiempo, 0) + '%',\n  'Commits 14d: ' + val(k.commits_14d, 0) + ' (' + val(k.commits_por_dia, 0) + '/dia)',\n  'PR avg open: ' + val(k.pr_open_time_dias, 0) + ' dias',\n  'PR merge ratio 30d: ' + val(k.pr_merge_ratio_30d, 0) + '%',\n  'Dias hasta fin: ' + val(k.dias_hasta_fin, 'N/A'),\n  'Proyeccion: ' + val(k.proyeccion, 'N/A')\n];\n\nreturn [{ json: { text: lines.join('\\n') } }];"
+      },
+      "id": "3a100dcf-df88-4c6f-8ae4-44ca868dbef0",
+      "name": "Formatear KPIs1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        36736,
+        30656
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $node['Formatear KPIs1'].json.text || '(sin datos de KPIs aún — ejecuta el Monitor primero)' }}",
+        "options": {}
+      },
+      "id": "2e253817-dcd5-45f2-a660-12bac4dba809",
+      "name": "Resp KPIs1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        37072,
+        30656
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Config1\"].json.TRELLO_BOARD_ID }}/cards",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $node[\"Config1\"].json.TRELLO_API_KEY }}"
+            },
+            {
+              "name": "token",
+              "value": "={{ $node[\"Config1\"].json.TRELLO_TOKEN }}"
+            },
+            {
+              "name": "fields",
+              "value": "name,desc,due,dueComplete,idMembers,idList,dateLastActivity,labels"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b89edf2d-8c24-4a53-a68f-d13ea06e1c3f",
+      "name": "Trello Cards1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        35776,
+        30912
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Config1\"].json.TRELLO_BOARD_ID }}/lists",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $node[\"Config1\"].json.TRELLO_API_KEY }}"
+            },
+            {
+              "name": "token",
+              "value": "={{ $node[\"Config1\"].json.TRELLO_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2ba6cc02-5489-4c8a-9802-79a8c3478910",
+      "name": "Trello Lists1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        35776,
+        31056
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Config1\"].json.TRELLO_BOARD_ID }}/members",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $node[\"Config1\"].json.TRELLO_API_KEY }}"
+            },
+            {
+              "name": "token",
+              "value": "={{ $node[\"Config1\"].json.TRELLO_TOKEN }}"
+            },
+            {
+              "name": "fields",
+              "value": "fullName,username"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a50363b1-1971-40dd-9ceb-99ed636b5b23",
+      "name": "Trello Members1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        35776,
+        31328
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Config1\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Config1\"].json.GITHUB_REPO_BACKEND }}/commits?per_page=15",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config1\"].json.GITHUB_TOKEN_BACKEND || $node[\"Config1\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3e61c4bd-4ebe-4390-b7ee-4dee63d8f6bf",
+      "name": "GH Back Commits1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        35776,
+        31456
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Config1\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Config1\"].json.GITHUB_REPO_FRONTEND }}/commits?per_page=15",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config1\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Config1\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7956b17a-1a4a-48a1-885f-bcc02560b78c",
+      "name": "GH Front Commits1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        35776,
+        31584
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Config1\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Config1\"].json.GITHUB_REPO_BACKEND }}/pulls?state=all&per_page=15",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config1\"].json.GITHUB_TOKEN_BACKEND || $node[\"Config1\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5399d30e-cd60-4fa3-8070-9671c7b39159",
+      "name": "GH Back PRs1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        35776,
+        31728
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Config1\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Config1\"].json.GITHUB_REPO_FRONTEND }}/pulls?state=all&per_page=15",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config1\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Config1\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "eb26e9c7-f3fa-4bdf-b7f1-6086f91c968e",
+      "name": "GH Front PRs1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        35776,
+        31872
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT fecha_ejecucion, hay_problemas, tareas_vencidas, progreso_pct, kpis_json, recomendaciones_ia FROM analisis_proyecto ORDER BY fecha_ejecucion DESC LIMIT 5;",
+        "options": {}
+      },
+      "id": "ff0793b1-3262-411d-883a-8e4a9bf32581",
+      "name": "PG Historial1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        35776,
+        32016
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT pregunta, respuesta, fecha, aplicada, usuario FROM recomendaciones WHERE pregunta IS NOT NULL ORDER BY fecha DESC LIMIT 5;",
+        "options": {}
+      },
+      "id": "bc3a1082-03bc-4785-9bde-6bb2235d3f85",
+      "name": "PG Recomendaciones1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        35776,
+        32192
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 12
+      },
+      "id": "4f7d6cd4-289f-4a4f-8d16-c84c634bf286",
+      "name": "Merge Chat1",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        36368,
+        31264
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "d1",
+              "leftValue": "={{ $('Router Comandos1').first().json.necesita_diff }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d2c80a19-ea3f-4667-ad2b-5ec0ef3fd0ab",
+      "name": "IF Necesita Diff1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        36800,
+        31392
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Config1\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Config1\"].json.GITHUB_REPO_BACKEND }}/commits/{{ $node[\"GH Back Commits1\"].first().json.sha }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config1\"].json.GITHUB_TOKEN_BACKEND || $node[\"Config1\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "350786f7-dd80-49da-9af3-9ebae00ea624",
+      "name": "Diff Backend1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        37264,
+        30976
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Config1\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Config1\"].json.GITHUB_REPO_FRONTEND }}/commits/{{ $node[\"GH Front Commits1\"].first().json.sha }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config1\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Config1\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "150fca17-3384-4668-862a-f29d64100866",
+      "name": "Diff Frontend1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        37264,
+        31136
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst MS_PER_DAY = 86400000;\nfunction daysBetween(from, to) {\n  if (!from || !to) return null;\n  const diff = new Date(to) - new Date(from);\n  return Math.round(diff / 86400000);\n}\n\nfunction isValidDate(d) { return d instanceof Date && !Number.isNaN(d.getTime()); }\nfunction parseDate(value) { if (!value) return null; const d = new Date(value); return isValidDate(d) ? d : null; }\nfunction safeString(value, fallback = '') { return typeof value === 'string' ? value : fallback; }\nfunction safeArray(value) { return Array.isArray(value) ? value : []; }\nfunction truncate(value, max) { const str = safeString(value, ''); return str.length > max ? str.slice(0, max) : str; }\nfunction getFirstJson(nodeName, fallback = null) { try { const item = $(nodeName).first(); return item && item.json ? item.json : fallback; } catch (e) { return fallback; } }\nfunction getAllJson(nodeName) { try { const items = $(nodeName).all(); return Array.isArray(items) ? items.map(i => i?.json || {}) : []; } catch (e) { return []; } }\nfunction coalesce(...values) { for (const v of values) { if (v !== undefined && v !== null && v !== '') return v; } return null; }\nfunction simplifyCommit(c, type) { return { msg: truncate(c.commit?.message, 60), auth: truncate(c.commit?.author?.name, 20), date: c.commit?.author?.date, type: type }; }\n\nconst router = getFirstJson('Router Comandos', {});\nconst config = getFirstJson('Config', {});\nconst pregunta = safeString(router.pregunta, '').trim();\nconst usuario = safeString(router.usuario, 'desconocido');\nconst needDiff = !!router.necesita_diff;\nconst geminiKey = safeString(config.GEMINI_API_KEY, '');\n\nlet ctx;\nconst cached = getFirstJson('Redis Get CTX', {});\n\nif (cached && cached.ctx_data) {\n  // CACHE HIT!\n  ctx = typeof cached.ctx_data === 'string' ? JSON.parse(cached.ctx_data) : cached.ctx_data;\n} else {\n  // CACHE MISS: Build Context\n  const cards = getAllJson('Trello Cards');\n  const lists = getAllJson('Trello Lists');\n  const members = getAllJson('Trello Members');\n  const bCommits = getAllJson('GH Back Commits');\n  const fCommits = getAllJson('GH Front Commits');\n  const bPRs = getAllJson('GH Back PRs');\n  const fPRs = getAllJson('GH Front PRs');\n  const historial = getAllJson('PG Historial');\n  const recos = getAllJson('PG Recomendaciones');\n  const hitos = getAllJson('PG Hitos');\n\n  const tareas = cards.map(c => {\n    const l = lists.find(list => list.id === c.idList);\n    const m = c.idMembers?.length ? members.find(mem => mem.id === c.idMembers[0]) : null;\n    return { id: c.id, nombre: c.name, lista: l ? l.name : 'Desconocida', completada: (l && l.name.toLowerCase().includes('completado')), miembro: m ? m.fullName : 'Sin asignar', vencimiento: parseDate(c.due) };\n  });\n\n  const tareasPendientes = tareas.filter(t => !t.completada);\n  const vencidas = tareasPendientes.filter(t => t.vencimiento && t.vencimiento < now).length;\n  const porVencer = tareasPendientes.filter(t => t.vencimiento && t.vencimiento >= now && (t.vencimiento - now) / MS_PER_DAY <= 3).length;\n\n  const kpis = historial.length > 0 ? historial[0] : {};\n  const recomendacionesPrevias = recos.slice(0, 3).map(r => ({ desc: r.descripcion, aplicada: r.aplicada }));\n  const hitosActivos = hitos.filter(h => !h.completado).map(h => ({ n: h.nombre, fin: h.fecha_fin, d: daysBetween(now, parseDate(h.fecha_fin)) }));\n\n  ctx = {\n    fecha_actual: now.toISOString(),\n    usuario,\n    tareas: { total: tareas.length, vencidas, por_vencer_3dias: porVencer, completadas_count: tareas.filter(t => t.completada).length, recientes_completadas: tareas.filter(t => t.completada).slice(0, 15).map(t => t.nombre), resumen_todas: tareas.map(t => ({n: t.nombre, l: t.lista, c: t.completada ? 1 : 0})), distribucion: tareas.reduce((acc, t) => { acc[t.lista] = (acc[t.lista] || 0) + 1; return acc; }, {}) },\n    github: { commits_back_recientes: bCommits.slice(0, 8).map(c => simplifyCommit(c, 'backend')), commits_front_recientes: fCommits.slice(0, 8).map(c => simplifyCommit(c, 'frontend')) },\n    kpis_ultimo_analisis: kpis, hitos_proximos: hitosActivos.slice(0, 5), recomendaciones_previas: recomendacionesPrevias\n  };\n}\n\nlet diffBack = null; let diffFront = null;\nif (needDiff) {\n  const repo = router.comando?.params?.repo;\n  if (!repo || repo === 'backend') diffBack = getFirstJson('Diff Backend', null);\n  if (!repo || repo === 'frontend') diffFront = getFirstJson('Diff Frontend', null);\n}\nlet diffInfo = null;\nif (diffBack || diffFront) { diffInfo = { backend: diffBack ? truncate(JSON.stringify(diffBack), 3000) : null, frontend: diffFront ? truncate(JSON.stringify(diffFront), 3000) : null }; }\nctx.diff_commits = diffInfo;\n\nconst system_prompt = `Eres el Gestor de Proyecto IA para \"PetSafe\". Tu objetivo es dar respuestas precisas. REGLAS ESTRICTAS:\n1. MAX 1800 caracteres. SIN MARKDOWN complejo.\n2. Si preguntan por estado general: resume KPIs, tareas y fechas clave.\n3. Si la pregunta es simple (ej \"hay vencidas?\"), responde directo.\n4. Considera hitos proximos y dias hasta fin.\nCONTEXTO (${now.toISOString()}):\n${JSON.stringify(ctx, null, 2)}\nPREGUNTA DE ${usuario}:\n${pregunta || 'Pregunta no disponible'}`;\n\nreturn [{ json: { system_prompt, user_prompt: pregunta, gemini_key: geminiKey, pregunta, usuario, ctx_data: ctx, from_cache: !!(cached && cached.ctx_data) } }];\n"
+      },
+      "id": "c0383ee8-0309-4070-873d-8e9d65525b75",
+      "name": "Construir Contexto1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        37472,
+        31360
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.user_prompt }}",
+        "options": {
+          "systemMessage": "={{ $json.system_prompt }}"
+        }
+      },
+      "id": "8fc83a45-77b9-4a1c-8e56-e949a56cac22",
+      "name": "Gemini Chat1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        37856,
+        31696
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO recomendaciones (fecha, tipo, pregunta, respuesta, usuario, aplicada) VALUES (NOW(), 'chat', '{{ ($node[\"Construir Contexto1\"].json.pregunta || \"\").replace(/'/g, \"''\") }}', '{{ ($node[\"Gemini Chat1\"].json.output || \"Sin respuesta válida\").replace(/'/g, \"''\") }}', '{{ ($node[\"Construir Contexto1\"].json.usuario || \"\").replace(/'/g, \"''\") }}', false);",
+        "options": {}
+      },
+      "id": "89c9892b-7766-4d2d-9c4c-24e041c4773d",
+      "name": "Guardar Q&A1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        38176,
+        31680
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $node['Gemini Chat1'].json.output || '(respuesta vacia o bloqueada por seguridad)' }}",
+        "options": {}
+      },
+      "id": "849bc627-50c2-4744-83f2-e8879c722a47",
+      "name": "Resp Chat1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        38336,
+        31680
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT nombre, tipo, fecha_inicio, fecha_fin, responsable, completado FROM hitos_proyecto WHERE fecha_fin >= CURRENT_DATE - INTERVAL '7 days' ORDER BY fecha_fin ASC LIMIT 10;",
+        "options": {}
+      },
+      "id": "ec1052a2-c87c-45b9-b036-7f58f5b1004a",
+      "name": "PG Hitos1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        35776,
+        32384
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.comando.error }}",
+        "options": {}
+      },
+      "id": "36e77132-e364-4bbd-9446-4c86e36f7e12",
+      "name": "Resp Error1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        35776,
+        32560
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Comandos disponibles:\n- `!ayuda`: Muestra este mensaje.\n- `!kpis`: Muestra los KPIs actuales del proyecto.\n- `!reporte [dias]`: Genera un reporte en PDF de los ultimos 7 dias (o los dias que especifiques).\n- `!riesgos`: Analiza y muestra los riesgos actuales del proyecto.\n- `!hitos`: Muestra los proximos hitos del proyecto.\n- `!revisar <backend|frontend>`: Pide una revision del ultimo commit del repositorio especificado.\n\nEventos en tiempo real (webhooks):\n- Trello: `POST /webhook/trello-event`\n- GitHub: `POST /webhook/github-event`",
+        "options": {}
+      },
+      "id": "d47090af-5843-445d-ab18-9df05d53a87d",
+      "name": "Resp Ayuda1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        35776,
+        30064
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "if-es-ayuda",
+              "leftValue": "={{ $json.tipo === 'ayuda' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "864e244c-0e3c-43be-b6d8-22d7d19f89a4",
+      "name": "IF Es Ayuda1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        34944,
+        30640
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "if-es-error",
+              "leftValue": "={{ $json.tipo === 'error' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "390d1297-e9f1-4a8f-8984-303e5bc10fdc",
+      "name": "IF Es Error1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        35008,
+        31040
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "if-es-reporte",
+              "leftValue": "={{ $json.tipo === 'reporte' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f56cf418-2416-4aba-80d9-7d1144c173cd",
+      "name": "IF Es Reporte1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        35248,
+        30992
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "if-es-kpis",
+              "leftValue": "={{ $json.tipo === 'kpis' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7e08fb68-96b1-4c3b-84bc-a14fe9233b42",
+      "name": "IF Es KPIs1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        35248,
+        31280
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "865a4d4e-60b0-4146-af4f-89c08be57199",
+      "name": "Google Gemini Chat Model1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        37504,
+        31920
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "EcY5DyLsH2bNwVtM",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.usuario }}",
+        "sessionTTL": 60
+      },
+      "id": "8c7df21b-50ec-49ae-8844-4cf8679f79c4",
+      "name": "Redis Chat Memory1",
+      "type": "@n8n/n8n-nodes-langchain.memoryRedisChat",
+      "typeVersion": 1.5,
+      "position": [
+        37648,
+        31920
+      ],
+      "credentials": {
+        "redis": {
+          "id": "BoHQ6nfTk4dgPgVq",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "fdfe7cb9-9eda-45d5-902a-58d8e57c5372",
+      "name": "Calculator1",
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        37824,
+        31984
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "key": "={{ 'dedup:' + $json.usuario_discord + ':' + ($json.pregunta_usuario || '').slice(0,40).replace(/[^a-zA-Z0-9]/g,'') }}",
+        "options": {}
+      },
+      "id": "a9b2064d-b569-4fa4-816a-e50286ea11e7",
+      "name": "Redis Dedup Check1",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        34272,
+        30624
+      ],
+      "credentials": {
+        "redis": {
+          "id": "BoHQ6nfTk4dgPgVq",
+          "name": "Redis account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "65d7dbc2-dedd-4fd5-90c0-b8d57809626d",
+              "leftValue": "={{ $json.value }}",
+              "rightValue": "1",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "1dee8239-8619-478a-a2ec-ca8597586744",
+      "name": "IF Duplicado1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        34432,
+        30624
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok",
+        "options": {}
+      },
+      "id": "4da513ed-055b-49cf-adc6-4350c69a981c",
+      "name": "Resp Dedup Skip1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        34608,
+        30480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'dedup:' + $node['Config1'].json.usuario_discord + ':' + ($node['Config1'].json.pregunta_usuario || '').slice(0,40).replace(/[^a-zA-Z0-9]/g,'') }}",
+        "value": "1",
+        "keyType": "string",
+        "expire": true,
+        "ttl": 5
+      },
+      "id": "0bcdfd8c-b7c8-4199-b019-718e847f978c",
+      "name": "Redis Dedup Set1",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        34608,
+        30640
+      ],
+      "credentials": {
+        "redis": {
+          "id": "BoHQ6nfTk4dgPgVq",
+          "name": "Redis account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "key": "cache:kpis_response",
+        "options": {}
+      },
+      "id": "37847c1f-3d5b-44d3-b36b-ce0db152b1b7",
+      "name": "Redis Get KPIs Cache1",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        36256,
+        30640
+      ],
+      "credentials": {
+        "redis": {
+          "id": "BoHQ6nfTk4dgPgVq",
+          "name": "Redis account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "kpis-cache-check",
+              "leftValue": "={{ $json.value }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "858f6057-a427-443d-af79-6c4f5dcaad68",
+      "name": "IF KPIs Cacheados1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        36448,
+        30640
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.value || '(caché vacío — espera el próximo ciclo del Monitor)' }}",
+        "options": {}
+      },
+      "id": "40e05c84-4d3b-4e48-b11a-57f65fbc8b8c",
+      "name": "Resp KPIs Cacheados1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        36736,
+        30496
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "cache:kpis_response",
+        "value": "={{ $json.text }}",
+        "keyType": "string",
+        "expire": true,
+        "ttl": 600
+      },
+      "id": "7c8ad899-1242-45f8-af98-65499c053f56",
+      "name": "Redis Set KPIs Cache1",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        36912,
+        30656
+      ],
+      "credentials": {
+        "redis": {
+          "id": "BoHQ6nfTk4dgPgVq",
+          "name": "Redis account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "amount": 1
+      },
+      "id": "0d4d813d-4dda-4708-ba18-02914e61be14",
+      "name": "Wait Diff APIs1",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        37024,
+        31104
+      ],
+      "webhookId": "85958806-ba52-4e56-96ed-4d0564ad872c"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "52a40e90-67ca-445b-b7c7-6058623e7439",
+              "leftValue": "={{ ['estado','vencidas','miembros','commits','ci','progreso'].includes($node['Router Comandos1'].json.formato) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8477f926-2f66-4de1-b0d6-6fca765dcb03",
+      "name": "IF Datos Rapidos1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        37856,
+        31360
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "b6ee4417-ab2b-4c82-b1eb-003e19612010",
+                    "leftValue": "={{ $node['Router Comandos1'].json.formato }}",
+                    "rightValue": "estado",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "estado"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "9663ef0e-cc19-41d5-b005-f105b0beecbf",
+                    "leftValue": "={{ $node['Router Comandos1'].json.formato }}",
+                    "rightValue": "vencidas",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "vencidas"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "f297ab07-676a-4f25-b283-788bc17f8a97",
+                    "leftValue": "={{ $node['Router Comandos1'].json.formato }}",
+                    "rightValue": "miembros",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "miembros"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "39416be4-d9dc-4f24-a87e-b0762ebee276",
+                    "leftValue": "={{ $node['Router Comandos1'].json.formato }}",
+                    "rightValue": "commits",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "commits"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "9f34eb54-de75-4c97-9fc9-956965aa911d",
+                    "leftValue": "={{ $node['Router Comandos1'].json.formato }}",
+                    "rightValue": "ci",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ci"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "f0c0a05e-5c60-4e33-8ab2-f49d140a6343",
+                    "leftValue": "={{ $node['Router Comandos1'].json.formato }}",
+                    "rightValue": "progreso",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "progreso"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "b87eb16c-2d6f-42d9-b509-fd7d1646d4cd",
+      "name": "Switch Formato1",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        38608,
+        31232
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst h = $node['PG Historial1']?.first()?.json || {};\nconst kpis = (typeof h.kpis_json === 'string' ? JSON.parse(h.kpis_json) : h.kpis_json) || {};\nconst cards = $node['Trello Cards1'].all().map(i=>i.json);\nconst total = cards.length;\nconst done = cards.filter(c=>c.dueComplete).length;\nconst overdue = cards.filter(c=>c.due && !c.dueComplete && new Date(c.due)<new Date()).length;\nconst pct = total>0?Math.round(done/total*100):0;\nconst vel = kpis.velocidad_tareas_por_dia ?? '?';\nconst proj = kpis.proyeccion ?? 'sin datos';\nconst emojiProj = proj==='on-track'?'✅':proj==='riesgo'?'⚠️':'🔴';\nconst lines = [\n  '**📊 ESTADO DEL PROYECTO PetSafe**',\n  `Progreso: **${pct}%** (${done}/${total} tareas)  ${emojiProj} ${proj}`,\n  `Vencidas: **${overdue}**  |  Velocidad: **${vel}** tareas/día`,\n  `Commits 14d: **${kpis.commits_14d ?? '?'}**  |  Bus factor: **${kpis.bus_factor_14d ?? '?'}**`,\n  `Días hasta entrega: **${kpis.dias_hasta_fin ?? '?'}**`\n];\nreturn [{json:{respuesta: lines.join('\\n')}}];\n"
+      },
+      "id": "dd8cfd9e-9aa5-477c-a5d1-e0b44aa9c91d",
+      "name": "Formatear Estado1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        38976,
+        30928
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.respuesta }}",
+        "options": {}
+      },
+      "id": "6c59636a-8e95-436e-b0b3-ea8cf4a92c3c",
+      "name": "Resp estado1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        39216,
+        30928
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst cards = $node['Trello Cards1'].all().map(i=>i.json);\nconst lists = $node['Trello Lists1'].all().map(i=>i.json);\nconst members = $node['Trello Members1'].all().map(i=>i.json);\nconst listById = Object.fromEntries(lists.map(l=>[l.id,l.name]));\nconst memById = Object.fromEntries(members.map(m=>[m.id,m.fullName||m.username]));\nconst now = new Date();\nconst venc = cards.filter(c=>c.due&&!c.dueComplete&&new Date(c.due)<now);\nif(!venc.length) return [{json:{respuesta:'✅ No hay tareas vencidas.'}}];\nconst lines = ['**🔴 TAREAS VENCIDAS**',''];\nfor(const c of venc.slice(0,10)){\n  const dias = Math.floor((now-new Date(c.due))/86400000);\n  const resp = (c.idMembers||[]).map(id=>memById[id]||id).join(', ') || 'sin asignar';\n  lines.push(`• **${c.name}**`);\n  lines.push(`  Lista: ${listById[c.idList]||'?'} | Resp: ${resp} | Hace ${dias}d`);\n}\nif(venc.length>10) lines.push(`...y ${venc.length-10} más`);\nreturn [{json:{respuesta:lines.join('\\n')}}];\n"
+      },
+      "id": "ea098fdb-b9ae-44d3-aafb-3729c616e26f",
+      "name": "Formatear Vencidas1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        38976,
+        31104
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.respuesta }}",
+        "options": {}
+      },
+      "id": "54df5138-02ab-45ab-8fce-b9175d86be53",
+      "name": "Resp vencidas1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        39216,
+        31104
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst cards = $node['Trello Cards1'].all().map(i=>i.json);\nconst members = $node['Trello Members1'].all().map(i=>i.json);\nconst memById = Object.fromEntries(members.map(m=>[m.id,m.fullName||m.username]));\nconst now = new Date();\nconst stats = {};\nfor(const c of cards){\n  for(const id of (c.idMembers||[])){\n    const name = memById[id]||id;\n    if(!stats[name]) stats[name]={asig:0,done:0,venc:0};\n    stats[name].asig++;\n    if(c.dueComplete) stats[name].done++;\n    else if(c.due&&new Date(c.due)<now) stats[name].venc++;\n  }\n}\nconst lines = ['**👥 CARGA DEL EQUIPO**','`Miembro          | Asig | Done | Venc`'];\nfor(const [name,s] of Object.entries(stats)){\n  const short = name.split(' ').slice(0,2).join(' ').padEnd(16);\n  lines.push(`${short} |  ${String(s.asig).padStart(2)}  |  ${String(s.done).padStart(2)}  |  ${String(s.venc).padStart(2)}`);\n}\nreturn [{json:{respuesta:lines.join('\\n')}}];\n"
+      },
+      "id": "9d886113-85ff-4acc-95f5-670d7153faca",
+      "name": "Formatear Miembros1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        38976,
+        31296
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.respuesta }}",
+        "options": {}
+      },
+      "id": "f38af753-bc08-4244-93af-5f3645d65167",
+      "name": "Resp miembros1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        39216,
+        31296
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst bC = $node['GH Back Commits1'].all().map(i=>i.json).slice(0,5);\nconst fC = $node['GH Front Commits1'].all().map(i=>i.json).slice(0,5);\nconst fmt = (c,repo)=>`• \\`${(c.sha||'').slice(0,7)}\\` [${repo}] **${(c.commit?.author?.name||'?').split(' ')[0]}**: ${(c.commit?.message||'').split('\\n')[0].slice(0,70)}`;\nconst lines = ['**📝 COMMITS RECIENTES**','**Backend:**',...bC.map(c=>fmt(c,'back')),'','**Frontend:**',...fC.map(c=>fmt(c,'front'))];\nreturn [{json:{respuesta:lines.join('\\n')}}];\n"
+      },
+      "id": "8a2598ae-c1fc-4557-930a-cf3c031c960c",
+      "name": "Formatear Commits1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        38976,
+        31472
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.respuesta }}",
+        "options": {}
+      },
+      "id": "6c6603e8-e8de-4235-8452-cb58539187f0",
+      "name": "Resp commits1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        39216,
+        31472
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst bR = $node['GH Back CI Runs'].first()?.json?.workflow_runs?.[0];\nconst fR = $node['GH Front CI Runs'].first()?.json?.workflow_runs?.[0];\nconst emo = s=>s==='success'?'✅':s==='failure'?'❌':s==='in_progress'?'🔄':'⚪';\nconst fmt = (r,label)=>r?`${emo(r.conclusion||r.status)} **${label}**: ${r.conclusion||r.status} | rama: ${r.head_branch} | por: ${r.actor?.login||'?'}`:`⚪ **${label}**: sin datos`;\nconst lines = ['**🔧 ESTADO CI/CD**',fmt(bR,'Backend'),fmt(fR,'Frontend'),'','🌐 Deploy: https://pet-safe-six.vercel.app'];\nreturn [{json:{respuesta:lines.join('\\n')}}];\n"
+      },
+      "id": "e4dd5bb3-3484-4952-9f45-ad4af4a5cec2",
+      "name": "Formatear CI1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        38976,
+        31648
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.respuesta }}",
+        "options": {}
+      },
+      "id": "ee4c1890-eff1-4a31-b019-b4f8e7cbe5f1",
+      "name": "Resp ci1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        39216,
+        31648
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst cards = $node['Trello Cards1'].all().map(i=>i.json);\nconst h = $node['PG Historial1']?.first()?.json||{};\nconst kpis=(typeof h.kpis_json==='string'?JSON.parse(h.kpis_json):h.kpis_json)||{};\nconst now=new Date();\nconst total=cards.length, done=cards.filter(c=>c.dueComplete).length;\nconst pend=cards.filter(c=>!c.dueComplete&&!(c.due&&new Date(c.due)<now)).length;\nconst venc=cards.filter(c=>c.due&&!c.dueComplete&&new Date(c.due)<now).length;\nconst pct=total>0?Math.round(done/total*100):0;\nconst bar='█'.repeat(Math.round(pct/10))+'░'.repeat(10-Math.round(pct/10));\nconst lines=[\n  '**🏁 PROGRESO DEL SPRINT**',\n  `\\`[${bar}] ${pct}%\\``,\n  `Completadas: **${done}** | Pendientes: **${pend}** | Vencidas: **${venc}**`,\n  `Velocidad: **${kpis.velocidad_tareas_por_dia??'?'}** t/día | Commits/día: **${kpis.commits_por_dia??'?'}**`,\n  `Proyección: **${kpis.proyeccion??'sin datos'}** | Días hasta fin: **${kpis.dias_hasta_fin??'?'}**`\n];\nreturn [{json:{respuesta:lines.join('\\n')}}];\n"
+      },
+      "id": "f843cabf-96b3-4761-a062-9741356c982d",
+      "name": "Formatear Progreso1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        38976,
+        31824
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.respuesta }}",
+        "options": {}
+      },
+      "id": "d65a6fab-6fa1-47ce-b893-7276c4639701",
+      "name": "Resp progreso1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        39216,
+        31824
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.trello.com/1/search?query={{ encodeURIComponent($fromAI('keyword')) }}&idBoards={{ $node['Config1'].json.TRELLO_BOARD_ID }}&card_fields=name,desc,due,dueComplete,idList&key={{ $node['Config1'].json.TRELLO_KEY }}&token={{ $node['Config1'].json.TRELLO_TOKEN }}&modelTypes=cards",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {}
+          ]
+        }
+      },
+      "id": "b583471b-09ae-4b6f-a799-07720692576f",
+      "name": "Tool Buscar Trello1",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        37968,
+        31984
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node['Config1'].json.GITHUB_OWNER_BACKEND }}/{{ $fromAI('repo') === 'frontend' ? $node['Config1'].json.GITHUB_REPO_FRONTEND : $node['Config1'].json.GITHUB_REPO_BACKEND }}/actions/runs?per_page=3",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {}
+          ]
+        }
+      },
+      "id": "ad373a33-2d13-4c0d-b18e-24e9859548c9",
+      "name": "Tool Ver CI1",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        38128,
+        31984
+      ]
+    },
+    {
+      "parameters": {
+        "name": "crear_tarjeta_trello",
+        "description": "Crea una nueva tarjeta en Trello. Recibe: nombre (título de la tarea), descripcion, lista (ej. Pendientes, En Progreso) y miembro (a quien asignar).",
+        "workflowId": {
+          "value": "tool-crear-tarjeta",
+          "mode": "id"
+        }
+      },
+      "id": "57381c7f-e0fc-405d-877e-a11119059844",
+      "name": "Tool Workflow Crear Tarjeta1",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 1,
+      "position": [
+        38272,
+        31984
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Config1\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Config1\"].json.GITHUB_REPO_BACKEND }}/actions/runs?per_page=5",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config1\"].json.GITHUB_TOKEN_BACKEND || $node[\"Config1\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "chat-gh-back-ci-runs",
+      "name": "GH Back CI Runs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        35776,
+        32032
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Config1\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Config1\"].json.GITHUB_REPO_FRONTEND }}/actions/runs?per_page=5",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config1\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Config1\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "chat-gh-front-ci-runs",
+      "name": "GH Front CI Runs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        35776,
+        32160
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Discord Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Config1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config1": {
+      "main": [
+        [
+          {
+            "node": "Redis Dedup Check1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router Comandos1": {
+      "main": [
+        [
+          {
+            "node": "IF Es Ayuda1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Tipo1": {
+      "main": [
+        [
+          {
+            "node": "Trigger Reporte PDF1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres Ultimo KPI1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Trello Cards1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trello Lists1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trello Members1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Back Commits1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Front Commits1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Back PRs1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Front PRs1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Historial1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Recomendaciones1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Hitos1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resp Ayuda1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resp Error1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Reporte PDF1": {
+      "main": [
+        [
+          {
+            "node": "Resp Reporte1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Ultimo KPI1": {
+      "main": [
+        [
+          {
+            "node": "Redis Get KPIs Cache1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear KPIs1": {
+      "main": [
+        [
+          {
+            "node": "Redis Set KPIs Cache1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trello Cards1": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trello Lists1": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Trello Members1": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat1",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "GH Back Commits1": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat1",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "GH Front Commits1": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat1",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "GH Back PRs1": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat1",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "GH Front PRs1": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat1",
+            "type": "main",
+            "index": 6
+          }
+        ]
+      ]
+    },
+    "PG Historial1": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat1",
+            "type": "main",
+            "index": 7
+          }
+        ]
+      ]
+    },
+    "PG Recomendaciones1": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat1",
+            "type": "main",
+            "index": 8
+          }
+        ]
+      ]
+    },
+    "Merge Chat1": {
+      "main": [
+        [
+          {
+            "node": "IF Necesita Diff1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Necesita Diff1": {
+      "main": [
+        [
+          {
+            "node": "Wait Diff APIs1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Construir Contexto1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Diff Backend1": {
+      "main": [
+        [
+          {
+            "node": "Construir Contexto1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Diff Frontend1": {
+      "main": [
+        [
+          {
+            "node": "Construir Contexto1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Chat1": {
+      "main": [
+        [
+          {
+            "node": "Guardar Q&A1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar Q&A1": {
+      "main": [
+        [
+          {
+            "node": "Resp Chat1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PG Hitos1": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat1",
+            "type": "main",
+            "index": 9
+          }
+        ]
+      ]
+    },
+    "IF Es Ayuda1": {
+      "main": [
+        [
+          {
+            "node": "Resp Ayuda1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF Es Error1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Es Error1": {
+      "main": [
+        [
+          {
+            "node": "Resp Error1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF Es Reporte1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Es Reporte1": {
+      "main": [
+        [
+          {
+            "node": "Trigger Reporte PDF1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF Es KPIs1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Es KPIs1": {
+      "main": [
+        [
+          {
+            "node": "Postgres Ultimo KPI1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Trello Cards1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trello Lists1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trello Members1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Back Commits1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Front Commits1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Back PRs1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Front PRs1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Historial1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Recomendaciones1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Hitos1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Back CI Runs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Front CI Runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Gemini Chat1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis Chat Memory1": {
+      "ai_memory": [
+        [
+          {
+            "node": "Gemini Chat1",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Gemini Chat1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis Dedup Check1": {
+      "main": [
+        [
+          {
+            "node": "IF Duplicado1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Duplicado1": {
+      "main": [
+        [
+          {
+            "node": "Resp Dedup Skip1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Redis Dedup Set1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis Dedup Set1": {
+      "main": [
+        [
+          {
+            "node": "Router Comandos1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis Get KPIs Cache1": {
+      "main": [
+        [
+          {
+            "node": "IF KPIs Cacheados1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF KPIs Cacheados1": {
+      "main": [
+        [
+          {
+            "node": "Resp KPIs Cacheados1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Formatear KPIs1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis Set KPIs Cache1": {
+      "main": [
+        [
+          {
+            "node": "Resp KPIs1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Diff APIs1": {
+      "main": [
+        [
+          {
+            "node": "Diff Backend1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Diff Frontend1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Datos Rapidos1": {
+      "main": [
+        [
+          {
+            "node": "Switch Formato1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini Chat1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Formato1": {
+      "main": [
+        [
+          {
+            "node": "Formatear Estado1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Formatear Vencidas1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Formatear Miembros1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Formatear Commits1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Formatear CI1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Formatear Progreso1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Estado1": {
+      "main": [
+        [
+          {
+            "node": "Resp estado1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Vencidas1": {
+      "main": [
+        [
+          {
+            "node": "Resp vencidas1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Miembros1": {
+      "main": [
+        [
+          {
+            "node": "Resp miembros1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Commits1": {
+      "main": [
+        [
+          {
+            "node": "Resp commits1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear CI1": {
+      "main": [
+        [
+          {
+            "node": "Resp ci1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Progreso1": {
+      "main": [
+        [
+          {
+            "node": "Resp progreso1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool Buscar Trello1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Gemini Chat1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool Ver CI1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Gemini Chat1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool Workflow Crear Tarjeta1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Gemini Chat1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Contexto1": {
+      "main": [
+        [
+          {
+            "node": "IF Datos Rapidos1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GH Back CI Runs": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat1",
+            "type": "main",
+            "index": 10
+          }
+        ]
+      ]
+    },
+    "GH Front CI Runs": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat1",
+            "type": "main",
+            "index": 11
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "split-discord-chat-main-v1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "ePBXQgBFS8BKvIPS",
+  "tags": []
+}

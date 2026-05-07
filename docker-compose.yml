@@ -1,21 +1,61 @@
 services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: agente_db
+    environment:
+      POSTGRES_USER: agente
+      POSTGRES_PASSWORD: agente123
+      POSTGRES_DB: proyecto_db
+    volumes:
+    - postgres_data:/var/lib/postgresql/data
+    - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+    - 5432:5432
+    restart: always
+    networks:
+    - default
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache
+    restart: always
+    volumes:
+    - redis_data:/data
+    networks:
+    - default
   n8n:
-    image: n8nio/n8n:latest
+    image: n8nio/n8n
     container_name: n8n
     ports:
-      - "5678:5678"
+    - 5678:5678
     env_file:
-      - .env
+    - .env
+    environment:
+    - N8N_BASIC_AUTH_ACTIVE=true
+    - N8N_BASIC_AUTH_USER=admin
+    - N8N_BASIC_AUTH_PASSWORD=admin123
     volumes:
-      - n8n_data:/home/node/.n8n
-    restart: unless-stopped
-    
+    - n8n_data:/home/node/.n8n
+    depends_on:
+    - postgres
+    - redis
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+    - host.docker.internal:host-gateway
+    restart: always
+    networks:
+    - default
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: gotenberg
+    ports:
+    - 3001:3000
+    restart: always
+    networks:
+    - default
 volumes:
-  n8n_data:
+  postgres_data: null
+  n8n_data: null
+  redis_data: null
 networks:
   default:
     name: automatizacion
     external: true
-

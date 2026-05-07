@@ -11,13 +11,13 @@
           ]
         }
       },
-      "id": "9c1ac027-8193-4b2f-8a6d-fd6c6900405d",
-      "name": "Schedule Trigger",
+      "id": "0695f1a4-1869-4106-92ac-a090faba0d9e",
+      "name": "Schedule Trigger1",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
       "position": [
-        -2048,
-        224
+        -2320,
+        1424
       ]
     },
     {
@@ -100,28 +100,28 @@
         },
         "options": {}
       },
-      "id": "69a2a5ab-41e8-492c-ad95-1ea860e30846",
-      "name": "Configuración",
+      "id": "ce0ac715-dd1f-4983-9a5b-7dbe36b6f108",
+      "name": "Configuración1",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -1824,
-        224
+        -2096,
+        1424
       ]
     },
     {
       "parameters": {
-        "url": "=https://api.trello.com/1/boards/{{ $node[\"Configuración\"].json.TRELLO_BOARD_ID }}/cards",
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Configuración1\"].json.TRELLO_BOARD_ID }}/cards",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
             {
               "name": "key",
-              "value": "={{ $node[\"Configuración\"].json.TRELLO_API_KEY }}"
+              "value": "={{ $node[\"Configuración1\"].json.TRELLO_API_KEY }}"
             },
             {
               "name": "token",
-              "value": "={{ $node[\"Configuración\"].json.TRELLO_TOKEN }}"
+              "value": "={{ $node[\"Configuración1\"].json.TRELLO_TOKEN }}"
             },
             {
               "name": "fields",
@@ -139,18 +139,18 @@
         },
         "options": {}
       },
-      "id": "32162821-c0cb-4f77-9ca4-86e7c266fdce",
-      "name": "Trello Cards Delta",
+      "id": "a78b40d9-02ae-4c25-9261-34e7f35a58ba",
+      "name": "Trello Cards Delta1",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -1584,
-        32
+        -1856,
+        1232
       ]
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/repos/{{ $node[\"Configuración\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Configuración\"].json.GITHUB_REPO_BACKEND }}/commits",
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuración1\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Configuración1\"].json.GITHUB_REPO_BACKEND }}/commits",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -169,7 +169,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $node[\"Configuración\"].json.GITHUB_TOKEN_BACKEND || $node[\"Configuración\"].json.GITHUB_TOKEN }}"
+              "value": "=Bearer {{ $node[\"Configuración1\"].json.GITHUB_TOKEN_BACKEND || $node[\"Configuración1\"].json.GITHUB_TOKEN }}"
             },
             {
               "name": "Accept",
@@ -179,18 +179,18 @@
         },
         "options": {}
       },
-      "id": "f7b9aaa3-e0df-4e49-8a6b-241a5bae56aa",
-      "name": "GitHub Back Main",
+      "id": "9855b875-0953-48ad-9d88-b2976b900f74",
+      "name": "GitHub Back Main1",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -1584,
-        160
+        -1856,
+        1360
       ]
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/repos/{{ $node[\"Configuración\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Configuración\"].json.GITHUB_REPO_FRONTEND }}/commits",
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuración1\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Configuración1\"].json.GITHUB_REPO_FRONTEND }}/commits",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -209,7 +209,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $node[\"Configuración\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Configuración\"].json.GITHUB_TOKEN }}"
+              "value": "=Bearer {{ $node[\"Configuración1\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Configuración1\"].json.GITHUB_TOKEN }}"
             },
             {
               "name": "Accept",
@@ -219,13 +219,13 @@
         },
         "options": {}
       },
-      "id": "3b74096d-c94a-4e2f-9974-a86daf269eef",
-      "name": "GitHub Front Main",
+      "id": "51e563d1-eab9-4447-bfb2-047713a862b9",
+      "name": "GitHub Front Main1",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -1584,
-        304
+        -1856,
+        1504
       ]
     },
     {
@@ -234,13 +234,13 @@
         "query": "SELECT snapshot FROM estado_conocido WHERE id = 1;",
         "options": {}
       },
-      "id": "023f9be3-c64f-4984-aade-3a2f8ead4cbb",
-      "name": "PG Estado Conocido",
+      "id": "2a362f6f-cd63-43f6-9ebe-3f97d74efcc4",
+      "name": "PG Estado Conocido1",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -1584,
-        448
+        -1856,
+        1648
       ],
       "credentials": {
         "postgres": {
@@ -253,26 +253,26 @@
       "parameters": {
         "numberInputs": 4
       },
-      "id": "91cecb6b-4b3e-4538-bc89-af3c0536e90f",
-      "name": "Merge Delta",
+      "id": "0ba2dae1-88f3-4f30-841e-efbeb506a3db",
+      "name": "Merge Delta1",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
       "position": [
-        -1328,
-        224
+        -1600,
+        1424
       ]
     },
     {
       "parameters": {
-        "jsCode": "const cfg = $node['Configuración'].json;\n\nconst parseSnapshot = (value) => {\n  try {\n    if (!value) return {};\n    if (typeof value === 'string') return JSON.parse(value);\n    if (typeof value === 'object') return value;\n    return {};\n  } catch (e) {\n    return {};\n  }\n};\n\nconst safeNodeItems = (nodeName) => {\n  try {\n    return $(nodeName).all().map(i => i.json);\n  } catch (e) {\n    return [];\n  }\n};\n\nconst flattenItems = (arr) => {\n  const out = [];\n  for (const it of arr) {\n    if (Array.isArray(it)) out.push(...it);\n    else if (it && typeof it === 'object') out.push(it);\n  }\n  return out;\n};\n\nconst isCard = (x) =>\n  x &&\n  typeof x === 'object' &&\n  typeof x.id === 'string' &&\n  x.id.length === 24 &&\n  Object.prototype.hasOwnProperty.call(x, 'dueComplete');\n\nconst isCommit = (x) =>\n  x &&\n  typeof x === 'object' &&\n  typeof x.sha === 'string' &&\n  x.commit &&\n  typeof x.commit === 'object';\n\n// 1) Intento principal: leer por nodo (más robusto y explícito)\nlet cards = flattenItems(safeNodeItems('Trello Cards Delta')).filter(isCard);\nlet backCommits = flattenItems(safeNodeItems('GitHub Back Main')).filter(isCommit);\nlet frontCommits = flattenItems(safeNodeItems('GitHub Front Main')).filter(isCommit);\n\nconst pgRows = flattenItems(safeNodeItems('PG Estado Conocido'));\nlet prevSnapshot = parseSnapshot(pgRows[0]?.snapshot);\n\n// 2) Fallback: si algo vino vacío, intentar reconstruir desde Merge/$input\nif (!cards.length || !backCommits.length || !frontCommits.length || !Object.keys(prevSnapshot).length) {\n  const mergedRaw = $input.all().map(i => i.json);\n  const mergedFlat = flattenItems(mergedRaw);\n\n  const fbCards = [];\n  const fbBack = [];\n  const fbFront = [];\n  let fbSnapshot = {};\n\n  for (const it of mergedFlat) {\n    if (it?.snapshot && !Object.keys(fbSnapshot).length) {\n      fbSnapshot = parseSnapshot(it.snapshot);\n      continue;\n    }\n\n    if (isCard(it)) {\n      fbCards.push(it);\n      continue;\n    }\n\n    if (isCommit(it)) {\n      const url = String(it.url || it.html_url || '');\n      if (url.includes(cfg.GITHUB_REPO_BACKEND)) fbBack.push(it);\n      else if (url.includes(cfg.GITHUB_REPO_FRONTEND)) fbFront.push(it);\n    }\n  }\n\n  if (!cards.length) cards = fbCards;\n  if (!backCommits.length) backCommits = fbBack;\n  if (!frontCommits.length) frontCommits = fbFront;\n  if (!Object.keys(prevSnapshot).length) prevSnapshot = fbSnapshot;\n}\n\nconst prev = {\n  main_commit_back_sha: prevSnapshot.main_commit_back_sha || null,\n  main_commit_front_sha: prevSnapshot.main_commit_front_sha || null,\n  card_states: prevSnapshot.card_states || {}\n};\n\nconst events = [];\nconst newCardStates = {};\n\nfor (const c of cards) {\n  const attCount = (c.attachments || []).length;\n  const pdfAtts = (c.attachments || []).filter(a =>\n    (a.mimeType || '').includes('pdf') || (a.name || '').toLowerCase().endsWith('.pdf')\n  );\n\n  newCardStates[c.id] = {\n    dueComplete: !!c.dueComplete,\n    attCount,\n    pdfCount: pdfAtts.length\n  };\n\n  const prevCard = prev.card_states[c.id];\n  if (prevCard) {\n    if (!prevCard.dueComplete && c.dueComplete) {\n      events.push({\n        tipo: 'tarea_completada',\n        emoji: '✅',\n        titulo: 'Tarea completada',\n        descripcion: `La tarjeta \"${c.name}\" fue marcada como completada.`,\n        detalle: { card_id: c.id, card_name: c.name, due: c.due }\n      });\n    }\n\n    if ((prevCard.pdfCount || 0) < pdfAtts.length) {\n      const newPdfs = pdfAtts.slice(-(pdfAtts.length - (prevCard.pdfCount || 0)));\n      events.push({\n        tipo: 'entregable_subido',\n        emoji: '📎',\n        titulo: 'Nuevo entregable PDF',\n        descripcion: `Se subió un PDF a \"${c.name}\": ${newPdfs.map(p => p.name).join(', ')}`,\n        detalle: {\n          card_id: c.id,\n          card_name: c.name,\n          pdfs: newPdfs.map(p => ({ name: p.name, url: p.url }))\n        }\n      });\n    }\n  }\n}\n\nconst latestBack = backCommits[0];\nif (latestBack && latestBack.sha !== prev.main_commit_back_sha) {\n  if (prev.main_commit_back_sha) {\n    events.push({\n      tipo: 'commit_main_backend',\n      emoji: '🔀',\n      titulo: 'Commit a main (backend)',\n      descripcion: `${latestBack.commit?.author?.name || '?'}: ${(latestBack.commit?.message || '').split('\\n')[0]}`,\n      detalle: {\n        repo: 'backend',\n        sha: latestBack.sha,\n        url: latestBack.html_url,\n        autor: latestBack.commit?.author?.name,\n        mensaje: latestBack.commit?.message\n      }\n    });\n  }\n}\n\nconst latestFront = frontCommits[0];\nif (latestFront && latestFront.sha !== prev.main_commit_front_sha) {\n  if (prev.main_commit_front_sha) {\n    events.push({\n      tipo: 'commit_main_frontend',\n      emoji: '🔀',\n      titulo: 'Commit a main (frontend)',\n      descripcion: `${latestFront.commit?.author?.name || '?'}: ${(latestFront.commit?.message || '').split('\\n')[0]}`,\n      detalle: {\n        repo: 'frontend',\n        sha: latestFront.sha,\n        url: latestFront.html_url,\n        autor: latestFront.commit?.author?.name,\n        mensaje: latestFront.commit?.message\n      }\n    });\n  }\n}\n\nconst newSnapshot = {\n  main_commit_back_sha: latestBack?.sha || prev.main_commit_back_sha,\n  main_commit_front_sha: latestFront?.sha || prev.main_commit_front_sha,\n  card_states: newCardStates\n};\n\nreturn [{\n  json: {\n    events,\n    event_count: events.length,\n    new_snapshot: newSnapshot,\n    new_snapshot_json: JSON.stringify(newSnapshot)\n  }\n}];"
+        "jsCode": "const cfg = $node['Configuración1'].json;\n\nconst parseSnapshot = (value) => {\n  try {\n    if (!value) return {};\n    if (typeof value === 'string') return JSON.parse(value);\n    if (typeof value === 'object') return value;\n    return {};\n  } catch (e) {\n    return {};\n  }\n};\n\nconst safeNodeItems = (nodeName) => {\n  try {\n    return $(nodeName).all().map(i => i.json);\n  } catch (e) {\n    return [];\n  }\n};\n\nconst flattenItems = (arr) => {\n  const out = [];\n  for (const it of arr) {\n    if (Array.isArray(it)) out.push(...it);\n    else if (it && typeof it === 'object') out.push(it);\n  }\n  return out;\n};\n\nconst isCard = (x) =>\n  x &&\n  typeof x === 'object' &&\n  typeof x.id === 'string' &&\n  x.id.length === 24 &&\n  Object.prototype.hasOwnProperty.call(x, 'dueComplete');\n\nconst isCommit = (x) =>\n  x &&\n  typeof x === 'object' &&\n  typeof x.sha === 'string' &&\n  x.commit &&\n  typeof x.commit === 'object';\n\n// 1) Intento principal: leer por nodo (más robusto y explícito)\nlet cards = flattenItems(safeNodeItems('Trello Cards Delta')).filter(isCard);\nlet backCommits = flattenItems(safeNodeItems('GitHub Back Main')).filter(isCommit);\nlet frontCommits = flattenItems(safeNodeItems('GitHub Front Main')).filter(isCommit);\n\nconst pgRows = flattenItems(safeNodeItems('PG Estado Conocido'));\nlet prevSnapshot = parseSnapshot(pgRows[0]?.snapshot);\n\n// 2) Fallback: si algo vino vacío, intentar reconstruir desde Merge/$input\nif (!cards.length || !backCommits.length || !frontCommits.length || !Object.keys(prevSnapshot).length) {\n  const mergedRaw = $input.all().map(i => i.json);\n  const mergedFlat = flattenItems(mergedRaw);\n\n  const fbCards = [];\n  const fbBack = [];\n  const fbFront = [];\n  let fbSnapshot = {};\n\n  for (const it of mergedFlat) {\n    if (it?.snapshot && !Object.keys(fbSnapshot).length) {\n      fbSnapshot = parseSnapshot(it.snapshot);\n      continue;\n    }\n\n    if (isCard(it)) {\n      fbCards.push(it);\n      continue;\n    }\n\n    if (isCommit(it)) {\n      const url = String(it.url || it.html_url || '');\n      if (url.includes(cfg.GITHUB_REPO_BACKEND)) fbBack.push(it);\n      else if (url.includes(cfg.GITHUB_REPO_FRONTEND)) fbFront.push(it);\n    }\n  }\n\n  if (!cards.length) cards = fbCards;\n  if (!backCommits.length) backCommits = fbBack;\n  if (!frontCommits.length) frontCommits = fbFront;\n  if (!Object.keys(prevSnapshot).length) prevSnapshot = fbSnapshot;\n}\n\nconst prev = {\n  main_commit_back_sha: prevSnapshot.main_commit_back_sha || null,\n  main_commit_front_sha: prevSnapshot.main_commit_front_sha || null,\n  card_states: prevSnapshot.card_states || {}\n};\n\nconst events = [];\nconst newCardStates = {};\n\nfor (const c of cards) {\n  const attCount = (c.attachments || []).length;\n  const pdfAtts = (c.attachments || []).filter(a =>\n    (a.mimeType || '').includes('pdf') || (a.name || '').toLowerCase().endsWith('.pdf')\n  );\n\n  newCardStates[c.id] = {\n    dueComplete: !!c.dueComplete,\n    attCount,\n    pdfCount: pdfAtts.length\n  };\n\n  const prevCard = prev.card_states[c.id];\n  if (prevCard) {\n    if (!prevCard.dueComplete && c.dueComplete) {\n      events.push({\n        tipo: 'tarea_completada',\n        emoji: '✅',\n        titulo: 'Tarea completada',\n        descripcion: `La tarjeta \"${c.name}\" fue marcada como completada.`,\n        detalle: { card_id: c.id, card_name: c.name, due: c.due }\n      });\n    }\n\n    if ((prevCard.pdfCount || 0) < pdfAtts.length) {\n      const newPdfs = pdfAtts.slice(-(pdfAtts.length - (prevCard.pdfCount || 0)));\n      events.push({\n        tipo: 'entregable_subido',\n        emoji: '📎',\n        titulo: 'Nuevo entregable PDF',\n        descripcion: `Se subió un PDF a \"${c.name}\": ${newPdfs.map(p => p.name).join(', ')}`,\n        detalle: {\n          card_id: c.id,\n          card_name: c.name,\n          pdfs: newPdfs.map(p => ({ name: p.name, url: p.url }))\n        }\n      });\n    }\n  }\n}\n\nconst latestBack = backCommits[0];\nif (latestBack && latestBack.sha !== prev.main_commit_back_sha) {\n  if (prev.main_commit_back_sha) {\n    events.push({\n      tipo: 'commit_main_backend',\n      emoji: '🔀',\n      titulo: 'Commit a main (backend)',\n      descripcion: `${latestBack.commit?.author?.name || '?'}: ${(latestBack.commit?.message || '').split('\\n')[0]}`,\n      detalle: {\n        repo: 'backend',\n        sha: latestBack.sha,\n        url: latestBack.html_url,\n        autor: latestBack.commit?.author?.name,\n        mensaje: latestBack.commit?.message\n      }\n    });\n  }\n}\n\nconst latestFront = frontCommits[0];\nif (latestFront && latestFront.sha !== prev.main_commit_front_sha) {\n  if (prev.main_commit_front_sha) {\n    events.push({\n      tipo: 'commit_main_frontend',\n      emoji: '🔀',\n      titulo: 'Commit a main (frontend)',\n      descripcion: `${latestFront.commit?.author?.name || '?'}: ${(latestFront.commit?.message || '').split('\\n')[0]}`,\n      detalle: {\n        repo: 'frontend',\n        sha: latestFront.sha,\n        url: latestFront.html_url,\n        autor: latestFront.commit?.author?.name,\n        mensaje: latestFront.commit?.message\n      }\n    });\n  }\n}\n\nconst newSnapshot = {\n  main_commit_back_sha: latestBack?.sha || prev.main_commit_back_sha,\n  main_commit_front_sha: latestFront?.sha || prev.main_commit_front_sha,\n  card_states: newCardStates\n};\n\nreturn [{\n  json: {\n    events,\n    event_count: events.length,\n    new_snapshot: newSnapshot,\n    new_snapshot_json: JSON.stringify(newSnapshot)\n  }\n}];"
       },
-      "id": "c043aab2-125b-4ce6-995f-acb1454094f7",
-      "name": "Delta Detector",
+      "id": "e3a1640c-f7c1-4926-927f-0820a67e8e25",
+      "name": "Delta Detector1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1136,
-        256
+        -1408,
+        1456
       ]
     },
     {
@@ -283,13 +283,13 @@
           "queryReplacement": "={{ $json.new_snapshot_json }}"
         }
       },
-      "id": "e660aba2-e932-4977-92de-7d23133f81a5",
-      "name": "PG Update Estado",
+      "id": "4d30289a-d8e5-47c4-bd14-2d748625ac20",
+      "name": "PG Update Estado1",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -912,
-        464
+        -1184,
+        1664
       ],
       "credentials": {
         "postgres": {
@@ -320,32 +320,32 @@
         },
         "options": {}
       },
-      "id": "6efb8ce2-d6fd-4509-bdc5-d7174408a613",
-      "name": "IF Hay Eventos",
+      "id": "672d25b2-aee5-46e0-9d80-c15d230e18a3",
+      "name": "IF Hay Eventos1",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -912,
-        160
+        -1184,
+        1360
       ]
     },
     {
       "parameters": {
         "jsCode": "const events = $json.events || [];\nreturn events.map(e => ({ json: e }));\n"
       },
-      "id": "4ecb5126-7d4b-4c7d-a4ad-5ddafc5a52d9",
-      "name": "Split Events",
+      "id": "575686e3-50ec-4d49-91d6-61d32c40726a",
+      "name": "Split Events1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -688,
-        112
+        -960,
+        1312
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{ $node[\"Configuración\"].json.GEMINI_API_KEY }}",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{ $node[\"Configuración1\"].json.GEMINI_API_KEY }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -363,32 +363,32 @@
         },
         "options": {}
       },
-      "id": "3c8a725f-afd3-42a8-ac98-62b72ac58fe0",
-      "name": "Gemini Event Analysis",
+      "id": "83b399da-361f-4f83-b8bd-341c33e07f6a",
+      "name": "Gemini Event Analysis1",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -496,
-        112
+        -768,
+        1312
       ]
     },
     {
       "parameters": {
-        "jsCode": "const ev = $node['Split Events'].json;\nconst gem = $json;\nconst analysis = gem?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';\n\nlet extra = '';\nif (ev.detalle?.url) extra = `\\n🔗 ${ev.detalle.url}`;\nif (ev.detalle?.pdfs?.length) extra = '\\n' + ev.detalle.pdfs.map(p => `📄 [${p.name}](${p.url})`).join('\\n');\n\nconst content = `${ev.emoji} **${ev.titulo}**\\n${ev.descripcion}${extra}\\n\\n🤖 ${analysis}`;\n\nreturn [{ json: {\n  ...ev,\n  analysis,\n  content,\n  detalle_json: JSON.stringify(ev.detalle || {})\n}}];\n"
+        "jsCode": "const ev = $node['Split Events1'].json;\nconst gem = $json;\nconst analysis = gem?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';\n\nlet extra = '';\nif (ev.detalle?.url) extra = `\\n🔗 ${ev.detalle.url}`;\nif (ev.detalle?.pdfs?.length) extra = '\\n' + ev.detalle.pdfs.map(p => `📄 [${p.name}](${p.url})`).join('\\n');\n\nconst content = `${ev.emoji} **${ev.titulo}**\\n${ev.descripcion}${extra}\\n\\n🤖 ${analysis}`;\n\nreturn [{ json: {\n  ...ev,\n  analysis,\n  content,\n  detalle_json: JSON.stringify(ev.detalle || {})\n}}];\n"
       },
-      "id": "d4ba5390-166e-41ae-bb55-cddce5c15709",
-      "name": "Build Discord Msg",
+      "id": "6f6960c3-4b7c-46ec-b511-993f4ac99ed9",
+      "name": "Build Discord Msg1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -272,
-        112
+        -544,
+        1312
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $node[\"Configuración\"].json.DISCORD_WEBHOOK_URL }}",
+        "url": "={{ $node[\"Configuración1\"].json.DISCORD_WEBHOOK_URL }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -406,13 +406,13 @@
         },
         "options": {}
       },
-      "id": "bdcc7193-c793-4017-8d04-683404cc6c96",
-      "name": "Discord Event",
+      "id": "205473fd-a1a0-476b-81cf-56f608163360",
+      "name": "Discord Event1",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -48,
-        32
+        -320,
+        1232
       ]
     },
     {
@@ -423,13 +423,13 @@
           "queryReplacement": "={{ $json.tipo }},={{ $json.descripcion }},={{ $json.detalle_json }}"
         }
       },
-      "id": "e74c83e1-57e0-4650-8207-cd83d84c821f",
-      "name": "PG Insert Evento",
+      "id": "a4eaa3d1-c4ed-4c72-b506-405b5b22f74b",
+      "name": "PG Insert Evento1",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -48,
-        192
+        -320,
+        1392
       ],
       "credentials": {
         "postgres": {
@@ -441,157 +441,157 @@
   ],
   "pinData": {},
   "connections": {
-    "Schedule Trigger": {
+    "Schedule Trigger1": {
       "main": [
         [
           {
-            "node": "Configuración",
+            "node": "Configuración1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Configuración": {
+    "Configuración1": {
       "main": [
         [
           {
-            "node": "Trello Cards Delta",
+            "node": "Trello Cards Delta1",
             "type": "main",
             "index": 0
           },
           {
-            "node": "GitHub Back Main",
+            "node": "GitHub Back Main1",
             "type": "main",
             "index": 0
           },
           {
-            "node": "GitHub Front Main",
+            "node": "GitHub Front Main1",
             "type": "main",
             "index": 0
           },
           {
-            "node": "PG Estado Conocido",
+            "node": "PG Estado Conocido1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Trello Cards Delta": {
+    "Trello Cards Delta1": {
       "main": [
         [
           {
-            "node": "Merge Delta",
+            "node": "Merge Delta1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "GitHub Back Main": {
+    "GitHub Back Main1": {
       "main": [
         [
           {
-            "node": "Merge Delta",
+            "node": "Merge Delta1",
             "type": "main",
             "index": 1
           }
         ]
       ]
     },
-    "GitHub Front Main": {
+    "GitHub Front Main1": {
       "main": [
         [
           {
-            "node": "Merge Delta",
+            "node": "Merge Delta1",
             "type": "main",
             "index": 2
           }
         ]
       ]
     },
-    "PG Estado Conocido": {
+    "PG Estado Conocido1": {
       "main": [
         [
           {
-            "node": "Merge Delta",
+            "node": "Merge Delta1",
             "type": "main",
             "index": 3
           }
         ]
       ]
     },
-    "Merge Delta": {
+    "Merge Delta1": {
       "main": [
         [
           {
-            "node": "Delta Detector",
+            "node": "Delta Detector1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Delta Detector": {
+    "Delta Detector1": {
       "main": [
         [
           {
-            "node": "IF Hay Eventos",
+            "node": "IF Hay Eventos1",
             "type": "main",
             "index": 0
           },
           {
-            "node": "PG Update Estado",
+            "node": "PG Update Estado1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "IF Hay Eventos": {
+    "IF Hay Eventos1": {
       "main": [
         [
           {
-            "node": "Split Events",
+            "node": "Split Events1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Split Events": {
+    "Split Events1": {
       "main": [
         [
           {
-            "node": "Gemini Event Analysis",
+            "node": "Gemini Event Analysis1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini Event Analysis": {
+    "Gemini Event Analysis1": {
       "main": [
         [
           {
-            "node": "Build Discord Msg",
+            "node": "Build Discord Msg1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build Discord Msg": {
+    "Build Discord Msg1": {
       "main": [
         [
           {
-            "node": "Discord Event",
+            "node": "Discord Event1",
             "type": "main",
             "index": 0
           },
           {
-            "node": "PG Insert Evento",
+            "node": "PG Insert Evento1",
             "type": "main",
             "index": 0
           }
@@ -604,7 +604,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "99f83647-5590-4b4e-b4d0-cf147f59d534",
+  "versionId": "f20cab36-782e-4c1c-bb49-65037a97391a",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"

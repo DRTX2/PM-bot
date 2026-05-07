@@ -1,0 +1,94 @@
+{
+  "name": "Monitor PetSafe - Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "beccbdf9-99d2-4e7b-80b2-beb4a87917ee",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -448,
+        7072
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e1s1",
+              "name": "mensaje_error",
+              "value": "={{ `🚨 **Error en Monitor PetSafe** 🚨\n\n**Workflow:** ${$workflow.name}\n**Nodo:** ${$json.error?.node?.name || $json.node?.name || 'desconocido'}\n**Error:** ${$json.error?.message || $json.message || JSON.stringify($json).slice(0,300)}` }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4a1969d4-d1f5-4f05-b76c-37d15a08eb0b",
+      "name": "Formatear Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -192,
+        7056
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ content: ($json.mensaje_error || '🚨 Error desconocido en Monitor PetSafe — revisar ejecuciones en n8n').slice(0, 2000) }) }}",
+        "options": {}
+      },
+      "id": "2f1a8d23-dd8d-4deb-b4f9-65db3a2687f2",
+      "name": "Alerta a Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        48,
+        7072
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Formatear Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Error": {
+      "main": [
+        [
+          {
+            "node": "Alerta a Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "split-monitor-error-handler-v1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "monitor-petsafe-error-handler",
+  "tags": []
+}
