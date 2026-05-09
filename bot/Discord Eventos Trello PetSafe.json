@@ -3,20 +3,16 @@
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "trello-event",
-        "responseMode": "responseNode",
-        "options": {}
+        "modelId": "={{ $env.TRELLO_BOARD_ID }}"
       },
       "id": "4414093c-80c3-44ad-bcc4-c4d91e9e33e1",
       "name": "Trello Event Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.trelloTrigger",
+      "typeVersion": 1,
       "position": [
         33888,
         28992
-      ],
-      "webhookId": "75a8cc16-b29e-40c1-acf4-df57fecb1f0a"
+      ]
     },
     {
       "parameters": {
@@ -96,8 +92,10 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO eventos_detectados (tipo, descripcion, detalle, notificado) VALUES ('{{ ($json.tipo || \"trello_evento\").replace(/'/g, \"''\") }}', '{{ ($json.descripcion || \"\").replace(/'/g, \"''\") }}', '{{ ($json.detalle_json || \"{}\").replace(/'/g, \"''\") }}'::jsonb, TRUE);",
-        "options": {}
+        "query": "INSERT INTO eventos_detectados (tipo, descripcion, detalle, notificado) VALUES ($1, $2, $3::jsonb, TRUE);",
+        "options": {
+          "queryParameters": "={{($json.tipo || \"trello_evento\")}},={{($json.descripcion || \"\")}},={{($json.detalle_json || \"{}\")}}"
+        }
       },
       "id": "4f283ab4-3d50-4874-96c6-1bbaf23cb5fc",
       "name": "PG Insert Evento Trello",
@@ -205,7 +203,8 @@
     "binaryMode": "separate",
     "timeSavedMode": "fixed",
     "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false
+    "availableInMCP": false,
+    "errorWorkflow": "monitor-petsafe-error-handler"
   },
   "versionId": "split-discord-trello-events-v1",
   "meta": {

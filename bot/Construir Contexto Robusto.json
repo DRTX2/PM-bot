@@ -101,7 +101,7 @@
         "options": {}
       },
       "id": "ce0ac715-dd1f-4983-9a5b-7dbe36b6f108",
-      "name": "Configuración1",
+      "name": "Configuraci\u00f3n1",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
@@ -111,17 +111,17 @@
     },
     {
       "parameters": {
-        "url": "=https://api.trello.com/1/boards/{{ $node[\"Configuración1\"].json.TRELLO_BOARD_ID }}/cards",
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Configuraci\u00f3n1\"].json.TRELLO_BOARD_ID }}/cards",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
             {
               "name": "key",
-              "value": "={{ $node[\"Configuración1\"].json.TRELLO_API_KEY }}"
+              "value": "={{ $node[\"Configuraci\u00f3n1\"].json.TRELLO_API_KEY }}"
             },
             {
               "name": "token",
-              "value": "={{ $node[\"Configuración1\"].json.TRELLO_TOKEN }}"
+              "value": "={{ $node[\"Configuraci\u00f3n1\"].json.TRELLO_TOKEN }}"
             },
             {
               "name": "fields",
@@ -150,7 +150,7 @@
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/repos/{{ $node[\"Configuración1\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Configuración1\"].json.GITHUB_REPO_BACKEND }}/commits",
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuraci\u00f3n1\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Configuraci\u00f3n1\"].json.GITHUB_REPO_BACKEND }}/commits",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -169,7 +169,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $node[\"Configuración1\"].json.GITHUB_TOKEN_BACKEND || $node[\"Configuración1\"].json.GITHUB_TOKEN }}"
+              "value": "=Bearer {{ $node[\"Configuraci\u00f3n1\"].json.GITHUB_TOKEN_BACKEND || $node[\"Configuraci\u00f3n1\"].json.GITHUB_TOKEN }}"
             },
             {
               "name": "Accept",
@@ -190,7 +190,7 @@
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/repos/{{ $node[\"Configuración1\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Configuración1\"].json.GITHUB_REPO_FRONTEND }}/commits",
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuraci\u00f3n1\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Configuraci\u00f3n1\"].json.GITHUB_REPO_FRONTEND }}/commits",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -209,7 +209,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $node[\"Configuración1\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Configuración1\"].json.GITHUB_TOKEN }}"
+              "value": "=Bearer {{ $node[\"Configuraci\u00f3n1\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Configuraci\u00f3n1\"].json.GITHUB_TOKEN }}"
             },
             {
               "name": "Accept",
@@ -264,7 +264,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const cfg = $node['Configuración1'].json;\n\nconst parseSnapshot = (value) => {\n  try {\n    if (!value) return {};\n    if (typeof value === 'string') return JSON.parse(value);\n    if (typeof value === 'object') return value;\n    return {};\n  } catch (e) {\n    return {};\n  }\n};\n\nconst safeNodeItems = (nodeName) => {\n  try {\n    return $(nodeName).all().map(i => i.json);\n  } catch (e) {\n    return [];\n  }\n};\n\nconst flattenItems = (arr) => {\n  const out = [];\n  for (const it of arr) {\n    if (Array.isArray(it)) out.push(...it);\n    else if (it && typeof it === 'object') out.push(it);\n  }\n  return out;\n};\n\nconst isCard = (x) =>\n  x &&\n  typeof x === 'object' &&\n  typeof x.id === 'string' &&\n  x.id.length === 24 &&\n  Object.prototype.hasOwnProperty.call(x, 'dueComplete');\n\nconst isCommit = (x) =>\n  x &&\n  typeof x === 'object' &&\n  typeof x.sha === 'string' &&\n  x.commit &&\n  typeof x.commit === 'object';\n\n// 1) Intento principal: leer por nodo (más robusto y explícito)\nlet cards = flattenItems(safeNodeItems('Trello Cards Delta')).filter(isCard);\nlet backCommits = flattenItems(safeNodeItems('GitHub Back Main')).filter(isCommit);\nlet frontCommits = flattenItems(safeNodeItems('GitHub Front Main')).filter(isCommit);\n\nconst pgRows = flattenItems(safeNodeItems('PG Estado Conocido'));\nlet prevSnapshot = parseSnapshot(pgRows[0]?.snapshot);\n\n// 2) Fallback: si algo vino vacío, intentar reconstruir desde Merge/$input\nif (!cards.length || !backCommits.length || !frontCommits.length || !Object.keys(prevSnapshot).length) {\n  const mergedRaw = $input.all().map(i => i.json);\n  const mergedFlat = flattenItems(mergedRaw);\n\n  const fbCards = [];\n  const fbBack = [];\n  const fbFront = [];\n  let fbSnapshot = {};\n\n  for (const it of mergedFlat) {\n    if (it?.snapshot && !Object.keys(fbSnapshot).length) {\n      fbSnapshot = parseSnapshot(it.snapshot);\n      continue;\n    }\n\n    if (isCard(it)) {\n      fbCards.push(it);\n      continue;\n    }\n\n    if (isCommit(it)) {\n      const url = String(it.url || it.html_url || '');\n      if (url.includes(cfg.GITHUB_REPO_BACKEND)) fbBack.push(it);\n      else if (url.includes(cfg.GITHUB_REPO_FRONTEND)) fbFront.push(it);\n    }\n  }\n\n  if (!cards.length) cards = fbCards;\n  if (!backCommits.length) backCommits = fbBack;\n  if (!frontCommits.length) frontCommits = fbFront;\n  if (!Object.keys(prevSnapshot).length) prevSnapshot = fbSnapshot;\n}\n\nconst prev = {\n  main_commit_back_sha: prevSnapshot.main_commit_back_sha || null,\n  main_commit_front_sha: prevSnapshot.main_commit_front_sha || null,\n  card_states: prevSnapshot.card_states || {}\n};\n\nconst events = [];\nconst newCardStates = {};\n\nfor (const c of cards) {\n  const attCount = (c.attachments || []).length;\n  const pdfAtts = (c.attachments || []).filter(a =>\n    (a.mimeType || '').includes('pdf') || (a.name || '').toLowerCase().endsWith('.pdf')\n  );\n\n  newCardStates[c.id] = {\n    dueComplete: !!c.dueComplete,\n    attCount,\n    pdfCount: pdfAtts.length\n  };\n\n  const prevCard = prev.card_states[c.id];\n  if (prevCard) {\n    if (!prevCard.dueComplete && c.dueComplete) {\n      events.push({\n        tipo: 'tarea_completada',\n        emoji: '✅',\n        titulo: 'Tarea completada',\n        descripcion: `La tarjeta \"${c.name}\" fue marcada como completada.`,\n        detalle: { card_id: c.id, card_name: c.name, due: c.due }\n      });\n    }\n\n    if ((prevCard.pdfCount || 0) < pdfAtts.length) {\n      const newPdfs = pdfAtts.slice(-(pdfAtts.length - (prevCard.pdfCount || 0)));\n      events.push({\n        tipo: 'entregable_subido',\n        emoji: '📎',\n        titulo: 'Nuevo entregable PDF',\n        descripcion: `Se subió un PDF a \"${c.name}\": ${newPdfs.map(p => p.name).join(', ')}`,\n        detalle: {\n          card_id: c.id,\n          card_name: c.name,\n          pdfs: newPdfs.map(p => ({ name: p.name, url: p.url }))\n        }\n      });\n    }\n  }\n}\n\nconst latestBack = backCommits[0];\nif (latestBack && latestBack.sha !== prev.main_commit_back_sha) {\n  if (prev.main_commit_back_sha) {\n    events.push({\n      tipo: 'commit_main_backend',\n      emoji: '🔀',\n      titulo: 'Commit a main (backend)',\n      descripcion: `${latestBack.commit?.author?.name || '?'}: ${(latestBack.commit?.message || '').split('\\n')[0]}`,\n      detalle: {\n        repo: 'backend',\n        sha: latestBack.sha,\n        url: latestBack.html_url,\n        autor: latestBack.commit?.author?.name,\n        mensaje: latestBack.commit?.message\n      }\n    });\n  }\n}\n\nconst latestFront = frontCommits[0];\nif (latestFront && latestFront.sha !== prev.main_commit_front_sha) {\n  if (prev.main_commit_front_sha) {\n    events.push({\n      tipo: 'commit_main_frontend',\n      emoji: '🔀',\n      titulo: 'Commit a main (frontend)',\n      descripcion: `${latestFront.commit?.author?.name || '?'}: ${(latestFront.commit?.message || '').split('\\n')[0]}`,\n      detalle: {\n        repo: 'frontend',\n        sha: latestFront.sha,\n        url: latestFront.html_url,\n        autor: latestFront.commit?.author?.name,\n        mensaje: latestFront.commit?.message\n      }\n    });\n  }\n}\n\nconst newSnapshot = {\n  main_commit_back_sha: latestBack?.sha || prev.main_commit_back_sha,\n  main_commit_front_sha: latestFront?.sha || prev.main_commit_front_sha,\n  card_states: newCardStates\n};\n\nreturn [{\n  json: {\n    events,\n    event_count: events.length,\n    new_snapshot: newSnapshot,\n    new_snapshot_json: JSON.stringify(newSnapshot)\n  }\n}];"
+        "jsCode": "const cfg = $node['Configuraci\u00f3n1'].json;\n\nconst parseSnapshot = (value) => {\n  try {\n    if (!value) return {};\n    if (typeof value === 'string') return JSON.parse(value);\n    if (typeof value === 'object') return value;\n    return {};\n  } catch (e) {\n    return {};\n  }\n};\n\nconst safeNodeItems = (nodeName) => {\n  try {\n    return $(nodeName).all().map(i => i.json);\n  } catch (e) {\n    return [];\n  }\n};\n\nconst flattenItems = (arr) => {\n  const out = [];\n  for (const it of arr) {\n    if (Array.isArray(it)) out.push(...it);\n    else if (it && typeof it === 'object') out.push(it);\n  }\n  return out;\n};\n\nconst isCard = (x) =>\n  x &&\n  typeof x === 'object' &&\n  typeof x.id === 'string' &&\n  x.id.length === 24 &&\n  Object.prototype.hasOwnProperty.call(x, 'dueComplete');\n\nconst isCommit = (x) =>\n  x &&\n  typeof x === 'object' &&\n  typeof x.sha === 'string' &&\n  x.commit &&\n  typeof x.commit === 'object';\n\n// 1) Intento principal: leer por nodo (m\u00e1s robusto y expl\u00edcito)\nlet cards = flattenItems(safeNodeItems('Trello Cards Delta')).filter(isCard);\nlet backCommits = flattenItems(safeNodeItems('GitHub Back Main')).filter(isCommit);\nlet frontCommits = flattenItems(safeNodeItems('GitHub Front Main')).filter(isCommit);\n\nconst pgRows = flattenItems(safeNodeItems('PG Estado Conocido'));\nlet prevSnapshot = parseSnapshot(pgRows[0]?.snapshot);\n\n// 2) Fallback: si algo vino vac\u00edo, intentar reconstruir desde Merge/$input\nif (!cards.length || !backCommits.length || !frontCommits.length || !Object.keys(prevSnapshot).length) {\n  const mergedRaw = $input.all().map(i => i.json);\n  const mergedFlat = flattenItems(mergedRaw);\n\n  const fbCards = [];\n  const fbBack = [];\n  const fbFront = [];\n  let fbSnapshot = {};\n\n  for (const it of mergedFlat) {\n    if (it?.snapshot && !Object.keys(fbSnapshot).length) {\n      fbSnapshot = parseSnapshot(it.snapshot);\n      continue;\n    }\n\n    if (isCard(it)) {\n      fbCards.push(it);\n      continue;\n    }\n\n    if (isCommit(it)) {\n      const url = String(it.url || it.html_url || '');\n      if (url.includes(cfg.GITHUB_REPO_BACKEND)) fbBack.push(it);\n      else if (url.includes(cfg.GITHUB_REPO_FRONTEND)) fbFront.push(it);\n    }\n  }\n\n  if (!cards.length) cards = fbCards;\n  if (!backCommits.length) backCommits = fbBack;\n  if (!frontCommits.length) frontCommits = fbFront;\n  if (!Object.keys(prevSnapshot).length) prevSnapshot = fbSnapshot;\n}\n\nconst prev = {\n  main_commit_back_sha: prevSnapshot.main_commit_back_sha || null,\n  main_commit_front_sha: prevSnapshot.main_commit_front_sha || null,\n  card_states: prevSnapshot.card_states || {}\n};\n\nconst events = [];\nconst newCardStates = {};\n\nfor (const c of cards) {\n  const attCount = (c.attachments || []).length;\n  const pdfAtts = (c.attachments || []).filter(a =>\n    (a.mimeType || '').includes('pdf') || (a.name || '').toLowerCase().endsWith('.pdf')\n  );\n\n  newCardStates[c.id] = {\n    dueComplete: !!c.dueComplete,\n    attCount,\n    pdfCount: pdfAtts.length\n  };\n\n  const prevCard = prev.card_states[c.id];\n  if (prevCard) {\n    if (!prevCard.dueComplete && c.dueComplete) {\n      events.push({\n        tipo: 'tarea_completada',\n        emoji: '\u2705',\n        titulo: 'Tarea completada',\n        descripcion: `La tarjeta \"${c.name}\" fue marcada como completada.`,\n        detalle: { card_id: c.id, card_name: c.name, due: c.due }\n      });\n    }\n\n    if ((prevCard.pdfCount || 0) < pdfAtts.length) {\n      const newPdfs = pdfAtts.slice(-(pdfAtts.length - (prevCard.pdfCount || 0)));\n      events.push({\n        tipo: 'entregable_subido',\n        emoji: '\ud83d\udcce',\n        titulo: 'Nuevo entregable PDF',\n        descripcion: `Se subi\u00f3 un PDF a \"${c.name}\": ${newPdfs.map(p => p.name).join(', ')}`,\n        detalle: {\n          card_id: c.id,\n          card_name: c.name,\n          pdfs: newPdfs.map(p => ({ name: p.name, url: p.url }))\n        }\n      });\n    }\n  }\n}\n\nconst latestBack = backCommits[0];\nif (latestBack && latestBack.sha !== prev.main_commit_back_sha) {\n  if (prev.main_commit_back_sha) {\n    events.push({\n      tipo: 'commit_main_backend',\n      emoji: '\ud83d\udd00',\n      titulo: 'Commit a main (backend)',\n      descripcion: `${latestBack.commit?.author?.name || '?'}: ${(latestBack.commit?.message || '').split('\\n')[0]}`,\n      detalle: {\n        repo: 'backend',\n        sha: latestBack.sha,\n        url: latestBack.html_url,\n        autor: latestBack.commit?.author?.name,\n        mensaje: latestBack.commit?.message\n      }\n    });\n  }\n}\n\nconst latestFront = frontCommits[0];\nif (latestFront && latestFront.sha !== prev.main_commit_front_sha) {\n  if (prev.main_commit_front_sha) {\n    events.push({\n      tipo: 'commit_main_frontend',\n      emoji: '\ud83d\udd00',\n      titulo: 'Commit a main (frontend)',\n      descripcion: `${latestFront.commit?.author?.name || '?'}: ${(latestFront.commit?.message || '').split('\\n')[0]}`,\n      detalle: {\n        repo: 'frontend',\n        sha: latestFront.sha,\n        url: latestFront.html_url,\n        autor: latestFront.commit?.author?.name,\n        mensaje: latestFront.commit?.message\n      }\n    });\n  }\n}\n\nconst newSnapshot = {\n  main_commit_back_sha: latestBack?.sha || prev.main_commit_back_sha,\n  main_commit_front_sha: latestFront?.sha || prev.main_commit_front_sha,\n  card_states: newCardStates\n};\n\nreturn [{\n  json: {\n    events,\n    event_count: events.length,\n    new_snapshot: newSnapshot,\n    new_snapshot_json: JSON.stringify(newSnapshot)\n  }\n}];"
       },
       "id": "e3a1640c-f7c1-4926-927f-0820a67e8e25",
       "name": "Delta Detector1",
@@ -345,7 +345,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{ $node[\"Configuración1\"].json.GEMINI_API_KEY }}",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{ $node[\"Configuraci\u00f3n1\"].json.GEMINI_API_KEY }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -374,7 +374,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const ev = $node['Split Events1'].json;\nconst gem = $json;\nconst analysis = gem?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';\n\nlet extra = '';\nif (ev.detalle?.url) extra = `\\n🔗 ${ev.detalle.url}`;\nif (ev.detalle?.pdfs?.length) extra = '\\n' + ev.detalle.pdfs.map(p => `📄 [${p.name}](${p.url})`).join('\\n');\n\nconst content = `${ev.emoji} **${ev.titulo}**\\n${ev.descripcion}${extra}\\n\\n🤖 ${analysis}`;\n\nreturn [{ json: {\n  ...ev,\n  analysis,\n  content,\n  detalle_json: JSON.stringify(ev.detalle || {})\n}}];\n"
+        "jsCode": "const ev = $node['Split Events1'].json;\nconst gem = $json;\nconst analysis = gem?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';\n\nlet extra = '';\nif (ev.detalle?.url) extra = `\\n\ud83d\udd17 ${ev.detalle.url}`;\nif (ev.detalle?.pdfs?.length) extra = '\\n' + ev.detalle.pdfs.map(p => `\ud83d\udcc4 [${p.name}](${p.url})`).join('\\n');\n\nconst content = `${ev.emoji} **${ev.titulo}**\\n${ev.descripcion}${extra}\\n\\n\ud83e\udd16 ${analysis}`;\n\nreturn [{ json: {\n  ...ev,\n  analysis,\n  content,\n  detalle_json: JSON.stringify(ev.detalle || {})\n}}];\n"
       },
       "id": "6f6960c3-4b7c-46ec-b511-993f4ac99ed9",
       "name": "Build Discord Msg1",
@@ -388,7 +388,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $node[\"Configuración1\"].json.DISCORD_WEBHOOK_URL }}",
+        "url": "={{ $node[\"Configuraci\u00f3n1\"].json.DISCORD_WEBHOOK_URL }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -445,14 +445,14 @@
       "main": [
         [
           {
-            "node": "Configuración1",
+            "node": "Configuraci\u00f3n1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Configuración1": {
+    "Configuraci\u00f3n1": {
       "main": [
         [
           {
@@ -602,7 +602,8 @@
   "active": true,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate"
+    "binaryMode": "separate",
+    "errorWorkflow": "monitor-petsafe-error-handler"
   },
   "versionId": "f20cab36-782e-4c1c-bb49-65037a97391a",
   "meta": {

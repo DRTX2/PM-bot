@@ -3,20 +3,20 @@
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "github-event",
-        "responseMode": "responseNode",
-        "options": {}
+        "events": [
+          "*"
+        ],
+        "owner": "={{ $env.GITHUB_OWNER }}",
+        "repository": "={{ $env.GITHUB_REPO }}"
       },
       "id": "78bc5bf0-0cf4-49ea-9d79-2789e181861a",
       "name": "GitHub Event Webhook1",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.githubTrigger",
+      "typeVersion": 1,
       "position": [
         33920,
         29776
-      ],
-      "webhookId": "f483de4b-4b89-4edf-ad52-29f662f2f5d7"
+      ]
     },
     {
       "parameters": {
@@ -96,8 +96,10 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO eventos_detectados (tipo, descripcion, detalle, notificado) VALUES ('{{ ($json.tipo || \"github_evento\").replace(/'/g, \"''\") }}', '{{ ($json.descripcion || \"\").replace(/'/g, \"''\") }}', '{{ ($json.detalle_json || \"{}\").replace(/'/g, \"''\") }}'::jsonb, TRUE);",
-        "options": {}
+        "query": "INSERT INTO eventos_detectados (tipo, descripcion, detalle, notificado) VALUES ($1, $2, $3::jsonb, TRUE);",
+        "options": {
+          "queryParameters": "={{($json.tipo || \"github_evento\")}},={{($json.descripcion || \"\")}},={{($json.detalle_json || \"{}\")}}"
+        }
       },
       "id": "74862345-b099-4e70-920f-b96a0df22835",
       "name": "PG Insert Evento GitHub1",
@@ -205,7 +207,8 @@
     "binaryMode": "separate",
     "timeSavedMode": "fixed",
     "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false
+    "availableInMCP": false,
+    "errorWorkflow": "monitor-petsafe-error-handler"
   },
   "versionId": "split-discord-github-events-v1",
   "meta": {

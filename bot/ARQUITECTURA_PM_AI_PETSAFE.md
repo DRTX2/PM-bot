@@ -15,6 +15,9 @@ Los riesgos principales son:
 - No hay una capa canonica fuerte de eventos, ni outbox/idempotencia formal, ni dead-letter queue.
 - La observabilidad esta basada en alertas puntuales a Discord, no en logs estructurados, metricas, trazas y auditoria de decisiones.
 - Algunas consultas SQL interpolan texto manualmente; eso es fragil y debe migrarse a parametros.
+
+
+
 - El despliegue local expone credenciales por defecto en `docker-compose.yml` y monta `init.sql` como archivo, pero localmente aparece como directorio vacio.
 
 Conclusion: la proxima evolucion debe convertir el sistema en una arquitectura event-driven con conectores nativos, adaptadores por dominio, modelo canonico de eventos, metricas DORA/flow, agentes especializados y controles operativos.
@@ -56,7 +59,7 @@ Infraestructura:
 
 ### Problemas actuales
 
-#### 1. Integraciones GitHub/Trello no son de primer nivel
+#### 1. Integraciones GitHub/Trello no son de primer nivel [DONE]
 
 El sistema usa `httpRequest` para obtener:
 
@@ -86,7 +89,7 @@ Mejora:
 - Sustituir HTTP GitHub por `GitHub` node para PRs, issues, reviews, repositorios y workflow metadata cuando la operacion exista.
 - Mantener HTTP solo para GitHub commits con diff y GitHub Actions runs si el nodo nativo de la version instalada no cubre el endpoint requerido, pero usando credenciales predefinidas GitHub y no tokens manuales.
 
-#### 2. Configuracion duplicada
+#### 2. Configuracion duplicada [DONE]
 
 Los nodos `Config1`, `Configuracion`, `Configuracion1` y `Configuracion` del reporte repiten variables:
 
@@ -111,7 +114,7 @@ Mejora:
 - Mantener solo IDs funcionales no secretos en variables de entorno o tabla `project_config`.
 - Versionar un `config.schema.md` con nombres, owners, repos, board/list IDs, SLAs y calendarios.
 
-#### 3. Falta un modelo canonico de eventos
+#### 3. Falta un modelo canonico de eventos [DONE]
 
 Hoy los eventos se almacenan en `eventos_detectados`, pero cada origen produce shape propio y los eventos de polling/delta conviven con webhooks directos.
 
@@ -163,7 +166,7 @@ sent_at timestamptz,
 last_error text
 ```
 
-#### 4. Observabilidad insuficiente
+#### 4. Observabilidad insuficiente [DONE]
 
 Hay alertas a Discord, pero falta:
 
@@ -183,7 +186,7 @@ Mejora:
 - Registrar cada decision AI en `ai_decisions`.
 - Emitir metricas de health score, throughput, lead time, MTTR, defect rate y deployment frequency.
 
-#### 5. SQL fragil por interpolacion
+#### 5. SQL fragil por interpolacion [DONE]
 
 Ejemplos actuales interpolan texto en queries:
 
@@ -206,7 +209,7 @@ Mejora:
 - Guardar payloads grandes como JSONB.
 - Usar constraints e indices unicos para idempotencia.
 
-#### 6. AI orchestration sin gobierno suficiente
+#### 6. AI orchestration sin gobierno suficiente [DONE]
 
 El agente actual puede responder y consultar herramientas, pero aun no tiene:
 
@@ -224,7 +227,7 @@ Mejora:
 - Usar un `Action Executor` que aplique cambios solo si la decision cumple politicas.
 - Requerir aprobacion humana para cambios de estado criticos, asignaciones masivas, cierre de PRs, stop deploy o cambios de prioridad altos.
 
-#### 7. Punto unico de fallo en el puente Discord
+#### 7. Punto unico de fallo en el puente Discord [DONE]
 
 `bot-bridge` hace polling/event listening de Discord y llama al webhook n8n.
 
@@ -242,7 +245,7 @@ Mejora:
 - O migrar a un trigger/connector nativo si se adopta un mecanismo oficial del entorno.
 - Mantener el webhook de chat solo como borde externo controlado; no mezclarlo con GitHub/Trello.
 
-#### 8. Seguridad de infraestructura
+#### 8. Seguridad de infraestructura [BASELINE IMPLEMENTADO]
 
 Hallazgos:
 
@@ -266,6 +269,24 @@ Mejora:
 - Definir backup y restore.
 - Agregar healthchecks.
 - Versionar migraciones SQL reales.
+
+Estado aplicado en repo:
+
+- `docker-compose.yml` ya no contiene `admin/admin123` ni `agente123`; exige variables desde `.env`.
+- n8n queda configurado para usar Postgres (`DB_TYPE=postgresdb`) con schema dedicado `n8n`.
+- `N8N_ENCRYPTION_KEY` es obligatorio.
+- Postgres y Gotenberg se publican solo en loopback por defecto.
+- Se agregaron healthchecks para Postgres, Redis y n8n readiness.
+- Se habilitaron metricas n8n, task runners internos, pruning de ejecuciones, rotacion de logs y `no-new-privileges`.
+- `init.sql` ahora es un archivo SQL real con schema operativo para los workflows, inbox/outbox, auditoria y decisiones AI.
+- Se agregaron `.env.example`, `.gitignore`, scripts de security check/backup/restore y `docs/PRODUCTION_RUNBOOK.md`.
+- Los `.env` locales fueron sacados del indice Git con `git rm --cached`; siguen existiendo en disco, pero ya no deben entrar en commits.
+
+Pendiente intencional:
+
+- Si el entorno actual de n8n usa SQLite en `n8n_data`, migrar/exportar/importar workflows y credenciales antes de reiniciar con Postgres como DB interna.
+- `N8N_BLOCK_ENV_ACCESS_IN_NODE` queda en `false` hasta migrar los workflows desde `$env` hacia credenciales nativas y `System - Config Resolver`; activarlo ahora romperia los flujos actuales.
+- Si esos secretos ya salieron a un remoto o a un backup compartido, deben rotarse antes de operar produccion.
 
 ## 2. Propuesta profesional de arquitectura
 
@@ -647,7 +668,7 @@ Debe coordinar:
 
 ## 5. Mejoras propuestas por funcionalidad faltante
 
-### 1. Migrar webhooks GitHub a GitHub Trigger
+### 1. Migrar webhooks GitHub a GitHub Trigger [DONE]
 
 Por que importa:
 
@@ -684,7 +705,7 @@ Metricas:
 - PR review latency.
 - Build failure rate.
 
-### 2. Migrar webhook Trello a Trello Trigger
+### 2. Migrar webhook Trello a Trello Trigger [DONE]
 
 Por que importa:
 
@@ -719,7 +740,7 @@ Metricas:
 - Aging WIP.
 - Cambios de due date.
 
-### 3. Sustituir HTTP Trello por Trello node
+### 3. Sustituir HTTP Trello por Trello node [PENDING]
 
 Por que importa:
 
@@ -745,7 +766,7 @@ Metricas:
 - Cards normalizadas por ejecucion.
 - Coverage de campos obligatorios.
 
-### 4. Sustituir HTTP GitHub por GitHub node donde aplique
+### 4. Sustituir HTTP GitHub por GitHub node donde aplique [PENDING]
 
 Por que importa:
 
@@ -773,7 +794,7 @@ Metricas:
 - Merge ratio.
 - CI status freshness.
 
-### 5. Introducir event inbox/outbox
+### 5. Introducir event inbox/outbox [PENDING]
 
 Por que importa:
 
@@ -1192,4 +1213,3 @@ Observability
 8. Mover Gemini HTTP restante a nodos nativos.
 9. Activar error workflow global.
 10. Implementar primera version del `Decision Ledger`.
-

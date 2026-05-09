@@ -127,7 +127,8 @@
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate"
+    "binaryMode": "separate",
+    "errorWorkflow": "monitor-petsafe-error-handler"
   },
   "versionId": "79e9f8c4-71d1-47f7-b533-b49ccebf6bc9",
   "meta": {

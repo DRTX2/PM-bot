@@ -1,60 +1,159 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: agente_db
     environment:
-      POSTGRES_USER: agente
-      POSTGRES_PASSWORD: agente123
-      POSTGRES_DB: proyecto_db
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-proyecto_db}
     volumes:
-    - postgres_data:/var/lib/postgresql/data
-    - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/001-project-schema.sql:ro
     ports:
-    - 5432:5432
-    restart: always
+      - "${POSTGRES_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
     networks:
-    - default
+      - default
+
   redis:
     image: redis:7-alpine
     container_name: redis_cache
-    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
-    - redis_data:/data
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
     networks:
-    - default
+      - default
+
   n8n:
-    image: n8nio/n8n
+    image: n8nio/n8n:${N8N_VERSION:?Set N8N_VERSION to an exact tested release in .env}
     container_name: n8n
     ports:
-    - 5678:5678
-    env_file:
-    - .env
+      - "${N8N_BIND_ADDRESS:-127.0.0.1}:${N8N_HOST_PORT:-5678}:5678"
     environment:
-    - N8N_BASIC_AUTH_ACTIVE=true
-    - N8N_BASIC_AUTH_USER=admin
-    - N8N_BASIC_AUTH_PASSWORD=admin123
+      NODE_ENV: ${NODE_ENV:-production}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-proyecto_db}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      DB_POSTGRESDB_SCHEMA: ${N8N_DB_SCHEMA:-n8n}
+      DB_POSTGRESDB_POOL_SIZE: ${N8N_DB_POOL_SIZE:-5}
+      N8N_HOST: ${N8N_HOST:?Set N8N_HOST in .env}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-https}
+      WEBHOOK_URL: ${WEBHOOK_URL:?Set WEBHOOK_URL in .env}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Set N8N_ENCRYPTION_KEY in .env}
+      N8N_BASIC_AUTH_ACTIVE: ${N8N_BASIC_AUTH_ACTIVE:-true}
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:?Set N8N_BASIC_AUTH_USER in .env}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:?Set N8N_BASIC_AUTH_PASSWORD in .env}
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE:-true}
+      N8N_SAMESITE_COOKIE: ${N8N_SAMESITE_COOKIE:-lax}
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      N8N_BLOCK_FILE_ACCESS_TO_N8N_FILES: "true"
+      N8N_GIT_NODE_DISABLE_BARE_REPOS: "true"
+      N8N_RUNNERS_ENABLED: ${N8N_RUNNERS_ENABLED:-true}
+      N8N_RUNNERS_MODE: ${N8N_RUNNERS_MODE:-internal}
+      N8N_METRICS: ${N8N_METRICS:-true}
+      QUEUE_HEALTH_CHECK_ACTIVE: ${QUEUE_HEALTH_CHECK_ACTIVE:-true}
+      EXECUTIONS_DATA_PRUNE: ${EXECUTIONS_DATA_PRUNE:-true}
+      EXECUTIONS_DATA_MAX_AGE: ${EXECUTIONS_DATA_MAX_AGE:-336}
+      EXECUTIONS_DATA_PRUNE_MAX_COUNT: ${EXECUTIONS_DATA_PRUNE_MAX_COUNT:-10000}
+      N8N_TEMPLATES_ENABLED: ${N8N_TEMPLATES_ENABLED:-false}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-America/Guayaquil}
+      TZ: ${TZ:-America/Guayaquil}
+      TRELLO_API_KEY: ${TRELLO_API_KEY:?Set TRELLO_API_KEY in .env}
+      TRELLO_TOKEN: ${TRELLO_TOKEN:?Set TRELLO_TOKEN in .env}
+      TRELLO_BOARD_ID: ${TRELLO_BOARD_ID:?Set TRELLO_BOARD_ID in .env}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:?Set GITHUB_TOKEN in .env}
+      GITHUB_TOKEN_BACKEND: ${GITHUB_TOKEN_BACKEND:-${GITHUB_TOKEN}}
+      GITHUB_TOKEN_FRONTEND: ${GITHUB_TOKEN_FRONTEND:-${GITHUB_TOKEN}}
+      GITHUB_OWNER: ${GITHUB_OWNER:-${GITHUB_OWNER_BACKEND}}
+      GITHUB_OWNER_BACKEND: ${GITHUB_OWNER_BACKEND:?Set GITHUB_OWNER_BACKEND in .env}
+      GITHUB_OWNER_FRONTEND: ${GITHUB_OWNER_FRONTEND:-${GITHUB_OWNER:-${GITHUB_OWNER_BACKEND}}}
+      GITHUB_REPO_BACKEND: ${GITHUB_REPO_BACKEND:?Set GITHUB_REPO_BACKEND in .env}
+      GITHUB_REPO_FRONTEND: ${GITHUB_REPO_FRONTEND:?Set GITHUB_REPO_FRONTEND in .env}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY in .env}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:?Set DISCORD_WEBHOOK_URL in .env}
+      DISCORD_WEBHOOK_URL_CHAT: ${DISCORD_WEBHOOK_URL_CHAT:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-PetSafe PM AI}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      GOTENBERG_URL: ${GOTENBERG_URL:-http://gotenberg:3000}
+      # Keep false until workflows no longer depend on $env in expressions.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: ${N8N_BLOCK_ENV_ACCESS_IN_NODE:-false}
     volumes:
-    - n8n_data:/home/node/.n8n
+      - n8n_data:/home/node/.n8n
     depends_on:
-    - postgres
-    - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     extra_hosts:
-    - host.docker.internal:host-gateway
-    restart: always
+      - host.docker.internal:host-gateway
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:5678/healthz/readiness').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
+        ]
+      interval: 20s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
     networks:
-    - default
+      - default
+
   gotenberg:
     image: gotenberg/gotenberg:8
     container_name: gotenberg
     ports:
-    - 3001:3000
-    restart: always
+      - "${GOTENBERG_BIND_ADDRESS:-127.0.0.1}:${GOTENBERG_PORT:-3001}:3000"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
     networks:
-    - default
+      - default
+
 volumes:
-  postgres_data: null
-  n8n_data: null
-  redis_data: null
+  postgres_data:
+  n8n_data:
+  redis_data:
+
 networks:
   default:
     name: automatizacion

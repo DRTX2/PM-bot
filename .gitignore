@@ -1,0 +1,21 @@
+.env
+.env.*
+!.env.example
+env (*)
+
+bot-bridge/.env
+bot-bridge/.env.*
+!bot-bridge/.env.example
+
+node_modules/
+bot-bridge/node_modules/
+
+secrets/*
+!secrets/.gitkeep
+
+backups/
+*.dump
+*.backup
+*.bak
+
+.DS_Store

@@ -3,6 +3,7 @@
 Mapa rápido de los workflows actuales en `bot/`.
 
 Para la revision senior completa y roadmap de produccion, ver `ARQUITECTURA_PM_AI_PETSAFE.md`.
+Para operar o validar infraestructura de produccion, ver `../docs/PRODUCTION_RUNBOOK.md`.
 
 ## Discord
 

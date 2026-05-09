@@ -1,0 +1,64 @@
+{
+  "name": "System - Config Resolver",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "On Execute",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "GITHUB_OWNER",
+              "value": "={{ $env.GITHUB_OWNER }}"
+            },
+            {
+              "name": "GITHUB_REPO",
+              "value": "={{ $env.GITHUB_REPO }}"
+            },
+            {
+              "name": "TRELLO_BOARD_ID",
+              "value": "={{ $env.TRELLO_BOARD_ID }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config",
+      "name": "Set Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        200,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On Execute": {
+      "main": [
+        [
+          {
+            "node": "Set Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "errorWorkflow": "monitor-petsafe-error-handler"
+  },
+  "id": "system-config-resolver"
+}

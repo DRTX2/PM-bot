@@ -121,7 +121,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const pregunta = ($node['Config1'].json.pregunta_usuario || '').trim();\nconst low = pregunta.toLowerCase();\n\n// Objeto para almacenar los detalles del comando\nconst comando = {\n  nombre: null,\n  params: {},\n  tipo: 'chat', // Default\n  necesita_diff: false,\n  error: null\n};\n\n// Si no es un comando, es un chat normal\nif (!pregunta.startsWith('!')) {\n  if (pregunta.includes('ha saltado al servidor') || pregunta.includes('joined the server')) {\n    comando.error = 'Ignorado';\n  } else {\n    comando.necesita_diff = /(codig|commit|diff|revisa|calidad|pull request|\\bpr\\b|merge)/.test(low);\n  }\n} else {\n  const partes = pregunta.split(' ');\n  const cmd = partes[0].toLowerCase();\n\n  switch (cmd) {\n    case '!ayuda':\n    case '!help':\n      comando.nombre = 'ayuda';\n      comando.tipo = 'ayuda';\n      break;\n    case '!kpis':\n      comando.nombre = 'kpis';\n      comando.tipo = 'kpis';\n      break;\n    case '!reporte':\n      comando.nombre = 'reporte';\n      comando.tipo = 'reporte';\n      // Opcional: capturar número de días\n      const dias = parseInt(partes[1], 10);\n      if (!isNaN(dias) && dias > 0) {\n        comando.params.dias = dias;\n      } else {\n        comando.params.dias = 7; // Default\n      }\n      break;\n    case '!riesgos':\n      comando.nombre = 'riesgos';\n      comando.tipo = 'chat'; // Usará el flujo de chat pero con un contexto específico\n      break;\n    case '!hitos':\n      comando.nombre = 'hitos';\n      comando.tipo = 'chat'; // Igual que riesgos\n      break;\n    case '!revisar':\n      comando.nombre = 'revisar';\n      comando.tipo = 'chat';\n      comando.necesita_diff = true;\n      const repo = (partes[1] || '').toLowerCase();\n      if (repo === 'backend' || repo === 'frontend') {\n        comando.params.repo = repo;\n      } else {\n        comando.error = 'Debes especificar un repositorio: `!revisar backend` o `!revisar frontend`.';\n      }\n      break;\n    case '!estado':\n      comando.nombre = 'estado'; comando.tipo = 'chat'; comando.formato = 'estado'; break;\n    case '!vencidas':\n      comando.nombre = 'vencidas'; comando.tipo = 'chat'; comando.formato = 'vencidas'; break;\n    case '!miembros':\n      comando.nombre = 'miembros'; comando.tipo = 'chat'; comando.formato = 'miembros'; break;\n    case '!commits':\n      comando.nombre = 'commits'; comando.tipo = 'chat'; comando.formato = 'commits'; break;\n    case '!ci':\n      comando.nombre = 'ci'; comando.tipo = 'chat'; comando.formato = 'ci'; break;\n    case '!progreso':\n      comando.nombre = 'progreso'; comando.tipo = 'chat'; comando.formato = 'progreso'; break;\n        default:\n      comando.error = `Comando \\`${cmd}\\` no reconocido. Usa \\`!ayuda\\` para ver la lista de comandos.`;\n      break;\n  }\n}\n\n// El objeto de salida ahora es más rico en información\nreturn [{\n  json: {\n    pregunta,\n    comando,\n    tipo: comando.error ? 'error' : comando.tipo,\n    necesita_diff: comando.necesita_diff,\n    formato: comando.formato || 'chat',\n    usuario: $node['Config1'].json.usuario_discord\n  }\n}];"
+        "jsCode": "const pregunta = ($node['Config1'].json.pregunta_usuario || '').trim();\nconst low = pregunta.toLowerCase();\n\n// Objeto para almacenar los detalles del comando\nconst comando = {\n  nombre: null,\n  params: {},\n  tipo: 'chat', // Default\n  necesita_diff: false,\n  error: null\n};\n\n// Si no es un comando, es un chat normal\nif (!pregunta.startsWith('!')) {\n  if (pregunta.includes('ha saltado al servidor') || pregunta.includes('joined the server')) {\n    comando.error = 'Ignorado';\n  } else {\n    comando.necesita_diff = /(codig|commit|diff|revisa|calidad|pull request|\\bpr\\b|merge)/.test(low);\n  }\n} else {\n  const partes = pregunta.split(' ');\n  const cmd = partes[0].toLowerCase();\n\n  switch (cmd) {\n    case '!ayuda':\n    case '!help':\n      comando.nombre = 'ayuda';\n      comando.tipo = 'ayuda';\n      break;\n    case '!kpis':\n      comando.nombre = 'kpis';\n      comando.tipo = 'kpis';\n      break;\n    case '!reporte':\n      comando.nombre = 'reporte';\n      comando.tipo = 'reporte';\n      // Opcional: capturar n\u00famero de d\u00edas\n      const dias = parseInt(partes[1], 10);\n      if (!isNaN(dias) && dias > 0) {\n        comando.params.dias = dias;\n      } else {\n        comando.params.dias = 7; // Default\n      }\n      break;\n    case '!riesgos':\n      comando.nombre = 'riesgos';\n      comando.tipo = 'chat'; // Usar\u00e1 el flujo de chat pero con un contexto espec\u00edfico\n      break;\n    case '!hitos':\n      comando.nombre = 'hitos';\n      comando.tipo = 'chat'; // Igual que riesgos\n      break;\n    case '!revisar':\n      comando.nombre = 'revisar';\n      comando.tipo = 'chat';\n      comando.necesita_diff = true;\n      const repo = (partes[1] || '').toLowerCase();\n      if (repo === 'backend' || repo === 'frontend') {\n        comando.params.repo = repo;\n      } else {\n        comando.error = 'Debes especificar un repositorio: `!revisar backend` o `!revisar frontend`.';\n      }\n      break;\n    case '!estado':\n      comando.nombre = 'estado'; comando.tipo = 'chat'; comando.formato = 'estado'; break;\n    case '!vencidas':\n      comando.nombre = 'vencidas'; comando.tipo = 'chat'; comando.formato = 'vencidas'; break;\n    case '!miembros':\n      comando.nombre = 'miembros'; comando.tipo = 'chat'; comando.formato = 'miembros'; break;\n    case '!commits':\n      comando.nombre = 'commits'; comando.tipo = 'chat'; comando.formato = 'commits'; break;\n    case '!ci':\n      comando.nombre = 'ci'; comando.tipo = 'chat'; comando.formato = 'ci'; break;\n    case '!progreso':\n      comando.nombre = 'progreso'; comando.tipo = 'chat'; comando.formato = 'progreso'; break;\n        default:\n      comando.error = `Comando \\`${cmd}\\` no reconocido. Usa \\`!ayuda\\` para ver la lista de comandos.`;\n      break;\n  }\n}\n\n// El objeto de salida ahora es m\u00e1s rico en informaci\u00f3n\nreturn [{\n  json: {\n    pregunta,\n    comando,\n    tipo: comando.error ? 'error' : comando.tipo,\n    necesita_diff: comando.necesita_diff,\n    formato: comando.formato || 'chat',\n    usuario: $node['Config1'].json.usuario_discord\n  }\n}];"
       },
       "id": "59de45b2-9ad6-4de2-97da-0d617f57835b",
       "name": "Router Comandos1",
@@ -276,7 +276,7 @@
     {
       "parameters": {
         "respondWith": "text",
-        "responseBody": "={{ $node['Formatear KPIs1'].json.text || '(sin datos de KPIs aún — ejecuta el Monitor primero)' }}",
+        "responseBody": "={{ $node['Formatear KPIs1'].json.text || '(sin datos de KPIs a\u00fan \u2014 ejecuta el Monitor primero)' }}",
         "options": {}
       },
       "id": "2e253817-dcd5-45f2-a660-12bac4dba809",
@@ -682,8 +682,10 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO recomendaciones (fecha, tipo, pregunta, respuesta, usuario, aplicada) VALUES (NOW(), 'chat', '{{ ($node[\"Construir Contexto1\"].json.pregunta || \"\").replace(/'/g, \"''\") }}', '{{ ($node[\"Gemini Chat1\"].json.output || \"Sin respuesta válida\").replace(/'/g, \"''\") }}', '{{ ($node[\"Construir Contexto1\"].json.usuario || \"\").replace(/'/g, \"''\") }}', false);",
-        "options": {}
+        "query": "INSERT INTO recomendaciones (fecha, tipo, pregunta, respuesta, usuario, aplicada) VALUES (NOW(), 'chat', $1, $2, $3, false);",
+        "options": {
+          "queryParameters": "={{($node[\"Construir Contexto1\"].json.pregunta || \"\")}},={{($node[\"Gemini Chat1\"].json.output || \"Sin respuesta v\u00e1lida\")}},={{($node[\"Construir Contexto1\"].json.usuario || \"\")}}"
+        }
       },
       "id": "89c9892b-7766-4d2d-9c4c-24e041c4773d",
       "name": "Guardar Q&A1",
@@ -1099,7 +1101,7 @@
     {
       "parameters": {
         "respondWith": "text",
-        "responseBody": "={{ $json.value || '(caché vacío — espera el próximo ciclo del Monitor)' }}",
+        "responseBody": "={{ $json.value || '(cach\u00e9 vac\u00edo \u2014 espera el pr\u00f3ximo ciclo del Monitor)' }}",
         "options": {}
       },
       "id": "40e05c84-4d3b-4e48-b11a-57f65fbc8b8c",
@@ -1348,7 +1350,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst h = $node['PG Historial1']?.first()?.json || {};\nconst kpis = (typeof h.kpis_json === 'string' ? JSON.parse(h.kpis_json) : h.kpis_json) || {};\nconst cards = $node['Trello Cards1'].all().map(i=>i.json);\nconst total = cards.length;\nconst done = cards.filter(c=>c.dueComplete).length;\nconst overdue = cards.filter(c=>c.due && !c.dueComplete && new Date(c.due)<new Date()).length;\nconst pct = total>0?Math.round(done/total*100):0;\nconst vel = kpis.velocidad_tareas_por_dia ?? '?';\nconst proj = kpis.proyeccion ?? 'sin datos';\nconst emojiProj = proj==='on-track'?'✅':proj==='riesgo'?'⚠️':'🔴';\nconst lines = [\n  '**📊 ESTADO DEL PROYECTO PetSafe**',\n  `Progreso: **${pct}%** (${done}/${total} tareas)  ${emojiProj} ${proj}`,\n  `Vencidas: **${overdue}**  |  Velocidad: **${vel}** tareas/día`,\n  `Commits 14d: **${kpis.commits_14d ?? '?'}**  |  Bus factor: **${kpis.bus_factor_14d ?? '?'}**`,\n  `Días hasta entrega: **${kpis.dias_hasta_fin ?? '?'}**`\n];\nreturn [{json:{respuesta: lines.join('\\n')}}];\n"
+        "jsCode": "\nconst h = $node['PG Historial1']?.first()?.json || {};\nconst kpis = (typeof h.kpis_json === 'string' ? JSON.parse(h.kpis_json) : h.kpis_json) || {};\nconst cards = $node['Trello Cards1'].all().map(i=>i.json);\nconst total = cards.length;\nconst done = cards.filter(c=>c.dueComplete).length;\nconst overdue = cards.filter(c=>c.due && !c.dueComplete && new Date(c.due)<new Date()).length;\nconst pct = total>0?Math.round(done/total*100):0;\nconst vel = kpis.velocidad_tareas_por_dia ?? '?';\nconst proj = kpis.proyeccion ?? 'sin datos';\nconst emojiProj = proj==='on-track'?'\u2705':proj==='riesgo'?'\u26a0\ufe0f':'\ud83d\udd34';\nconst lines = [\n  '**\ud83d\udcca ESTADO DEL PROYECTO PetSafe**',\n  `Progreso: **${pct}%** (${done}/${total} tareas)  ${emojiProj} ${proj}`,\n  `Vencidas: **${overdue}**  |  Velocidad: **${vel}** tareas/d\u00eda`,\n  `Commits 14d: **${kpis.commits_14d ?? '?'}**  |  Bus factor: **${kpis.bus_factor_14d ?? '?'}**`,\n  `D\u00edas hasta entrega: **${kpis.dias_hasta_fin ?? '?'}**`\n];\nreturn [{json:{respuesta: lines.join('\\n')}}];\n"
       },
       "id": "dd8cfd9e-9aa5-477c-a5d1-e0b44aa9c91d",
       "name": "Formatear Estado1",
@@ -1376,7 +1378,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst cards = $node['Trello Cards1'].all().map(i=>i.json);\nconst lists = $node['Trello Lists1'].all().map(i=>i.json);\nconst members = $node['Trello Members1'].all().map(i=>i.json);\nconst listById = Object.fromEntries(lists.map(l=>[l.id,l.name]));\nconst memById = Object.fromEntries(members.map(m=>[m.id,m.fullName||m.username]));\nconst now = new Date();\nconst venc = cards.filter(c=>c.due&&!c.dueComplete&&new Date(c.due)<now);\nif(!venc.length) return [{json:{respuesta:'✅ No hay tareas vencidas.'}}];\nconst lines = ['**🔴 TAREAS VENCIDAS**',''];\nfor(const c of venc.slice(0,10)){\n  const dias = Math.floor((now-new Date(c.due))/86400000);\n  const resp = (c.idMembers||[]).map(id=>memById[id]||id).join(', ') || 'sin asignar';\n  lines.push(`• **${c.name}**`);\n  lines.push(`  Lista: ${listById[c.idList]||'?'} | Resp: ${resp} | Hace ${dias}d`);\n}\nif(venc.length>10) lines.push(`...y ${venc.length-10} más`);\nreturn [{json:{respuesta:lines.join('\\n')}}];\n"
+        "jsCode": "\nconst cards = $node['Trello Cards1'].all().map(i=>i.json);\nconst lists = $node['Trello Lists1'].all().map(i=>i.json);\nconst members = $node['Trello Members1'].all().map(i=>i.json);\nconst listById = Object.fromEntries(lists.map(l=>[l.id,l.name]));\nconst memById = Object.fromEntries(members.map(m=>[m.id,m.fullName||m.username]));\nconst now = new Date();\nconst venc = cards.filter(c=>c.due&&!c.dueComplete&&new Date(c.due)<now);\nif(!venc.length) return [{json:{respuesta:'\u2705 No hay tareas vencidas.'}}];\nconst lines = ['**\ud83d\udd34 TAREAS VENCIDAS**',''];\nfor(const c of venc.slice(0,10)){\n  const dias = Math.floor((now-new Date(c.due))/86400000);\n  const resp = (c.idMembers||[]).map(id=>memById[id]||id).join(', ') || 'sin asignar';\n  lines.push(`\u2022 **${c.name}**`);\n  lines.push(`  Lista: ${listById[c.idList]||'?'} | Resp: ${resp} | Hace ${dias}d`);\n}\nif(venc.length>10) lines.push(`...y ${venc.length-10} m\u00e1s`);\nreturn [{json:{respuesta:lines.join('\\n')}}];\n"
       },
       "id": "ea098fdb-b9ae-44d3-aafb-3729c616e26f",
       "name": "Formatear Vencidas1",
@@ -1404,7 +1406,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst cards = $node['Trello Cards1'].all().map(i=>i.json);\nconst members = $node['Trello Members1'].all().map(i=>i.json);\nconst memById = Object.fromEntries(members.map(m=>[m.id,m.fullName||m.username]));\nconst now = new Date();\nconst stats = {};\nfor(const c of cards){\n  for(const id of (c.idMembers||[])){\n    const name = memById[id]||id;\n    if(!stats[name]) stats[name]={asig:0,done:0,venc:0};\n    stats[name].asig++;\n    if(c.dueComplete) stats[name].done++;\n    else if(c.due&&new Date(c.due)<now) stats[name].venc++;\n  }\n}\nconst lines = ['**👥 CARGA DEL EQUIPO**','`Miembro          | Asig | Done | Venc`'];\nfor(const [name,s] of Object.entries(stats)){\n  const short = name.split(' ').slice(0,2).join(' ').padEnd(16);\n  lines.push(`${short} |  ${String(s.asig).padStart(2)}  |  ${String(s.done).padStart(2)}  |  ${String(s.venc).padStart(2)}`);\n}\nreturn [{json:{respuesta:lines.join('\\n')}}];\n"
+        "jsCode": "\nconst cards = $node['Trello Cards1'].all().map(i=>i.json);\nconst members = $node['Trello Members1'].all().map(i=>i.json);\nconst memById = Object.fromEntries(members.map(m=>[m.id,m.fullName||m.username]));\nconst now = new Date();\nconst stats = {};\nfor(const c of cards){\n  for(const id of (c.idMembers||[])){\n    const name = memById[id]||id;\n    if(!stats[name]) stats[name]={asig:0,done:0,venc:0};\n    stats[name].asig++;\n    if(c.dueComplete) stats[name].done++;\n    else if(c.due&&new Date(c.due)<now) stats[name].venc++;\n  }\n}\nconst lines = ['**\ud83d\udc65 CARGA DEL EQUIPO**','`Miembro          | Asig | Done | Venc`'];\nfor(const [name,s] of Object.entries(stats)){\n  const short = name.split(' ').slice(0,2).join(' ').padEnd(16);\n  lines.push(`${short} |  ${String(s.asig).padStart(2)}  |  ${String(s.done).padStart(2)}  |  ${String(s.venc).padStart(2)}`);\n}\nreturn [{json:{respuesta:lines.join('\\n')}}];\n"
       },
       "id": "9d886113-85ff-4acc-95f5-670d7153faca",
       "name": "Formatear Miembros1",
@@ -1432,7 +1434,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst bC = $node['GH Back Commits1'].all().map(i=>i.json).slice(0,5);\nconst fC = $node['GH Front Commits1'].all().map(i=>i.json).slice(0,5);\nconst fmt = (c,repo)=>`• \\`${(c.sha||'').slice(0,7)}\\` [${repo}] **${(c.commit?.author?.name||'?').split(' ')[0]}**: ${(c.commit?.message||'').split('\\n')[0].slice(0,70)}`;\nconst lines = ['**📝 COMMITS RECIENTES**','**Backend:**',...bC.map(c=>fmt(c,'back')),'','**Frontend:**',...fC.map(c=>fmt(c,'front'))];\nreturn [{json:{respuesta:lines.join('\\n')}}];\n"
+        "jsCode": "\nconst bC = $node['GH Back Commits1'].all().map(i=>i.json).slice(0,5);\nconst fC = $node['GH Front Commits1'].all().map(i=>i.json).slice(0,5);\nconst fmt = (c,repo)=>`\u2022 \\`${(c.sha||'').slice(0,7)}\\` [${repo}] **${(c.commit?.author?.name||'?').split(' ')[0]}**: ${(c.commit?.message||'').split('\\n')[0].slice(0,70)}`;\nconst lines = ['**\ud83d\udcdd COMMITS RECIENTES**','**Backend:**',...bC.map(c=>fmt(c,'back')),'','**Frontend:**',...fC.map(c=>fmt(c,'front'))];\nreturn [{json:{respuesta:lines.join('\\n')}}];\n"
       },
       "id": "8a2598ae-c1fc-4557-930a-cf3c031c960c",
       "name": "Formatear Commits1",
@@ -1460,7 +1462,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst bR = $node['GH Back CI Runs'].first()?.json?.workflow_runs?.[0];\nconst fR = $node['GH Front CI Runs'].first()?.json?.workflow_runs?.[0];\nconst emo = s=>s==='success'?'✅':s==='failure'?'❌':s==='in_progress'?'🔄':'⚪';\nconst fmt = (r,label)=>r?`${emo(r.conclusion||r.status)} **${label}**: ${r.conclusion||r.status} | rama: ${r.head_branch} | por: ${r.actor?.login||'?'}`:`⚪ **${label}**: sin datos`;\nconst lines = ['**🔧 ESTADO CI/CD**',fmt(bR,'Backend'),fmt(fR,'Frontend'),'','🌐 Deploy: https://pet-safe-six.vercel.app'];\nreturn [{json:{respuesta:lines.join('\\n')}}];\n"
+        "jsCode": "\nconst bR = $node['GH Back CI Runs'].first()?.json?.workflow_runs?.[0];\nconst fR = $node['GH Front CI Runs'].first()?.json?.workflow_runs?.[0];\nconst emo = s=>s==='success'?'\u2705':s==='failure'?'\u274c':s==='in_progress'?'\ud83d\udd04':'\u26aa';\nconst fmt = (r,label)=>r?`${emo(r.conclusion||r.status)} **${label}**: ${r.conclusion||r.status} | rama: ${r.head_branch} | por: ${r.actor?.login||'?'}`:`\u26aa **${label}**: sin datos`;\nconst lines = ['**\ud83d\udd27 ESTADO CI/CD**',fmt(bR,'Backend'),fmt(fR,'Frontend'),'','\ud83c\udf10 Deploy: https://pet-safe-six.vercel.app'];\nreturn [{json:{respuesta:lines.join('\\n')}}];\n"
       },
       "id": "e4dd5bb3-3484-4952-9f45-ad4af4a5cec2",
       "name": "Formatear CI1",
@@ -1488,7 +1490,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst cards = $node['Trello Cards1'].all().map(i=>i.json);\nconst h = $node['PG Historial1']?.first()?.json||{};\nconst kpis=(typeof h.kpis_json==='string'?JSON.parse(h.kpis_json):h.kpis_json)||{};\nconst now=new Date();\nconst total=cards.length, done=cards.filter(c=>c.dueComplete).length;\nconst pend=cards.filter(c=>!c.dueComplete&&!(c.due&&new Date(c.due)<now)).length;\nconst venc=cards.filter(c=>c.due&&!c.dueComplete&&new Date(c.due)<now).length;\nconst pct=total>0?Math.round(done/total*100):0;\nconst bar='█'.repeat(Math.round(pct/10))+'░'.repeat(10-Math.round(pct/10));\nconst lines=[\n  '**🏁 PROGRESO DEL SPRINT**',\n  `\\`[${bar}] ${pct}%\\``,\n  `Completadas: **${done}** | Pendientes: **${pend}** | Vencidas: **${venc}**`,\n  `Velocidad: **${kpis.velocidad_tareas_por_dia??'?'}** t/día | Commits/día: **${kpis.commits_por_dia??'?'}**`,\n  `Proyección: **${kpis.proyeccion??'sin datos'}** | Días hasta fin: **${kpis.dias_hasta_fin??'?'}**`\n];\nreturn [{json:{respuesta:lines.join('\\n')}}];\n"
+        "jsCode": "\nconst cards = $node['Trello Cards1'].all().map(i=>i.json);\nconst h = $node['PG Historial1']?.first()?.json||{};\nconst kpis=(typeof h.kpis_json==='string'?JSON.parse(h.kpis_json):h.kpis_json)||{};\nconst now=new Date();\nconst total=cards.length, done=cards.filter(c=>c.dueComplete).length;\nconst pend=cards.filter(c=>!c.dueComplete&&!(c.due&&new Date(c.due)<now)).length;\nconst venc=cards.filter(c=>c.due&&!c.dueComplete&&new Date(c.due)<now).length;\nconst pct=total>0?Math.round(done/total*100):0;\nconst bar='\u2588'.repeat(Math.round(pct/10))+'\u2591'.repeat(10-Math.round(pct/10));\nconst lines=[\n  '**\ud83c\udfc1 PROGRESO DEL SPRINT**',\n  `\\`[${bar}] ${pct}%\\``,\n  `Completadas: **${done}** | Pendientes: **${pend}** | Vencidas: **${venc}**`,\n  `Velocidad: **${kpis.velocidad_tareas_por_dia??'?'}** t/d\u00eda | Commits/d\u00eda: **${kpis.commits_por_dia??'?'}**`,\n  `Proyecci\u00f3n: **${kpis.proyeccion??'sin datos'}** | D\u00edas hasta fin: **${kpis.dias_hasta_fin??'?'}**`\n];\nreturn [{json:{respuesta:lines.join('\\n')}}];\n"
       },
       "id": "f843cabf-96b3-4761-a062-9741356c982d",
       "name": "Formatear Progreso1",
@@ -1555,7 +1557,7 @@
     {
       "parameters": {
         "name": "crear_tarjeta_trello",
-        "description": "Crea una nueva tarjeta en Trello. Recibe: nombre (título de la tarea), descripcion, lista (ej. Pendientes, En Progreso) y miembro (a quien asignar).",
+        "description": "Crea una nueva tarjeta en Trello. Recibe: nombre (t\u00edtulo de la tarea), descripcion, lista (ej. Pendientes, En Progreso) y miembro (a quien asignar).",
         "workflowId": {
           "value": "tool-crear-tarjeta",
           "mode": "id"
@@ -2427,7 +2429,8 @@
     "binaryMode": "separate",
     "timeSavedMode": "fixed",
     "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false
+    "availableInMCP": false,
+    "errorWorkflow": "monitor-petsafe-error-handler"
   },
   "versionId": "split-discord-chat-main-v1",
   "meta": {
