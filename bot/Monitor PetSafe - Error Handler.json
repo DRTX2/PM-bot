@@ -3,13 +3,13 @@
   "nodes": [
     {
       "parameters": {},
-      "id": "beccbdf9-99d2-4e7b-80b2-beb4a87917ee",
+      "id": "929f5b66-ce80-4810-b4ab-32b0d150e574",
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
       "position": [
-        -448,
-        7072
+        -288,
+        16
       ]
     },
     {
@@ -26,13 +26,13 @@
         },
         "options": {}
       },
-      "id": "4a1969d4-d1f5-4f05-b76c-37d15a08eb0b",
+      "id": "1130bd5a-79de-49c3-8a71-8af070f95510",
       "name": "Formatear Error",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -192,
-        7056
+        -32,
+        16
       ]
     },
     {
@@ -44,13 +44,13 @@
         "jsonBody": "={{ ({ content: ($json.mensaje_error || '🚨 Error desconocido en Monitor PetSafe — revisar ejecuciones en n8n').slice(0, 2000) }) }}",
         "options": {}
       },
-      "id": "2f1a8d23-dd8d-4deb-b4f9-65db3a2687f2",
+      "id": "2e38716e-2920-4def-85dc-bb27a3e3f36b",
       "name": "Alerta a Discord",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        48,
-        7072
+        208,
+        16
       ]
     }
   ],
@@ -79,16 +79,15 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "split-monitor-error-handler-v1",
+  "versionId": "f37dca75-56e4-4c1b-9e65-4cf15987857c",
   "meta": {
-    "templateCredsSetupCompleted": true,
     "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
   },
-  "id": "monitor-petsafe-error-handler",
+  "id": "O4qJYNx2qDrWB3wt",
   "tags": []
 }

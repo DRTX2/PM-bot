@@ -3,32 +3,81 @@
   "nodes": [
     {
       "parameters": {
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "STRATIUM-UTA"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "PetSafe-Back",
+          "mode": "name"
+        },
         "events": [
           "*"
         ],
-        "owner": "={{ $env.GITHUB_OWNER }}",
-        "repository": "={{ $env.GITHUB_REPO }}"
+        "options": {}
       },
-      "id": "78bc5bf0-0cf4-49ea-9d79-2789e181861a",
-      "name": "GitHub Event Webhook1",
+      "id": "e4d6951c-9537-419e-9ed9-943bff94452e",
+      "name": "GitHub Event Webhook Backend",
       "type": "n8n-nodes-base.githubTrigger",
       "typeVersion": 1,
       "position": [
-        33920,
-        29776
-      ]
+        -1024,
+        128
+      ],
+      "webhookId": "2eea23e2-c0cc-4d57-a46b-f7f4d30eece7",
+      "credentials": {
+        "githubApi": {
+          "id": "Ef6o1UdEiDu28Ibq",
+          "name": "backend-account"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "const headers = $json.headers || {};\nconst body = $json.body || {};\n\nconst getHeader = (name) => {\n  const key = Object.keys(headers).find(k => k.toLowerCase() === name.toLowerCase());\n  return key ? headers[key] : '';\n};\n\nconst event = String(getHeader('x-github-event') || '').toLowerCase();\nconst action = body.action || '';\nconst repo = body.repository?.full_name || 'repo/desconocido';\nconst actor = body.sender?.login || body.pusher?.name || 'desconocido';\n\nlet ignored = false;\nlet tipo = 'github_evento';\nlet titulo = 'Evento GitHub';\nlet descripcion = \"Evento \" + (event || \"desconocido\") + \" en \" + repo + \".\";\nlet url = body.repository?.html_url || null;\nlet branch = null;\nlet prNumber = null;\n\nif (event === 'pull_request') {\n  const pr = body.pull_request || {};\n  prNumber = body.number || pr.number || null;\n  const prTitle = pr.title || 'PR sin titulo';\n  url = pr.html_url || url;\n\n  if (action === 'opened' || action === 'reopened') {\n    tipo = 'github_pr_opened';\n    titulo = 'PR abierto';\n    descripcion = actor + \" abrio PR #\" + prNumber + \": \" + prTitle + \".\";\n  } else if (action === 'ready_for_review') {\n    tipo = 'github_pr_ready';\n    titulo = 'PR listo para revision';\n    descripcion = actor + \" marco PR #\" + prNumber + \" listo para revision.\";\n  } else if (action === 'synchronize') {\n    tipo = 'github_pr_updated';\n    titulo = 'PR actualizado';\n    descripcion = actor + \" actualizo PR #\" + prNumber + \": \" + prTitle + \".\";\n  } else if (action === 'closed' && pr.merged) {\n    tipo = 'github_pr_merged';\n    titulo = 'PR mergeado';\n    descripcion = actor + \" mergeo PR #\" + prNumber + \": \" + prTitle + \".\";\n  } else if (action === 'closed') {\n    tipo = 'github_pr_closed';\n    titulo = 'PR cerrado';\n    descripcion = actor + \" cerro PR #\" + prNumber + \": \" + prTitle + \".\";\n  } else {\n    ignored = true;\n    titulo = 'Evento GitHub ignorado';\n    descripcion = \"Evento pull_request/\" + action + \" no se procesa en este workflow.\";\n  }\n} else if (event === 'push') {\n  const ref = body.ref || '';\n  branch = ref.replace('refs/heads/', '') || ref;\n  const commits = Array.isArray(body.commits) ? body.commits : [];\n  const commitCount = commits.length;\n  url = body.compare || url;\n\n  if (branch === 'main' || branch === 'master') {\n    ignored = true;\n    tipo = 'github_push_main_ignored';\n    titulo = 'Push principal ignorado';\n    descripcion = actor + \" hizo push a \" + branch + \" (\" + commitCount + \" commits). Lo gestiona Workflow 3 Delta Detector.\";\n  } else {\n    tipo = 'github_push_branch';\n    titulo = 'Push en rama de trabajo';\n    descripcion = actor + \" hizo push a \" + branch + \" (\" + commitCount + \" commits).\";\n  }\n} else {\n  ignored = true;\n  titulo = 'Evento GitHub ignorado';\n  descripcion = \"Evento \" + (event || \"desconocido\") + \" no se procesa en este workflow.\";\n}\n\nconst detalle = {\n  event,\n  action,\n  repo,\n  actor,\n  branch,\n  pr_number: prNumber,\n  url,\n  received_at: new Date().toISOString()\n};\n\nconst discord_content = \"[PetSafe/GitHub] \" + titulo + \"\\n\" + descripcion + (url ? \"\\n\" + url : \"\");\n\nreturn [{\n  json: {\n    source: 'github',\n    ignored,\n    tipo,\n    titulo,\n    descripcion,\n    detalle,\n    detalle_json: JSON.stringify(detalle || {}),\n    discord_content\n  }\n}];"
+        "owner": {
+          "__rl": true,
+          "value": "JosueGarciaAbata",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "PetSafe-Front",
+          "mode": "name"
+        },
+        "events": [
+          "*"
+        ],
+        "options": {}
       },
-      "id": "e62ad425-77b1-4693-bc47-6628d5005445",
+      "id": "55f24aae-72c9-43bf-9b6f-0cfe2fad47bc",
+      "name": "GitHub Event Webhook Frontend",
+      "type": "n8n-nodes-base.githubTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1024,
+        384
+      ],
+      "webhookId": "e480b610-6d9b-42dc-827f-8d8c2c753f66",
+      "credentials": {
+        "githubApi": {
+          "id": "dkFcPmeSEHWQKN9i",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const headers = $json.headers || {};\nconst body = $json.body || {};\n\nconst getHeader = (name) => {\n  const key = Object.keys(headers).find((k) => k.toLowerCase() === name.toLowerCase());\n  return key ? headers[key] : '';\n};\n\nconst event = String(getHeader('x-github-event') || '').toLowerCase();\nconst action = body.action || '';\nconst repo = body.repository?.full_name || 'repo/desconocido';\nconst repoName = body.repository?.name || '';\nconst actor = body.sender?.login || body.pusher?.name || 'desconocido';\nconst backendRepo = 'PetSafe-Back';\nconst frontendRepo = 'PetSafe-Front';\n\nlet repoScope = 'github';\nif (repoName && repoName === backendRepo) repoScope = 'backend';\nelse if (repoName && repoName === frontendRepo) repoScope = 'frontend';\n\nlet ignored = false;\nlet tipo = 'github_evento';\nlet titulo = 'Evento GitHub';\nlet descripcion = 'Evento ' + (event || 'desconocido') + ' en ' + repo + '.';\nlet url = body.repository?.html_url || null;\nlet branch = null;\nlet prNumber = null;\n\nif (event === 'pull_request') {\n  const pr = body.pull_request || {};\n  prNumber = body.number || pr.number || null;\n  const prTitle = pr.title || 'PR sin titulo';\n  url = pr.html_url || url;\n\n  if (action === 'opened' || action === 'reopened') {\n    tipo = 'github_pr_opened';\n    titulo = 'PR abierto';\n    descripcion = actor + ' abrio PR #' + prNumber + ' en ' + repo + ': ' + prTitle + '.';\n  } else if (action === 'ready_for_review') {\n    tipo = 'github_pr_ready';\n    titulo = 'PR listo para revision';\n    descripcion = actor + ' marco PR #' + prNumber + ' en ' + repo + ' listo para revision.';\n  } else if (action === 'synchronize') {\n    tipo = 'github_pr_updated';\n    titulo = 'PR actualizado';\n    descripcion = actor + ' actualizo PR #' + prNumber + ' en ' + repo + ': ' + prTitle + '.';\n  } else if (action === 'closed' && pr.merged) {\n    tipo = 'github_pr_merged';\n    titulo = 'PR mergeado';\n    descripcion = actor + ' mergeo PR #' + prNumber + ' en ' + repo + ': ' + prTitle + '.';\n  } else if (action === 'closed') {\n    tipo = 'github_pr_closed';\n    titulo = 'PR cerrado';\n    descripcion = actor + ' cerro PR #' + prNumber + ' en ' + repo + ': ' + prTitle + '.';\n  } else {\n    ignored = true;\n    titulo = 'Evento GitHub ignorado';\n    descripcion = 'Evento pull_request/' + action + ' no se procesa en este workflow.';\n  }\n} else if (event === 'push') {\n  const ref = body.ref || '';\n  branch = ref.replace('refs/heads/', '') || ref;\n  const commits = Array.isArray(body.commits) ? body.commits : [];\n  const commitCount = commits.length;\n  url = body.compare || url;\n\n  if (branch === 'main' || branch === 'master') {\n    ignored = true;\n    tipo = 'github_push_main_ignored';\n    titulo = 'Push principal ignorado';\n    descripcion = actor + ' hizo push a ' + branch + ' en ' + repo + ' (' + commitCount + ' commits). Lo gestiona Construir Contexto Robusto.';\n  } else {\n    tipo = 'github_push_branch';\n    titulo = 'Push en rama de trabajo';\n    descripcion = actor + ' hizo push a ' + branch + ' en ' + repo + ' (' + commitCount + ' commits).';\n  }\n} else {\n  ignored = true;\n  titulo = 'Evento GitHub ignorado';\n  descripcion = 'Evento ' + (event || 'desconocido') + ' no se procesa en este workflow.';\n}\n\nconst detalle = {\n  event,\n  action,\n  repo,\n  repo_name: repoName || null,\n  repo_scope: repoScope,\n  actor,\n  branch,\n  pr_number: prNumber,\n  url,\n  received_at: new Date().toISOString()\n};\n\nconst discord_content = '[PetSafe/GitHub/' + repoScope + '] ' + titulo + '\\n' + descripcion + (url ? '\\n' + url : '');\n\nreturn [{\n  json: {\n    source: 'github',\n    ignored,\n    tipo,\n    titulo,\n    descripcion,\n    detalle,\n    detalle_json: JSON.stringify(detalle || {}),\n    discord_content\n  }\n}];"
+      },
+      "id": "675a7d4b-7906-4318-86f9-48e421796bde",
       "name": "Normalizar Evento GitHub1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        34160,
-        29776
+        -784,
+        256
       ]
     },
     {
@@ -53,19 +102,19 @@
         },
         "options": {}
       },
-      "id": "77b88e2d-d313-4fb2-a444-9222fca68394",
+      "id": "b1c0eebe-7281-4ee9-8e50-f2f2fb773e56",
       "name": "IF Evento GitHub Relevante1",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        34384,
-        29776
+        -560,
+        256
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "url": "https://discordapp.com/api/webhooks/1494442658821832904/apUVcK-nDQ0ti_jmkIYwma_LWggN6Qj4EYm-jNZT3MK8W0B69LqMolAHd_Dtu60xlr4V",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -83,13 +132,13 @@
         },
         "options": {}
       },
-      "id": "cd7bc733-9905-4113-9fde-d2d5c7a58695",
+      "id": "6115c56b-0526-45a7-a22b-2a8b1fb793af",
       "name": "Discord Evento GitHub1",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        34656,
-        29936
+        -288,
+        416
       ],
       "continueOnFail": true
     },
@@ -97,17 +146,15 @@
       "parameters": {
         "operation": "executeQuery",
         "query": "INSERT INTO eventos_detectados (tipo, descripcion, detalle, notificado) VALUES ($1, $2, $3::jsonb, TRUE);",
-        "options": {
-          "queryParameters": "={{($json.tipo || \"github_evento\")}},={{($json.descripcion || \"\")}},={{($json.detalle_json || \"{}\")}}"
-        }
+        "options": {}
       },
-      "id": "74862345-b099-4e70-920f-b96a0df22835",
+      "id": "7010053a-1f52-4392-bbab-807f06d95d44",
       "name": "PG Insert Evento GitHub1",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        34672,
-        29760
+        -272,
+        240
       ],
       "credentials": {
         "postgres": {
@@ -123,13 +170,13 @@
         "responseBody": "ok (github procesado)",
         "options": {}
       },
-      "id": "4b66856c-ccc4-4f50-bf6f-50b3669e9581",
+      "id": "5f0dc114-d2b1-4b07-a7e6-1c18b141a707",
       "name": "Resp GitHub Procesado1",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        34672,
-        29568
+        -272,
+        48
       ]
     },
     {
@@ -138,19 +185,30 @@
         "responseBody": "ok (github ignorado)",
         "options": {}
       },
-      "id": "5c50cf00-2925-42fb-b38a-a23cb1562516",
+      "id": "67698259-f3b1-4be1-9c14-73b216abf2ad",
       "name": "Resp GitHub Ignorado1",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        34656,
-        30096
+        -288,
+        576
       ]
     }
   ],
   "pinData": {},
   "connections": {
-    "GitHub Event Webhook1": {
+    "GitHub Event Webhook Backend": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Evento GitHub1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub Event Webhook Frontend": {
       "main": [
         [
           {
@@ -201,20 +259,16 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate",
-    "timeSavedMode": "fixed",
-    "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false,
-    "errorWorkflow": "monitor-petsafe-error-handler"
+    "binaryMode": "separate"
   },
-  "versionId": "split-discord-github-events-v1",
+  "versionId": "1a58182b-5a84-44dd-b444-cd3ce4d83d95",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
   },
-  "id": "discord-eventos-github-petsafe",
+  "id": "LKhZAQYHgktyV0jO",
   "tags": []
 }

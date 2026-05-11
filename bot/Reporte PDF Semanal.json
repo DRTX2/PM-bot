@@ -12,24 +12,24 @@
           ]
         }
       },
-      "id": "00fc4ee6-d1aa-487a-8898-8a3422622fb8",
+      "id": "c4698827-d1f6-4943-9903-fd1b5834f7e7",
       "name": "Schedule Viernes 18:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
       "position": [
-        1280,
-        3632
+        -480,
+        608
       ]
     },
     {
       "parameters": {},
-      "id": "a6833532-8d92-498e-8860-04ee27dabf81",
+      "id": "3da69951-cda1-4ab2-a9d1-9ec503108a5b",
       "name": "On-Demand Trigger",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
       "position": [
-        1280,
-        3856
+        -480,
+        832
       ]
     },
     {
@@ -130,13 +130,13 @@
         },
         "options": {}
       },
-      "id": "cb732e7f-ecb7-4e4f-b4e2-56dfff14e595",
-      "name": "Configuraci\u00f3n",
+      "id": "253fbfe9-4017-48c5-b19c-90522a5fa735",
+      "name": "Configuración",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1520,
-        3728
+        -240,
+        704
       ]
     },
     {
@@ -144,16 +144,16 @@
         "operation": "executeQuery",
         "query": "SELECT fecha_ejecucion, hay_problemas, total_tareas, tareas_completadas, tareas_vencidas, progreso_pct, cantidad_problemas, severidad_maxima, kpis_json FROM analisis_proyecto WHERE fecha_ejecucion >= NOW() - ($1 || ' days')::interval ORDER BY fecha_ejecucion DESC;",
         "options": {
-          "queryReplacement": "={{ $node[\"Configuraci\u00f3n\"].json.rango_dias }}"
+          "queryReplacement": "={{ $node[\"Configuración\"].json.rango_dias }}"
         }
       },
-      "id": "9c771eb6-f745-4fe5-b681-a20983756e03",
-      "name": "PG An\u00e1lisis 7d",
+      "id": "dd0e59b3-0bfa-4c6e-8f4a-9677df6a5c5f",
+      "name": "PG Análisis 7d",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1760,
-        3024
+        0,
+        0
       ],
       "credentials": {
         "postgres": {
@@ -168,13 +168,13 @@
         "query": "SELECT * FROM analisis_proyecto ORDER BY fecha_ejecucion DESC LIMIT 1;",
         "options": {}
       },
-      "id": "a4570d4f-89a4-4c09-9dfd-f349121238e7",
-      "name": "PG \u00daltimo An\u00e1lisis",
+      "id": "0cfcf966-62fc-4205-80e4-e93cb6a07ac6",
+      "name": "PG Último Análisis",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1760,
-        3216
+        0,
+        192
       ],
       "credentials": {
         "postgres": {
@@ -189,13 +189,13 @@
         "query": "SELECT DISTINCT ON (card_id) card_id, card_nombre, lista_nombre, miembro_nombre, fecha_vencimiento FROM estado_tareas WHERE completada = FALSE AND fecha_vencimiento < NOW() ORDER BY card_id, fecha DESC;",
         "options": {}
       },
-      "id": "38f13641-6996-475a-8128-a6ede3c2fb18",
+      "id": "bf00bd3f-0665-464d-aecb-fb9849622bd9",
       "name": "PG Tareas Vencidas",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1760,
-        3408
+        0,
+        384
       ],
       "credentials": {
         "postgres": {
@@ -210,13 +210,13 @@
         "query": "SELECT nombre, tipo, fecha_inicio, fecha_fin, responsable, completado FROM hitos_proyecto WHERE fecha_fin >= CURRENT_DATE AND fecha_fin <= CURRENT_DATE + INTERVAL '30 days' ORDER BY fecha_fin ASC;",
         "options": {}
       },
-      "id": "bca66402-3c7c-4699-a2fa-e0efa842ad6a",
-      "name": "PG Hitos Pr\u00f3ximos",
+      "id": "39c6c739-3dd6-4c7e-aefe-bec47f64d2b1",
+      "name": "PG Hitos Próximos",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1760,
-        3600
+        0,
+        576
       ],
       "credentials": {
         "postgres": {
@@ -230,16 +230,16 @@
         "operation": "executeQuery",
         "query": "SELECT fecha, tipo, descripcion FROM eventos_detectados WHERE fecha >= NOW() - ($1 || ' days')::interval ORDER BY fecha DESC LIMIT 100;",
         "options": {
-          "queryReplacement": "={{ $node[\"Configuraci\u00f3n\"].json.rango_dias }}"
+          "queryReplacement": "={{ $node[\"Configuración\"].json.rango_dias }}"
         }
       },
-      "id": "95b1ec6b-984f-461e-a258-1b61cc22a0ac",
+      "id": "5bcf0025-1870-4a48-89d6-0f895b91de49",
       "name": "PG Eventos 7d",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1760,
-        3760
+        0,
+        736
       ],
       "credentials": {
         "postgres": {
@@ -253,16 +253,16 @@
         "operation": "executeQuery",
         "query": "SELECT fecha, tipo, descripcion FROM recomendaciones WHERE aplicada = FALSE AND tipo = 'alerta_ia' AND fecha >= NOW() - ($1 || ' days')::interval ORDER BY fecha DESC LIMIT 20;",
         "options": {
-          "queryReplacement": "={{ $node[\"Configuraci\u00f3n\"].json.rango_dias }}"
+          "queryReplacement": "={{ $node[\"Configuración\"].json.rango_dias }}"
         }
       },
-      "id": "d6ce992b-2def-4707-8f9d-c41635c5aace",
+      "id": "1399a2c1-9f23-48bd-a447-fdec0222841d",
       "name": "PG Recomendaciones",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1760,
-        3936
+        0,
+        912
       ],
       "credentials": {
         "postgres": {
@@ -277,13 +277,13 @@
         "query": "SELECT email, nombre FROM destinatarios_reporte WHERE activo = TRUE;",
         "options": {}
       },
-      "id": "c08c1295-ca2f-466b-b06e-a0d4db2dc3c4",
+      "id": "1ae77b2b-2570-43fe-b3de-dd19d4ec8cca",
       "name": "PG Destinatarios",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1760,
-        4096
+        0,
+        1072
       ],
       "credentials": {
         "postgres": {
@@ -294,13 +294,13 @@
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/repos/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_REPO_BACKEND }}/commits",
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuración\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Configuración\"].json.GITHUB_REPO_BACKEND }}/commits",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
             {
               "name": "since",
-              "value": "={{ $node[\"Configuraci\u00f3n\"].json.fecha_desde }}"
+              "value": "={{ $node[\"Configuración\"].json.fecha_desde }}"
             },
             {
               "name": "per_page",
@@ -313,7 +313,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $node[\"Configuraci\u00f3n\"].json.GITHUB_TOKEN_BACKEND || $node[\"Configuraci\u00f3n\"].json.GITHUB_TOKEN }}"
+              "value": "=Bearer {{ $node[\"Configuración\"].json.GITHUB_TOKEN_BACKEND || $node[\"Configuración\"].json.GITHUB_TOKEN }}"
             },
             {
               "name": "Accept",
@@ -323,24 +323,24 @@
         },
         "options": {}
       },
-      "id": "6de94184-a874-4f7b-8191-8b0618a6a382",
+      "id": "cac8122a-8e8f-4b54-95b6-a5e80dc1d6c3",
       "name": "GitHub Back 7d",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1760,
-        4256
+        0,
+        1232
       ]
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/repos/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_REPO_FRONTEND }}/commits",
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuración\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Configuración\"].json.GITHUB_REPO_FRONTEND }}/commits",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
             {
               "name": "since",
-              "value": "={{ $node[\"Configuraci\u00f3n\"].json.fecha_desde }}"
+              "value": "={{ $node[\"Configuración\"].json.fecha_desde }}"
             },
             {
               "name": "per_page",
@@ -353,7 +353,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $node[\"Configuraci\u00f3n\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Configuraci\u00f3n\"].json.GITHUB_TOKEN }}"
+              "value": "=Bearer {{ $node[\"Configuración\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Configuración\"].json.GITHUB_TOKEN }}"
             },
             {
               "name": "Accept",
@@ -363,39 +363,39 @@
         },
         "options": {}
       },
-      "id": "f9f845f0-2021-4c28-b1f1-65bf192c7935",
+      "id": "2bfec486-716f-427b-a6bf-df56e9d74aae",
       "name": "GitHub Front 7d",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1760,
-        4400
+        0,
+        1376
       ]
     },
     {
       "parameters": {
         "numberInputs": 9
       },
-      "id": "40ea12ce-90b7-4363-8e6f-c204acfbbf90",
+      "id": "dd48b3b0-9898-4cc1-8796-5d21f11fa806",
       "name": "Merge Reporte",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
       "position": [
-        2048,
-        3872
+        288,
+        848
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Process heterogeneous array from Merge node\nconst items = $input.all().map(i => i.json);\n\nlet analisis7d = [], ultimo = null, vencidas = [], hitos = [], eventos = [], recos = [], destinatarios = [], backCommits = [], frontCommits = [];\n\n// Helper: detect object type by structure\nconst detectType = (obj) => {\n  if (!obj || typeof obj !== 'object') return 'unknown';\n  \n  if (obj.progreso_pct !== undefined) return 'analisis';\n  if (obj.card_id && obj.card_nombre) return 'tarea';\n  if (obj.email && obj.nombre) return 'destinatario';\n  if (obj.sha && obj.commit) return 'commit';\n  // CORRECCI\u00d3N AQU\u00cd:\n  if (obj.fecha_fin && obj.tipo && !obj.card_id) return 'hito'; \n  if (obj.descripcion && obj.tipo) {\n      // Diferenciar entre evento y recomendaci\u00f3n por contenido o tabla si es posible\n      return obj.aplicada !== undefined ? 'recomendacion' : 'evento';\n  }\n  \n  return 'unknown';\n};\n\n// Segregate: Merge data is heterogeneous array\nfor (const obj of items) {\n  const type = detectType(obj);\n  \n  if (type === 'analisis') {\n    analisis7d.push(obj);\n  } else if (type === 'tarea') {\n    vencidas.push(obj);\n  } else if (type === 'destinatario') {\n    destinatarios.push(obj);\n  } else if (type === 'commit') {\n    // Guess backend vs frontend by repo in commit message or branch hint\n    const msg = obj.commit?.message || '';\n    if (msg.toLowerCase().includes('front') || msg.toLowerCase().includes('ui') || msg.toLowerCase().includes('component')) {\n      frontCommits.push(obj);\n    } else {\n      backCommits.push(obj);\n    }\n  } else if (type === 'hito') {\n    hitos.push(obj);\n  } else if (type === 'recomendacion') {\n    recos.push(obj);\n  } else if (type === 'evento') {\n    eventos.push(obj);\n  }\n}\n\n// Sort an\u00e1lisis by date DESC to get latest first\nanalisis7d.sort((a, b) => new Date(b.fecha_ejecucion) - new Date(a.fecha_ejecucion));\nultimo = analisis7d[0] || {};\n\n// Parse KPIs if string\nconst k = ultimo.kpis_json || {};\nconst kpis = typeof k === 'string' ? JSON.parse(k) : k;\n\n// Calculate trend\nconst tendencia = analisis7d.length > 1 ? {\n  progreso_inicial: analisis7d[analisis7d.length - 1]?.progreso_pct || 0,\n  progreso_final: analisis7d[0]?.progreso_pct || 0,\n  delta: (analisis7d[0]?.progreso_pct || 0) - (analisis7d[analisis7d.length - 1]?.progreso_pct || 0),\n  ejecuciones: analisis7d.length\n} : null;\n\nconst prompt = `Genera un RESUMEN EJECUTIVO del reporte semanal del proyecto PetSafe (sistema veterinario). Usa tono profesional en espa\u00f1ol. Estructura:\n\n1. ESTADO GENERAL (1 p\u00e1rrafo, 3-4 frases)\n2. LOGROS DE LA SEMANA (bullets, m\u00e1x 4)\n3. RIESGOS CR\u00cdTICOS (bullets con prioridad A/M/B, m\u00e1x 4)\n4. PR\u00d3XIMOS PASOS (bullets accionables, m\u00e1x 4)\n\nDatos:\n${JSON.stringify({\n  kpis,\n  tendencia,\n  ultimo: {\n    progreso_pct: ultimo.progreso_pct,\n    total_tareas: ultimo.total_tareas,\n    tareas_completadas: ultimo.tareas_completadas,\n    tareas_vencidas: ultimo.tareas_vencidas,\n    cantidad_problemas: ultimo.cantidad_problemas\n  },\n  vencidas_count: vencidas.length,\n  hitos_proximos: hitos.slice(0, 3),\n  commits: { back: backCommits.length, front: frontCommits.length },\n  eventos_count: eventos.length\n})}\n\nResponde SOLO con HTML v\u00e1lido usando <h3>, <p>, <ul>, <li>, <strong>. Sin backticks ni markdown.`;\n\nconst data = {\n  fecha_reporte: new Date().toISOString(),\n  fecha_reporte_local: new Date().toLocaleString('es-EC', { timeZone: 'America/Guayaquil' }),\n  rango_dias: $node['Configuraci\u00f3n'].json.rango_dias,\n  ultimo_analisis: ultimo,\n  kpis,\n  tendencia,\n  analisis_historia: analisis7d,\n  tareas_vencidas: vencidas,\n  hitos_proximos: hitos,\n  eventos_recientes: eventos,\n  recomendaciones_pendientes: recos,\n  destinatarios: destinatarios.map(d => d.email),\n  destinatarios_info: destinatarios,\n  commits_back: backCommits.map(c => ({ sha: (c.sha || '').substring(0,7), autor: c.commit?.author?.name, fecha: c.commit?.author?.date, mensaje: (c.commit?.message || '').split('\\n')[0] })),\n  commits_front: frontCommits.map(c => ({ sha: (c.sha || '').substring(0,7), autor: c.commit?.author?.name, fecha: c.commit?.author?.date, mensaje: (c.commit?.message || '').split('\\n')[0] })),\n  total_commits_back: backCommits.length,\n  total_commits_front: frontCommits.length,\n  gemini_key: $env.GEMINI_API_KEY,\n  prompt\n};\n\nreturn [{ json: data }];\n"
+        "jsCode": "// Process heterogeneous array from Merge node\nconst items = $input.all().map(i => i.json);\n\nlet analisis7d = [], ultimo = null, vencidas = [], hitos = [], eventos = [], recos = [], destinatarios = [], backCommits = [], frontCommits = [];\n\n// Helper: detect object type by structure\nconst detectType = (obj) => {\n  if (!obj || typeof obj !== 'object') return 'unknown';\n  \n  if (obj.progreso_pct !== undefined) return 'analisis';\n  if (obj.card_id && obj.card_nombre) return 'tarea';\n  if (obj.email && obj.nombre) return 'destinatario';\n  if (obj.sha && obj.commit) return 'commit';\n  // CORRECCIÓN AQUÍ:\n  if (obj.fecha_fin && obj.tipo && !obj.card_id) return 'hito'; \n  if (obj.descripcion && obj.tipo) {\n      // Diferenciar entre evento y recomendación por contenido o tabla si es posible\n      return obj.aplicada !== undefined ? 'recomendacion' : 'evento';\n  }\n  \n  return 'unknown';\n};\n\n// Segregate: Merge data is heterogeneous array\nfor (const obj of items) {\n  const type = detectType(obj);\n  \n  if (type === 'analisis') {\n    analisis7d.push(obj);\n  } else if (type === 'tarea') {\n    vencidas.push(obj);\n  } else if (type === 'destinatario') {\n    destinatarios.push(obj);\n  } else if (type === 'commit') {\n    // Guess backend vs frontend by repo in commit message or branch hint\n    const msg = obj.commit?.message || '';\n    if (msg.toLowerCase().includes('front') || msg.toLowerCase().includes('ui') || msg.toLowerCase().includes('component')) {\n      frontCommits.push(obj);\n    } else {\n      backCommits.push(obj);\n    }\n  } else if (type === 'hito') {\n    hitos.push(obj);\n  } else if (type === 'recomendacion') {\n    recos.push(obj);\n  } else if (type === 'evento') {\n    eventos.push(obj);\n  }\n}\n\n// Sort análisis by date DESC to get latest first\nanalisis7d.sort((a, b) => new Date(b.fecha_ejecucion) - new Date(a.fecha_ejecucion));\nultimo = analisis7d[0] || {};\n\n// Parse KPIs if string\nconst k = ultimo.kpis_json || {};\nconst kpis = typeof k === 'string' ? JSON.parse(k) : k;\n\n// Calculate trend\nconst tendencia = analisis7d.length > 1 ? {\n  progreso_inicial: analisis7d[analisis7d.length - 1]?.progreso_pct || 0,\n  progreso_final: analisis7d[0]?.progreso_pct || 0,\n  delta: (analisis7d[0]?.progreso_pct || 0) - (analisis7d[analisis7d.length - 1]?.progreso_pct || 0),\n  ejecuciones: analisis7d.length\n} : null;\n\nconst prompt = `Genera un RESUMEN EJECUTIVO del reporte semanal del proyecto PetSafe (sistema veterinario). Usa tono profesional en español. Estructura:\n\n1. ESTADO GENERAL (1 párrafo, 3-4 frases)\n2. LOGROS DE LA SEMANA (bullets, máx 4)\n3. RIESGOS CRÍTICOS (bullets con prioridad A/M/B, máx 4)\n4. PRÓXIMOS PASOS (bullets accionables, máx 4)\n\nDatos:\n${JSON.stringify({\n  kpis,\n  tendencia,\n  ultimo: {\n    progreso_pct: ultimo.progreso_pct,\n    total_tareas: ultimo.total_tareas,\n    tareas_completadas: ultimo.tareas_completadas,\n    tareas_vencidas: ultimo.tareas_vencidas,\n    cantidad_problemas: ultimo.cantidad_problemas\n  },\n  vencidas_count: vencidas.length,\n  hitos_proximos: hitos.slice(0, 3),\n  commits: { back: backCommits.length, front: frontCommits.length },\n  eventos_count: eventos.length\n})}\n\nResponde SOLO con HTML válido usando <h3>, <p>, <ul>, <li>, <strong>. Sin backticks ni markdown.`;\n\nconst data = {\n  fecha_reporte: new Date().toISOString(),\n  fecha_reporte_local: new Date().toLocaleString('es-EC', { timeZone: 'America/Guayaquil' }),\n  rango_dias: $node['Configuración'].json.rango_dias,\n  ultimo_analisis: ultimo,\n  kpis,\n  tendencia,\n  analisis_historia: analisis7d,\n  tareas_vencidas: vencidas,\n  hitos_proximos: hitos,\n  eventos_recientes: eventos,\n  recomendaciones_pendientes: recos,\n  destinatarios: destinatarios.map(d => d.email),\n  destinatarios_info: destinatarios,\n  commits_back: backCommits.map(c => ({ sha: (c.sha || '').substring(0,7), autor: c.commit?.author?.name, fecha: c.commit?.author?.date, mensaje: (c.commit?.message || '').split('\\n')[0] })),\n  commits_front: frontCommits.map(c => ({ sha: (c.sha || '').substring(0,7), autor: c.commit?.author?.name, fecha: c.commit?.author?.date, mensaje: (c.commit?.message || '').split('\\n')[0] })),\n  total_commits_back: backCommits.length,\n  total_commits_front: frontCommits.length,\n  gemini_key: $env.GEMINI_API_KEY,\n  prompt\n};\n\nreturn [{ json: data }];\n"
       },
-      "id": "d6bb7bbc-feac-4c8f-b6b7-820bfc23e65c",
+      "id": "225a74e7-fb4f-4e70-be4e-cafc8788a6bb",
       "name": "Build Report Data",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2272,
-        3984
+        512,
+        960
       ]
     },
     {
@@ -407,32 +407,32 @@
         "jsonBody": "={{ ({ contents: [{ parts: [{ text: $json.prompt }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 1200 } }) }}",
         "options": {}
       },
-      "id": "50172a82-1604-410d-9957-0813e9ad9ef3",
+      "id": "466acc45-6293-4fc5-a51e-dfc8a51a1a98",
       "name": "Gemini Executive Summary",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2480,
-        3984
+        720,
+        960
       ]
     },
     {
       "parameters": {
-        "jsCode": "const gem = $json;\nconst data = $node['Build Report Data'].json;\nconst summaryHtml = gem?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || \n  `<p><strong>Estado del proyecto:</strong> Progreso ${data.ultimo_analisis.progreso_pct || 0}% \u00b7 Equipo activo \u00b7 ${data.tareas_vencidas.length} tareas vencidas \u00b7 Proyecci\u00f3n: ${data.kpis.proyeccion_a_tiempo ? 'A tiempo' : 'En riesgo'}</p>\n   <p><strong>Focus:</strong> ${data.kpis.dias_hasta_fin} d\u00edas hasta fin. Velocidad ${data.kpis.velocidad_tareas_por_dia || 0}/d\u00eda.</p>`; \n\nconst fmt = (d) => d ? new Date(d).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }) : '-';\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));\n\nconst k = data.kpis || {};\nconst rowsKpis = [\n  ['Progreso general', `${data.ultimo_analisis.progreso_pct || 0}%`],\n  ['Velocidad (tareas/sem)', k.velocidad_semana ?? '-'],\n  ['% Tareas a tiempo', (k.pct_a_tiempo != null ? k.pct_a_tiempo + '%' : '-')],\n  ['Commits/d\u00eda (back)', k.commits_por_dia_back ?? '-'],\n  ['Commits/d\u00eda (front)', k.commits_por_dia_front ?? '-'],\n  ['PR open time (h) back', k.pr_open_time_back ?? '-'],\n  ['PR open time (h) front', k.pr_open_time_front ?? '-'],\n  ['PR merge ratio', k.pr_merge_ratio ?? '-'],\n  ['D\u00edas restantes', k.dias_hasta_fin ?? '-'],\n  ['Proyecci\u00f3n a tiempo', k.proyeccion_a_tiempo ? 'S\u00ed' : 'En riesgo']\n];\n\nconst trHtml = (arr) => arr.map(r => `<tr><td>${esc(r[0])}</td><td><strong>${esc(r[1])}</strong></td></tr>`).join('');\n\nconst vencidasHtml = data.tareas_vencidas.length ? `<table><thead><tr><th>Tarea</th><th>Lista</th><th>Responsable</th><th>Vencida el</th></tr></thead><tbody>${data.tareas_vencidas.map(v => `<tr><td>${esc(v.card_nombre)}</td><td>${esc(v.lista_nombre)}</td><td>${esc(v.miembro_nombre || '-')}</td><td>${fmt(v.fecha_vencimiento)}</td></tr>`).join('')}</tbody></table>` : '<p><em>Sin tareas vencidas.</em></p>';\n\nconst hitosHtml = data.hitos_proximos.length ? `<table><thead><tr><th>Hito</th><th>Tipo</th><th>Fecha</th><th>Responsable</th></tr></thead><tbody>${data.hitos_proximos.map(h => `<tr><td>${esc(h.nombre)}</td><td>${esc(h.tipo)}</td><td>${fmt(h.fecha_fin)}</td><td>${esc(h.responsable || '-')}</td></tr>`).join('')}</tbody></table>` : '';\n\nconst commitsHtml = (arr, titulo) => {\n  if (!arr.length) return '';\n  const lines = arr.slice(0, 10).map(c => {\n    const author = esc(c.autor).split(' ')[0];\n    const msg = esc(c.mensaje).slice(0, 70);\n    const date = fmt(c.fecha);\n    return `<div style=\"margin-bottom:3mm; font-size:9.5pt;\"><code>${esc(c.sha)}</code> ${author}: ${msg} \u00b7 ${date}</div>`;\n  }).join('');\n  return `<h4>${titulo}</h4>${lines}`;\n};\n\nconst eventosHtml = data.eventos_recientes.length ? `<ul>${data.eventos_recientes.slice(0, 15).map(e => `<li>${fmt(e.fecha)} \u2014 <strong>${esc(e.tipo)}</strong>: ${esc(e.descripcion)}</li>`).join('')}</ul>` : '';\n\nconst recosHtml = data.recomendaciones_pendientes.length ? `<ul>${data.recomendaciones_pendientes.slice(0, 10).map(r => `<li>${fmt(r.fecha)} \u2014 ${esc((r.descripcion || '').substring(0, 300))}</li>`).join('')}</ul>` : '';\n\nconst tendenciaHtml = data.tendencia ? `<p>Progreso: <strong>${data.tendencia.progreso_inicial}%</strong> \u2192 <strong>${data.tendencia.progreso_final}%</strong> (\u0394 ${data.tendencia.delta >= 0 ? '+' : ''}${data.tendencia.delta} pts \u00b7 ${data.tendencia.ejecuciones} ejecuciones)</p>` : '<p><em>Datos insuficientes para tendencia.</em></p>';\n\nconst html = `<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n<meta charset=\"utf-8\"/>\n<title>Reporte Semanal PetSafe</title>\n<style>\n  @page { margin: 22mm 18mm; }\n  body { font-family: 'Helvetica', Arial, sans-serif; color: #222; font-size: 11pt; line-height: 1.4; }\n  .portada { text-align: center; padding: 40mm 0 30mm; border-bottom: 3px solid #1e40af; margin-bottom: 20mm; }\n  .portada h1 { color: #1e40af; font-size: 28pt; margin: 0 0 6mm; }\n  .portada h2 { color: #555; font-size: 14pt; font-weight: normal; margin: 0 0 10mm; }\n  .portada .meta { color: #777; font-size: 10pt; }\n  h2 { color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 2mm; margin-top: 12mm; font-size: 14pt; }\n  h3 { color: #333; font-size: 12pt; margin-top: 6mm; }\n  h4 { color: #555; font-size: 11pt; margin-top: 4mm; }\n  table { width: 100%; border-collapse: collapse; margin: 4mm 0; font-size: 10pt; }\n  th { background: #1e40af; color: white; padding: 2mm; text-align: left; }\n  td { padding: 2mm; border-bottom: 1px solid #ddd; }\n  tr:nth-child(even) td { background: #f7f7fb; }\n  ul { margin: 2mm 0; padding-left: 6mm; }\n  li { margin-bottom: 1mm; }\n  code { background: #eef; padding: 0 1mm; border-radius: 2px; font-size: 9pt; }\n  .footer { margin-top: 20mm; padding-top: 3mm; border-top: 1px solid #ccc; color: #888; font-size: 9pt; text-align: center; }\n  .badge { display: inline-block; padding: 1mm 3mm; border-radius: 3px; font-size: 9pt; font-weight: bold; }\n  .badge-ok { background: #16a34a; color: white; }\n  .badge-warn { background: #eab308; color: white; }\n  .badge-err { background: #dc2626; color: white; }\n</style>\n</head>\n<body>\n<div class=\"portada\">\n  <h1>\ud83d\udc3e PetSafe</h1>\n  <h2>Reporte Semanal de Gesti\u00f3n</h2>\n  <div class=\"meta\">Generado: ${esc(data.fecha_reporte_local)}<br/>Rango: \u00faltimos ${data.rango_dias} d\u00edas</div>\n</div>\n\n<h2>1. Resumen Ejecutivo</h2>\n${summaryHtml}\n\n<h2>2. KPIs del Proyecto</h2>\n<table><thead><tr><th>Indicador</th><th>Valor</th></tr></thead><tbody>${trHtml(rowsKpis)}</tbody></table>\n\n<h2>3. Tendencia Semanal</h2>\n${tendenciaHtml}\n\n<h2>4. Tareas Vencidas</h2>\n${vencidasHtml}\n\n${data.hitos_proximos.length ? '<h2>5. Hitos Pr\u00f3ximos (30 d\u00edas)</h2>' : ''}\n${hitosHtml}\n\n<h2>6. Actividad Git</h2>\n${commitsHtml(data.commits_back, 'Backend')}\n${commitsHtml(data.commits_front, 'Frontend')}\n\n${data.eventos_recientes.length ? '<h2>7. Eventos Detectados</h2>' : ''}\n${eventosHtml}\n\n${data.recomendaciones_pendientes.length ? '<h2>8. Recomendaciones Pendientes (IA)</h2>' : ''}\n${recosHtml}\n\n<div class=\"footer\">\ud83e\udd16 Reporte generado autom\u00e1ticamente por n8n + Gemini \u00b7 PetSafe PM Assistant</div>\n</body>\n</html>`;\n\nconst fileName = `reporte-petsafe-${new Date().toISOString().slice(0,10)}.html`;\nconst summaryText = `Reporte semanal PetSafe: progreso ${data.ultimo_analisis.progreso_pct || 0}%, ${data.tareas_vencidas.length} tareas vencidas, ${data.total_commits_back + data.total_commits_front} commits, ${data.eventos_recientes.length} eventos.`;\n\nreturn [{\n  json: {\n    summaryText,\n    destinatarios: data.destinatarios,\n    destinatarios_info: data.destinatarios_info,\n    rango_dias: data.rango_dias,\n    fecha_reporte_local: data.fecha_reporte_local\n  },\n  binary: {\n    data: {\n      data: Buffer.from(html).toString('base64'),\n      mimeType: 'text/html',\n      fileName: 'index.html'\n    }\n  }\n}];\n"
+        "jsCode": "const gem = $json;\nconst data = $node['Build Report Data'].json;\nconst summaryHtml = gem?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || \n  `<p><strong>Estado del proyecto:</strong> Progreso ${data.ultimo_analisis.progreso_pct || 0}% · Equipo activo · ${data.tareas_vencidas.length} tareas vencidas · Proyección: ${data.kpis.proyeccion_a_tiempo ? 'A tiempo' : 'En riesgo'}</p>\n   <p><strong>Focus:</strong> ${data.kpis.dias_hasta_fin} días hasta fin. Velocidad ${data.kpis.velocidad_tareas_por_dia || 0}/día.</p>`; \n\nconst fmt = (d) => d ? new Date(d).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }) : '-';\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));\n\nconst k = data.kpis || {};\nconst rowsKpis = [\n  ['Progreso general', `${data.ultimo_analisis.progreso_pct || 0}%`],\n  ['Velocidad (tareas/sem)', k.velocidad_semana ?? '-'],\n  ['% Tareas a tiempo', (k.pct_a_tiempo != null ? k.pct_a_tiempo + '%' : '-')],\n  ['Commits/día (back)', k.commits_por_dia_back ?? '-'],\n  ['Commits/día (front)', k.commits_por_dia_front ?? '-'],\n  ['PR open time (h) back', k.pr_open_time_back ?? '-'],\n  ['PR open time (h) front', k.pr_open_time_front ?? '-'],\n  ['PR merge ratio', k.pr_merge_ratio ?? '-'],\n  ['Días restantes', k.dias_hasta_fin ?? '-'],\n  ['Proyección a tiempo', k.proyeccion_a_tiempo ? 'Sí' : 'En riesgo']\n];\n\nconst trHtml = (arr) => arr.map(r => `<tr><td>${esc(r[0])}</td><td><strong>${esc(r[1])}</strong></td></tr>`).join('');\n\nconst vencidasHtml = data.tareas_vencidas.length ? `<table><thead><tr><th>Tarea</th><th>Lista</th><th>Responsable</th><th>Vencida el</th></tr></thead><tbody>${data.tareas_vencidas.map(v => `<tr><td>${esc(v.card_nombre)}</td><td>${esc(v.lista_nombre)}</td><td>${esc(v.miembro_nombre || '-')}</td><td>${fmt(v.fecha_vencimiento)}</td></tr>`).join('')}</tbody></table>` : '<p><em>Sin tareas vencidas.</em></p>';\n\nconst hitosHtml = data.hitos_proximos.length ? `<table><thead><tr><th>Hito</th><th>Tipo</th><th>Fecha</th><th>Responsable</th></tr></thead><tbody>${data.hitos_proximos.map(h => `<tr><td>${esc(h.nombre)}</td><td>${esc(h.tipo)}</td><td>${fmt(h.fecha_fin)}</td><td>${esc(h.responsable || '-')}</td></tr>`).join('')}</tbody></table>` : '';\n\nconst commitsHtml = (arr, titulo) => {\n  if (!arr.length) return '';\n  const lines = arr.slice(0, 10).map(c => {\n    const author = esc(c.autor).split(' ')[0];\n    const msg = esc(c.mensaje).slice(0, 70);\n    const date = fmt(c.fecha);\n    return `<div style=\"margin-bottom:3mm; font-size:9.5pt;\"><code>${esc(c.sha)}</code> ${author}: ${msg} · ${date}</div>`;\n  }).join('');\n  return `<h4>${titulo}</h4>${lines}`;\n};\n\nconst eventosHtml = data.eventos_recientes.length ? `<ul>${data.eventos_recientes.slice(0, 15).map(e => `<li>${fmt(e.fecha)} — <strong>${esc(e.tipo)}</strong>: ${esc(e.descripcion)}</li>`).join('')}</ul>` : '';\n\nconst recosHtml = data.recomendaciones_pendientes.length ? `<ul>${data.recomendaciones_pendientes.slice(0, 10).map(r => `<li>${fmt(r.fecha)} — ${esc((r.descripcion || '').substring(0, 300))}</li>`).join('')}</ul>` : '';\n\nconst tendenciaHtml = data.tendencia ? `<p>Progreso: <strong>${data.tendencia.progreso_inicial}%</strong> → <strong>${data.tendencia.progreso_final}%</strong> (Δ ${data.tendencia.delta >= 0 ? '+' : ''}${data.tendencia.delta} pts · ${data.tendencia.ejecuciones} ejecuciones)</p>` : '<p><em>Datos insuficientes para tendencia.</em></p>';\n\nconst html = `<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n<meta charset=\"utf-8\"/>\n<title>Reporte Semanal PetSafe</title>\n<style>\n  @page { margin: 22mm 18mm; }\n  body { font-family: 'Helvetica', Arial, sans-serif; color: #222; font-size: 11pt; line-height: 1.4; }\n  .portada { text-align: center; padding: 40mm 0 30mm; border-bottom: 3px solid #1e40af; margin-bottom: 20mm; }\n  .portada h1 { color: #1e40af; font-size: 28pt; margin: 0 0 6mm; }\n  .portada h2 { color: #555; font-size: 14pt; font-weight: normal; margin: 0 0 10mm; }\n  .portada .meta { color: #777; font-size: 10pt; }\n  h2 { color: #1e40af; border-bottom: 2px solid #1e40af; padding-bottom: 2mm; margin-top: 12mm; font-size: 14pt; }\n  h3 { color: #333; font-size: 12pt; margin-top: 6mm; }\n  h4 { color: #555; font-size: 11pt; margin-top: 4mm; }\n  table { width: 100%; border-collapse: collapse; margin: 4mm 0; font-size: 10pt; }\n  th { background: #1e40af; color: white; padding: 2mm; text-align: left; }\n  td { padding: 2mm; border-bottom: 1px solid #ddd; }\n  tr:nth-child(even) td { background: #f7f7fb; }\n  ul { margin: 2mm 0; padding-left: 6mm; }\n  li { margin-bottom: 1mm; }\n  code { background: #eef; padding: 0 1mm; border-radius: 2px; font-size: 9pt; }\n  .footer { margin-top: 20mm; padding-top: 3mm; border-top: 1px solid #ccc; color: #888; font-size: 9pt; text-align: center; }\n  .badge { display: inline-block; padding: 1mm 3mm; border-radius: 3px; font-size: 9pt; font-weight: bold; }\n  .badge-ok { background: #16a34a; color: white; }\n  .badge-warn { background: #eab308; color: white; }\n  .badge-err { background: #dc2626; color: white; }\n</style>\n</head>\n<body>\n<div class=\"portada\">\n  <h1>🐾 PetSafe</h1>\n  <h2>Reporte Semanal de Gestión</h2>\n  <div class=\"meta\">Generado: ${esc(data.fecha_reporte_local)}<br/>Rango: últimos ${data.rango_dias} días</div>\n</div>\n\n<h2>1. Resumen Ejecutivo</h2>\n${summaryHtml}\n\n<h2>2. KPIs del Proyecto</h2>\n<table><thead><tr><th>Indicador</th><th>Valor</th></tr></thead><tbody>${trHtml(rowsKpis)}</tbody></table>\n\n<h2>3. Tendencia Semanal</h2>\n${tendenciaHtml}\n\n<h2>4. Tareas Vencidas</h2>\n${vencidasHtml}\n\n${data.hitos_proximos.length ? '<h2>5. Hitos Próximos (30 días)</h2>' : ''}\n${hitosHtml}\n\n<h2>6. Actividad Git</h2>\n${commitsHtml(data.commits_back, 'Backend')}\n${commitsHtml(data.commits_front, 'Frontend')}\n\n${data.eventos_recientes.length ? '<h2>7. Eventos Detectados</h2>' : ''}\n${eventosHtml}\n\n${data.recomendaciones_pendientes.length ? '<h2>8. Recomendaciones Pendientes (IA)</h2>' : ''}\n${recosHtml}\n\n<div class=\"footer\">🤖 Reporte generado automáticamente por n8n + Gemini · PetSafe PM Assistant</div>\n</body>\n</html>`;\n\nconst fileName = `reporte-petsafe-${new Date().toISOString().slice(0,10)}.html`;\nconst summaryText = `Reporte semanal PetSafe: progreso ${data.ultimo_analisis.progreso_pct || 0}%, ${data.tareas_vencidas.length} tareas vencidas, ${data.total_commits_back + data.total_commits_front} commits, ${data.eventos_recientes.length} eventos.`;\n\nreturn [{\n  json: {\n    summaryText,\n    destinatarios: data.destinatarios,\n    destinatarios_info: data.destinatarios_info,\n    rango_dias: data.rango_dias,\n    fecha_reporte_local: data.fecha_reporte_local\n  },\n  binary: {\n    data: {\n      data: Buffer.from(html).toString('base64'),\n      mimeType: 'text/html',\n      fileName: 'index.html'\n    }\n  }\n}];\n"
       },
-      "id": "86e84772-cf00-46f0-9acd-729d41401e31",
+      "id": "377a0a6f-71c9-4175-a3ae-4a5af9e307b3",
       "name": "Build HTML + Binary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2704,
-        3984
+        944,
+        960
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $node[\"Configuraci\u00f3n\"].json.GOTENBERG_URL }}/forms/chromium/convert/html",
+        "url": "={{ $node[\"Configuración\"].json.GOTENBERG_URL }}/forms/chromium/convert/html",
         "sendBody": true,
         "contentType": "multipart-form-data",
         "bodyParameters": {
@@ -453,39 +453,39 @@
           }
         }
       },
-      "id": "4139448a-85a0-4638-a031-0c18d9efcf6a",
-      "name": "Gotenberg HTML\u2192PDF",
+      "id": "ca1bc995-a1d0-492d-9ffd-081902003517",
+      "name": "Gotenberg HTML→PDF",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2928,
-        3984
+        1168,
+        960
       ]
     },
     {
       "parameters": {
         "jsCode": "const meta = $node['Build HTML + Binary'].json;\nconst fileName = `reporte-petsafe-${new Date().toISOString().slice(0,10)}.pdf`;\nconst pdfBin = $binary.pdf;\nreturn [{\n  json: { ...meta, fileName },\n  binary: { pdf: { ...pdfBin, fileName, mimeType: 'application/pdf' } }\n}];\n"
       },
-      "id": "34b5824c-255a-421d-96c9-a66986277b41",
+      "id": "a72d57bf-6a19-440f-94b4-07bb7654b904",
       "name": "Rename PDF",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3152,
-        3984
+        1392,
+        960
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $node[\"Configuraci\u00f3n\"].json.DISCORD_WEBHOOK_URL }}",
+        "url": "={{ $node[\"Configuración\"].json.DISCORD_WEBHOOK_URL }}",
         "sendBody": true,
         "contentType": "multipart-form-data",
         "bodyParameters": {
           "parameters": [
             {
               "name": "payload_json",
-              "value": "={{ JSON.stringify({ content: '\ud83d\udcc4 **Reporte semanal PetSafe**\\n' + $json.summaryText, username: 'PetSafe Reports' }) }}"
+              "value": "={{ JSON.stringify({ content: '📄 **Reporte semanal PetSafe**\\n' + $json.summaryText, username: 'PetSafe Reports' }) }}"
             },
             {
               "parameterType": "formBinaryData",
@@ -496,32 +496,32 @@
         },
         "options": {}
       },
-      "id": "60500649-062d-42f0-802e-3905544a4c89",
+      "id": "8a570ebd-92f3-46ab-b33d-88d5aa2a43b8",
       "name": "Discord Upload PDF",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3392,
-        3856
+        1632,
+        832
       ]
     },
     {
       "parameters": {
-        "fromEmail": "={{ $node[\"Configuraci\u00f3n\"].json.SMTP_FROM_NAME }} <{{ $node[\"Configuraci\u00f3n\"].json.SMTP_FROM_EMAIL }}>",
+        "fromEmail": "={{ $node[\"Configuración\"].json.SMTP_FROM_NAME }} <{{ $node[\"Configuración\"].json.SMTP_FROM_EMAIL }}>",
         "toEmail": "={{ $json.destinatarios.join(',') }}",
-        "subject": "=\ud83d\udcca Reporte Semanal PetSafe \u2014 {{ $json.fecha_reporte_local }}",
-        "html": "=<p>Hola,</p><p>Adjunto el reporte semanal de gesti\u00f3n del proyecto <strong>PetSafe</strong>.</p><p><em>{{ $json.summaryText }}</em></p><p>Rango: \u00faltimos {{ $json.rango_dias }} d\u00edas.</p><p>\u2014 PetSafe PM Assistant</p>",
+        "subject": "=📊 Reporte Semanal PetSafe — {{ $json.fecha_reporte_local }}",
+        "html": "=<p>Hola,</p><p>Adjunto el reporte semanal de gestión del proyecto <strong>PetSafe</strong>.</p><p><em>{{ $json.summaryText }}</em></p><p>Rango: últimos {{ $json.rango_dias }} días.</p><p>— PetSafe PM Assistant</p>",
         "options": {
           "attachments": "pdf"
         }
       },
-      "id": "8d17db0d-f9b6-481e-b0e8-9d550e35c351",
+      "id": "2fa6bfa5-efe9-4b1a-9eb3-ef6220c7cfa6",
       "name": "SMTP Enviar Email",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
       "position": [
-        3392,
-        4016
+        1632,
+        992
       ],
       "webhookId": "a4d370cb-12c7-4c71-a6d4-09a15504d5fa",
       "credentials": {
@@ -539,13 +539,13 @@
           "queryReplacement": "={{ [\n  'semanal',\n  Number($json.rango_dias || 7),\n  ($json.destinatarios || []).join('|'),\n  String($json.summaryText || '').replace(/,/g, ';')\n] }}"
         }
       },
-      "id": "54e6d5f5-3c29-4e47-9e9d-cba183b6702c",
+      "id": "e3a20e5c-6520-4943-9374-53e8850745a8",
       "name": "PG Log Reporte",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        3392,
-        4176
+        1632,
+        1152
       ],
       "credentials": {
         "postgres": {
@@ -571,7 +571,7 @@
           "cachedResultName": "alertas-proyecto",
           "cachedResultUrl": "https://discord.com/channels/1494441816911773737/1494442482673651933"
         },
-        "content": "={{ JSON.stringify({ content: '\ud83d\udcc4 **Reporte semanal PetSafe**\\n' + $json.summaryText, username: 'PetSafe Reports' }) }}",
+        "content": "={{ JSON.stringify({ content: '📄 **Reporte semanal PetSafe**\\n' + $json.summaryText, username: 'PetSafe Reports' }) }}",
         "options": {},
         "embeds": {
           "values": []
@@ -587,10 +587,10 @@
       "type": "n8n-nodes-base.discord",
       "typeVersion": 2,
       "position": [
-        3392,
-        3664
+        1632,
+        640
       ],
-      "id": "77157fd0-9504-4a34-84a4-fa0b33fbe31a",
+      "id": "b6c4b48b-673c-4670-899d-a8de9c7a20ba",
       "name": "Discord Upload PDF2",
       "webhookId": "53dccc43-33ee-4262-9b5f-977452f39ccf",
       "credentials": {
@@ -602,39 +602,39 @@
     },
     {
       "parameters": {},
-      "id": "5880df81-3ddc-476e-9c8b-c5849f64d7b7",
+      "id": "0d58e704-e807-4626-be38-672e0ef3437a",
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
       "position": [
-        1280,
-        4096
+        -480,
+        1072
       ]
     },
     {
       "parameters": {
         "options": {}
       },
-      "id": "611b4521-7ae2-4a2a-b4e1-3246197cec67",
+      "id": "33b8e9fe-7afa-43d1-a71a-5cf71fb1f7bc",
       "name": "Respuesta a Chat",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        3632,
-        3856
+        1872,
+        832
       ]
     },
     {
       "parameters": {
         "options": {}
       },
-      "id": "6768a1d4-afc3-41a6-b1a0-4b99d1693d25",
+      "id": "34235b7a-8f70-4279-885e-956f7f501885",
       "name": "Respuesta de Error a Chat",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        1520,
-        4096
+        -240,
+        1072
       ]
     }
   ],
@@ -644,7 +644,7 @@
       "main": [
         [
           {
-            "node": "Configuraci\u00f3n",
+            "node": "Configuración",
             "type": "main",
             "index": 0
           }
@@ -655,23 +655,23 @@
       "main": [
         [
           {
-            "node": "Configuraci\u00f3n",
+            "node": "Configuración",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Configuraci\u00f3n": {
+    "Configuración": {
       "main": [
         [
           {
-            "node": "PG An\u00e1lisis 7d",
+            "node": "PG Análisis 7d",
             "type": "main",
             "index": 0
           },
           {
-            "node": "PG \u00daltimo An\u00e1lisis",
+            "node": "PG Último Análisis",
             "type": "main",
             "index": 0
           },
@@ -681,7 +681,7 @@
             "index": 0
           },
           {
-            "node": "PG Hitos Pr\u00f3ximos",
+            "node": "PG Hitos Próximos",
             "type": "main",
             "index": 0
           },
@@ -713,7 +713,7 @@
         ]
       ]
     },
-    "PG An\u00e1lisis 7d": {
+    "PG Análisis 7d": {
       "main": [
         [
           {
@@ -724,7 +724,7 @@
         ]
       ]
     },
-    "PG \u00daltimo An\u00e1lisis": {
+    "PG Último Análisis": {
       "main": [
         [
           {
@@ -746,7 +746,7 @@
         ]
       ]
     },
-    "PG Hitos Pr\u00f3ximos": {
+    "PG Hitos Próximos": {
       "main": [
         [
           {
@@ -849,14 +849,14 @@
       "main": [
         [
           {
-            "node": "Gotenberg HTML\u2192PDF",
+            "node": "Gotenberg HTML→PDF",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gotenberg HTML\u2192PDF": {
+    "Gotenberg HTML→PDF": {
       "main": [
         [
           {
@@ -882,6 +882,11 @@
           },
           {
             "node": "PG Log Reporte",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Discord Upload PDF2",
             "type": "main",
             "index": 0
           }
@@ -914,14 +919,12 @@
   "active": true,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate",
-    "errorWorkflow": "monitor-petsafe-error-handler"
+    "binaryMode": "separate"
   },
-  "versionId": "e1eed263-5a7b-4937-b7dc-91b5f3bbd337",
+  "versionId": "a90d4e6d-d43f-4360-9d94-2356fc1da0cc",
   "meta": {
-    "templateCredsSetupCompleted": true,
     "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
   },
-  "id": "joddDTQkcp6U7mT9",
+  "id": "Gy8PUj6ikmbNkgfR",
   "tags": []
 }

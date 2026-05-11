@@ -3,26 +3,26 @@
   "nodes": [
     {
       "parameters": {},
-      "id": "2b061e45-f96e-4e0e-bf0e-ff2f4dcf0ade",
+      "id": "2379788f-4fdc-47dc-af29-52e4f9774751",
       "name": "When clicking \"Execute\"",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -336,
-        16
+        0,
+        0
       ]
     },
     {
       "parameters": {
         "jsCode": "// Centralizamos la data para que sea mantenible\nconst seedData = [\n  {\n    id: 1,\n    nombre_estado: 'inicializacion_sistema',\n    snapshot: {\n      version: \"1.1.0\",\n      last_sync: new Date().toISOString(),\n      metadata: {\n        env: \"production\",\n        owner: \"David Manjarres\"\n      }\n    }\n  }\n];\n\n// Mapeo nativo para n8n\nreturn seedData.map(item => ({ json: item }));"
       },
-      "id": "dfa9364d-178b-476e-a688-3d38538b1884",
+      "id": "f1d342fd-f2a9-4c5e-bcf7-5c177f1de6c4",
       "name": "Define Seed Data",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -112,
-        16
+        224,
+        0
       ]
     },
     {
@@ -83,13 +83,13 @@
         },
         "options": {}
       },
-      "id": "7ea42c43-fd9b-4715-a211-8c739da24bc3",
+      "id": "2f59d3ca-f48d-49f2-b0b8-0291f689464c",
       "name": "Upsert Estado Conocido",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.2,
       "position": [
-        112,
-        16
+        448,
+        0
       ],
       "credentials": {
         "postgres": {
@@ -127,14 +127,12 @@
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate",
-    "errorWorkflow": "monitor-petsafe-error-handler"
+    "binaryMode": "separate"
   },
-  "versionId": "79e9f8c4-71d1-47f7-b533-b49ccebf6bc9",
+  "versionId": "a24a2b9b-8367-4325-8bb5-fb4f397bf3fb",
   "meta": {
-    "templateCredsSetupCompleted": true,
     "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
   },
-  "id": "aXOczDpgOsgmRulm",
+  "id": "FFPLSwbkXbs0kuql",
   "tags": []
 }

@@ -3,28 +3,35 @@
   "nodes": [
     {
       "parameters": {
-        "modelId": "={{ $env.TRELLO_BOARD_ID }}"
+        "id": "69baa8ff02e1cfb32a461a04"
       },
-      "id": "4414093c-80c3-44ad-bcc4-c4d91e9e33e1",
+      "id": "717e848f-3508-4450-8a34-88fc1703375f",
       "name": "Trello Event Webhook",
       "type": "n8n-nodes-base.trelloTrigger",
       "typeVersion": 1,
       "position": [
-        33888,
-        28992
-      ]
+        -848,
+        288
+      ],
+      "webhookId": "3d6027b5-2b1b-4639-b53d-a9c2942c677e",
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
     },
     {
       "parameters": {
         "jsCode": "const body = $json.body || {};\nconst action = body.action || {};\nconst data = action.data || {};\nconst type = action.type || 'unknown';\nconst actor = action.memberCreator?.fullName || action.memberCreator?.username || 'desconocido';\nconst boardName = data.board?.name || body.model?.name || 'tablero';\nconst card = data.card || {};\nconst cardName = card.name || 'tarjeta sin nombre';\nconst cardUrl = card.shortUrl || card.url || body.model?.url || null;\n\nlet ignored = false;\nlet tipo = 'trello_evento';\nlet titulo = 'Evento Trello';\nlet descripcion = \"Evento \" + type + \" en \" + boardName + \".\";\n\nif (type === 'updateCard' && data.listBefore && data.listAfter) {\n  tipo = 'trello_card_move';\n  titulo = 'Tarjeta movida';\n  descripcion = actor + \" movio \" + cardName + \" de \" + data.listBefore.name + \" a \" + data.listAfter.name + \".\";\n} else if (type === 'commentCard') {\n  tipo = 'trello_comment';\n  titulo = 'Comentario en tarjeta';\n  descripcion = actor + \" comento en \" + cardName + \".\";\n} else if (type === 'createCard') {\n  tipo = 'trello_card_created';\n  titulo = 'Tarjeta creada';\n  descripcion = actor + \" creo la tarjeta \" + cardName + \".\";\n} else if (type === 'updateCard' && Object.prototype.hasOwnProperty.call(data.old || {}, 'due')) {\n  tipo = 'trello_due_changed';\n  titulo = 'Fecha limite actualizada';\n  descripcion = actor + \" actualizo fecha limite de \" + cardName + \".\";\n} else {\n  // Eventos como completado/PDF ya se cubren en Workflow 3 para evitar duplicados.\n  ignored = true;\n  titulo = 'Evento Trello ignorado';\n  descripcion = \"Evento \" + type + \" no se procesa aqui para evitar duplicar otros workflows.\";\n}\n\nconst detalle = {\n  action_type: type,\n  actor,\n  board_name: boardName,\n  card_id: card.id || null,\n  card_name: cardName,\n  card_url: cardUrl,\n  list_before: data.listBefore?.name || null,\n  list_after: data.listAfter?.name || null,\n  comment: data.text || null,\n  due: card.due || null,\n  date: action.date || null\n};\n\nconst discord_content = \"[PetSafe/Trello] \" + titulo + \"\\n\" + descripcion + (cardUrl ? \"\\n\" + cardUrl : \"\");\n\nreturn [{\n  json: {\n    source: 'trello',\n    ignored,\n    tipo,\n    titulo,\n    descripcion,\n    detalle,\n    detalle_json: JSON.stringify(detalle || {}),\n    discord_content\n  }\n}];"
       },
-      "id": "85a87e8f-457c-4c98-99b4-7b39b6ea8e6f",
+      "id": "e5482ecc-5f5f-45bf-9dc3-510127fdaa00",
       "name": "Normalizar Evento Trello",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        34128,
-        28992
+        -608,
+        288
       ]
     },
     {
@@ -49,13 +56,13 @@
         },
         "options": {}
       },
-      "id": "fd7fe877-ba02-497d-addd-d2ebdfdfcbf4",
+      "id": "dc234f05-088f-4567-be80-1213a8bc85ad",
       "name": "IF Evento Trello Relevante",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        34352,
-        28992
+        -384,
+        288
       ]
     },
     {
@@ -79,13 +86,13 @@
         },
         "options": {}
       },
-      "id": "2f4848de-962b-48bb-92cd-b6e5ba81bba9",
+      "id": "713d6b0b-36e8-4c28-b795-f2922e013651",
       "name": "Discord Evento Trello",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        34736,
-        28704
+        0,
+        0
       ],
       "continueOnFail": true
     },
@@ -93,17 +100,15 @@
       "parameters": {
         "operation": "executeQuery",
         "query": "INSERT INTO eventos_detectados (tipo, descripcion, detalle, notificado) VALUES ($1, $2, $3::jsonb, TRUE);",
-        "options": {
-          "queryParameters": "={{($json.tipo || \"trello_evento\")}},={{($json.descripcion || \"\")}},={{($json.detalle_json || \"{}\")}}"
-        }
+        "options": {}
       },
-      "id": "4f283ab4-3d50-4874-96c6-1bbaf23cb5fc",
+      "id": "b76eaad3-0e1f-4169-9fd4-2dfc302d009c",
       "name": "PG Insert Evento Trello",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
-        34736,
-        29072
+        0,
+        368
       ],
       "credentials": {
         "postgres": {
@@ -119,13 +124,13 @@
         "responseBody": "ok (trello procesado)",
         "options": {}
       },
-      "id": "f5012f65-64d1-41a0-abc8-d5830ba64610",
+      "id": "09147ab1-cd57-4755-81fd-c59f8546b2c7",
       "name": "Resp Trello Procesado",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        34736,
-        28896
+        0,
+        192
       ]
     },
     {
@@ -134,13 +139,13 @@
         "responseBody": "ok (trello ignorado)",
         "options": {}
       },
-      "id": "c4fe94ca-7b7d-4a0e-b752-6c120d62baad",
+      "id": "7e6148eb-c2e2-4628-a9c2-02fbe76d11ce",
       "name": "Resp Trello Ignorado",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        34736,
-        29248
+        0,
+        544
       ]
     }
   ],
@@ -197,20 +202,16 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate",
-    "timeSavedMode": "fixed",
-    "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false,
-    "errorWorkflow": "monitor-petsafe-error-handler"
+    "binaryMode": "separate"
   },
-  "versionId": "split-discord-trello-events-v1",
+  "versionId": "f0800a07-fef5-45f1-bcbe-714f45357c95",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
   },
-  "id": "discord-eventos-trello-petsafe",
+  "id": "GmfJjSBAgedWN4Fd",
   "tags": []
 }

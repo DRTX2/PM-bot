@@ -1,0 +1,1080 @@
+{
+  "name": "ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â¬ Workflow 2 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Chat Discord PetSafe",
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Discord Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "discord-chat",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        400
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "w2c01",
+              "name": "TRELLO_API_KEY",
+              "value": "={{ $env.TRELLO_API_KEY }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c02",
+              "name": "TRELLO_TOKEN",
+              "value": "={{ $env.TRELLO_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c03",
+              "name": "TRELLO_BOARD_ID",
+              "value": "={{ $env.TRELLO_BOARD_ID }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c04",
+              "name": "GITHUB_TOKEN",
+              "value": "={{ $env.GITHUB_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c04b",
+              "name": "GITHUB_TOKEN_BACKEND",
+              "value": "={{ $env.GITHUB_TOKEN_BACKEND || $env.GITHUB_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c04f",
+              "name": "GITHUB_TOKEN_FRONTEND",
+              "value": "={{ $env.GITHUB_TOKEN_FRONTEND || $env.GITHUB_TOKEN }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c05",
+              "name": "GITHUB_OWNER_BACKEND",
+              "value": "={{ $env.GITHUB_OWNER_BACKEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c05f",
+              "name": "GITHUB_OWNER_FRONTEND",
+              "value": "={{ $env.GITHUB_OWNER_FRONTEND || $env.GITHUB_OWNER || $env.GITHUB_OWNER_BACKEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c06",
+              "name": "GITHUB_REPO_BACKEND",
+              "value": "={{ $env.GITHUB_REPO_BACKEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c07",
+              "name": "GITHUB_REPO_FRONTEND",
+              "value": "={{ $env.GITHUB_REPO_FRONTEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c08",
+              "name": "GEMINI_API_KEY",
+              "value": "={{ $env.GEMINI_API_KEY }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c09",
+              "name": "pregunta_usuario",
+              "value": "={{ $json.body.content || 'Dame un resumen' }}",
+              "type": "string"
+            },
+            {
+              "id": "w2c10",
+              "name": "usuario_discord",
+              "value": "={{ $json.body.user || 'desconocido' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "router",
+      "name": "Router Comandos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        400
+      ],
+      "parameters": {
+        "jsCode": "const pregunta = ($node['Config'].json.pregunta_usuario || '').trim();\nconst low = pregunta.toLowerCase();\n\nlet tipo = 'chat';\nif (low.startsWith('!reporte')) tipo = 'reporte';\nelse if (low.startsWith('!kpis')) tipo = 'kpis';\n\nconst necesita_diff = /(codig|commit|diff|revisa|calidad|pull request|\\bpr\\b|merge)/.test(low);\n\nreturn [{ json: { pregunta, tipo, necesita_diff, usuario: $node['Config'].json.usuario_discord } }];"
+      }
+    },
+    {
+      "id": "switch",
+      "name": "Switch Tipo",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        660,
+        400
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.tipo }}",
+                    "rightValue": "reporte",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "reporte"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.tipo }}",
+                    "rightValue": "kpis",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "kpis"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.tipo }}",
+                    "rightValue": "chat",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "chat"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "trigger-reporte",
+      "name": "Trigger Reporte PDF",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        900,
+        160
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "WORKFLOW4_ID",
+          "mode": "id"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "resp-reporte",
+      "name": "Resp Reporte",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        160
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Reporte PDF generado y enviado al canal + email."
+      }
+    },
+    {
+      "id": "pg-kpis",
+      "name": "Postgres Ultimo KPI",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        900,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT fecha_ejecucion, progreso_pct, tareas_vencidas, kpis_json FROM analisis_proyecto ORDER BY fecha_ejecucion DESC LIMIT 1;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres Proyecto"
+        }
+      }
+    },
+    {
+      "id": "format-kpis",
+      "name": "Formatear KPIs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        320
+      ],
+      "parameters": {
+        "jsCode": "const row = $json;\nconst k = row.kpis_json || {};\nconst lines = [\n  'KPIs PetSafe (' + new Date(row.fecha_ejecucion).toLocaleString('es-EC') + ')',\n  '',\n  'Progreso sprint: ' + row.progreso_pct + '%',\n  'Tareas vencidas: ' + row.tareas_vencidas,\n  'Velocidad: ' + k.velocidad_tareas_por_dia + ' tareas/dÃƒÆ’Ã‚Â­a (completadas 7d: ' + k.completadas_7d + ')',\n  '% a tiempo: ' + k.pct_a_tiempo + '%',\n  'Commits 14d: ' + k.commits_14d + ' (' + k.commits_por_dia + '/dÃƒÆ’Ã‚Â­a)',\n  'PR avg open: ' + k.pr_open_time_dias + ' dÃƒÆ’Ã‚Â­as',\n  'PR merge ratio 30d: ' + k.pr_merge_ratio_30d + '%',\n  'DÃƒÆ’Ã‚Â­as hasta fin: ' + k.dias_hasta_fin,\n  'ProyecciÃƒÆ’Ã‚Â³n: ' + k.proyeccion\n];\nreturn [{ json: { text: lines.join('\\n') } }];"
+      }
+    },
+    {
+      "id": "resp-kpis",
+      "name": "Resp KPIs",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        320
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.text }}"
+      }
+    },
+    {
+      "id": "t-cards",
+      "name": "Trello Cards",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        500
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Config\"].json.TRELLO_BOARD_ID }}/cards",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $node[\"Config\"].json.TRELLO_API_KEY }}"
+            },
+            {
+              "name": "token",
+              "value": "={{ $node[\"Config\"].json.TRELLO_TOKEN }}"
+            },
+            {
+              "name": "fields",
+              "value": "name,desc,due,dueComplete,idMembers,idList,dateLastActivity,labels"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "t-lists",
+      "name": "Trello Lists",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        580
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Config\"].json.TRELLO_BOARD_ID }}/lists",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $node[\"Config\"].json.TRELLO_API_KEY }}"
+            },
+            {
+              "name": "token",
+              "value": "={{ $node[\"Config\"].json.TRELLO_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "t-members",
+      "name": "Trello Members",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        660
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Config\"].json.TRELLO_BOARD_ID }}/members",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $node[\"Config\"].json.TRELLO_API_KEY }}"
+            },
+            {
+              "name": "token",
+              "value": "={{ $node[\"Config\"].json.TRELLO_TOKEN }}"
+            },
+            {
+              "name": "fields",
+              "value": "fullName,username"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "gh-bc",
+      "name": "GH Back Commits",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        740
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.github.com/repos/{{ $node[\"Config\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Config\"].json.GITHUB_REPO_BACKEND }}/commits?per_page=15",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config\"].json.GITHUB_TOKEN_BACKEND || $node[\"Config\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "gh-fc",
+      "name": "GH Front Commits",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        820
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.github.com/repos/{{ $node[\"Config\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Config\"].json.GITHUB_REPO_FRONTEND }}/commits?per_page=15",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Config\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "gh-bp",
+      "name": "GH Back PRs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        900
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.github.com/repos/{{ $node[\"Config\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Config\"].json.GITHUB_REPO_BACKEND }}/pulls?state=all&per_page=15",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config\"].json.GITHUB_TOKEN_BACKEND || $node[\"Config\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "gh-fp",
+      "name": "GH Front PRs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        980
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.github.com/repos/{{ $node[\"Config\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Config\"].json.GITHUB_REPO_FRONTEND }}/pulls?state=all&per_page=15",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Config\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "pg-h",
+      "name": "PG Historial",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        900,
+        1060
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT fecha_ejecucion, hay_problemas, tareas_vencidas, progreso_pct, kpis_json, recomendaciones_ia FROM analisis_proyecto ORDER BY fecha_ejecucion DESC LIMIT 5;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres Proyecto"
+        }
+      }
+    },
+    {
+      "id": "pg-r",
+      "name": "PG Recomendaciones",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        900,
+        1140
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT pregunta, respuesta, fecha, aplicada, usuario FROM recomendaciones WHERE pregunta IS NOT NULL ORDER BY fecha DESC LIMIT 5;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres Proyecto"
+        }
+      }
+    },
+    {
+      "id": "pg-hitos",
+      "name": "PG Hitos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        900,
+        1220
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT nombre, tipo, fecha_inicio, fecha_fin, responsable, completado FROM hitos_proyecto WHERE fecha_fin >= CURRENT_DATE - INTERVAL '7 days' ORDER BY fecha_fin ASC LIMIT 10;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres Proyecto"
+        }
+      }
+    },
+    {
+      "id": "merge-chat",
+      "name": "Merge Chat",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1180,
+        800
+      ],
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 10,
+        "options": {}
+      }
+    },
+    {
+      "id": "if-diff",
+      "name": "IF Necesita Diff",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        800
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "d1",
+              "leftValue": "={{ $('Router Comandos').first().json.necesita_diff }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "diff-back",
+      "name": "Diff Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1660,
+        700
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.github.com/repos/{{ $node[\"Config\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Config\"].json.GITHUB_REPO_BACKEND }}/commits/{{ $node[\"GH Back Commits\"].first().json.sha }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config\"].json.GITHUB_TOKEN_BACKEND || $node[\"Config\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "diff-front",
+      "name": "Diff Frontend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1660,
+        820
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.github.com/repos/{{ $node[\"Config\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Config\"].json.GITHUB_REPO_FRONTEND }}/commits/{{ $node[\"GH Front Commits\"].first().json.sha }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Config\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Config\"].json.GITHUB_TOKEN }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-agent"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "contexto",
+      "name": "Construir Contexto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        800
+      ],
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst pregunta = $('Router Comandos').first().json.pregunta;\nconst usuario = $('Router Comandos').first().json.usuario;\nconst needDiff = $('Router Comandos').first().json.necesita_diff;\n\nconst cards = $('Trello Cards').all().map(i => i.json);\nconst lists = $('Trello Lists').all().map(i => i.json);\nconst members = $('Trello Members').all().map(i => i.json);\nconst bCommits = $('GH Back Commits').all().map(i => i.json);\nconst fCommits = $('GH Front Commits').all().map(i => i.json);\nconst bPRs = $('GH Back PRs').all().map(i => i.json);\nconst fPRs = $('GH Front PRs').all().map(i => i.json);\nconst historial = $('PG Historial').all().map(i => i.json);\nconst recos = $('PG Recomendaciones').all().map(i => i.json);\nconst hitos = $('PG Hitos').all().map(i => i.json);\n\nlet diffBack = null, diffFront = null;\nif (needDiff) {\n  try { diffBack = $('Diff Backend').first().json; } catch (e) {}\n  try { diffFront = $('Diff Frontend').first().json; } catch (e) {}\n}\n\nconst listaById = {};\nlists.forEach(l => { if (l?.id) listaById[l.id] = l.name; });\nconst memberById = {};\nmembers.forEach(m => { if (m?.id) memberById[m.id] = m.fullName || m.username; });\n\nconst tareas = cards.map(c => {\n  const due = c.due ? new Date(c.due) : null;\n  const vencida = due && !c.dueComplete && due < now;\n  const diasRest = due ? Math.floor((due - now) / 86400000) : null;\n  return {\n    nombre: c.name,\n    lista: listaById[c.idList] || 'desconocida',\n    completada: !!c.dueComplete,\n    fecha_limite: c.due,\n    dias_restantes: diasRest,\n    vencida: !!vencida,\n    responsables: (c.idMembers || []).map(id => memberById[id] || id),\n  };\n});\n\nconst vencidas = tareas.filter(t => t.vencida);\nconst porVencer = tareas.filter(t => !t.completada && !t.vencida && t.dias_restantes !== null && t.dias_restantes <= 3);\n\nconst ultimoAnalisis = historial[0] || null;\nconst kpis = ultimoAnalisis?.kpis_json || null;\n\nconst simplifyPR = p => ({ numero: p.number, titulo: p.title, estado: p.state, autor: p.user?.login, creado: p.created_at, dias_abierto: Math.floor((now - new Date(p.created_at)) / 86400000) });\nconst prsAbiertos = [...bPRs.map(simplifyPR), ...fPRs.map(simplifyPR)].filter(p => p.estado === 'open');\nconst prsStale = prsAbiertos.filter(p => p.dias_abierto > 7);\n\nconst simplifyCommit = c => ({ sha: (c.sha || '').slice(0, 7), mensaje: (c.commit?.message || '').split('\\n')[0], autor: c.commit?.author?.name, fecha: c.commit?.author?.date });\n\nlet diffInfo = null;\nif (diffBack || diffFront) {\n  const shapeDiff = d => d ? {\n    sha: d.sha?.slice(0, 7), mensaje: d.commit?.message, autor: d.commit?.author?.name,\n    archivos: (d.files || []).map(f => ({ archivo: f.filename, cambios: f.changes, patch: (f.patch || '').slice(0, 1200) }))\n  } : null;\n  diffInfo = { backend: shapeDiff(diffBack), frontend: shapeDiff(diffFront) };\n}\n\nconst hoy = now.toISOString().slice(0, 10);\nconst hitosActivos = hitos.filter(h => h.fecha_fin >= hoy).map(h => ({\n  nombre: h.nombre, tipo: h.tipo, fecha_fin: h.fecha_fin,\n  dias_faltan: Math.floor((new Date(h.fecha_fin) - now) / 86400000),\n  responsable: h.responsable\n}));\n\nconst ctx = {\n  fecha_actual: now.toISOString(), usuario,\n  tareas: {\n    total: tareas.length, vencidas, por_vencer_3dias: porVencer,\n    completadas_count: tareas.filter(t => t.completada).length,\n    distribucion: tareas.reduce((a, t) => { a[t.lista] = (a[t.lista] || 0) + 1; return a; }, {})\n  },\n  github: {\n    commits_back_recientes: bCommits.slice(0, 8).map(simplifyCommit),\n    commits_front_recientes: fCommits.slice(0, 8).map(simplifyCommit),\n    prs_abiertos: prsAbiertos, prs_stale_mas_7d: prsStale\n  },\n  kpis_ultimo_analisis: kpis,\n  hitos_proximos: hitosActivos.slice(0, 5),\n  historial_resumen: historial.map(h => ({ fecha: h.fecha_ejecucion, problemas: h.hay_problemas, vencidas: h.tareas_vencidas, progreso: h.progreso_pct })),\n  recomendaciones_previas: recos.map(r => ({ pregunta: (r.pregunta || '').slice(0, 120), respuesta: (r.respuesta || '').slice(0, 250), aplicada: r.aplicada, fecha: r.fecha })),\n  diff_commits: diffInfo\n};\n\nconst prompt = `Eres asistente experto de gestion del proyecto PetSafe. Copiloto del gestor para decisiones.\n\nREGLAS:\n1. SOLO respondes sobre el proyecto (Trello, GitHub, tareas, commits, PRs, equipo, riesgos, hitos, KPIs). Si no: responde EXACTAMENTE \"No es una pregunta relacionada con el proyecto.\"\n2. Espanol, texto plano, sin markdown, sin asteriscos, sin emojis, maximo 1800 caracteres.\n3. Siempre basado en datos reales del contexto. Si falta dato, dilo.\n4. Si preguntan que hacer, riesgos, decisiones: usa DIAGNOSTICO / RIESGOS / ACCIONES RECOMENDADAS.\n5. Si piden review de codigo y hay diff_commits, analiza calidad, bugs potenciales, buenas practicas.\n6. Si la pregunta es simple (ej \"hay vencidas?\"), responde directo.\n7. Considera hitos proximos y dias hasta fin para contextualizar urgencia.\n8. Menciona recomendaciones previas no aplicadas si son relevantes.\n\nCONTEXTO (fecha ${now.toISOString()}):\n${JSON.stringify(ctx, null, 2)}\n\nPREGUNTA DE ${usuario}:\n${pregunta}`;\n\nreturn [{ json: { prompt, gemini_key: $('Config').first().json.GEMINI_API_KEY, pregunta, usuario } }];"
+      }
+    },
+    {
+      "id": "gemini",
+      "name": "Gemini Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2140,
+        800
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{ $json.gemini_key }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ contents: [{ parts: [{ text: $json.prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 2048 } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "pg-save-qa",
+      "name": "Guardar Q&A",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2380,
+        800
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO recomendaciones (fecha, tipo, pregunta, respuesta, usuario, aplicada) VALUES (NOW(), 'chat', '{{ $node[\"Construir Contexto\"].json.pregunta.replace(/'/g, \"''\") }}', '{{ $node[\"Gemini Chat\"].json.candidates[0].content.parts[0].text.replace(/'/g, \"''\") }}', '{{ $node[\"Construir Contexto\"].json.usuario.replace(/'/g, \"''\") }}', false);"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres Proyecto"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "resp-chat",
+      "name": "Resp Chat",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2620,
+        800
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $node['Gemini Chat'].json.candidates[0].content.parts[0].text }}"
+      }
+    }
+  ],
+  "connections": {
+    "Discord Webhook": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router Comandos": {
+      "main": [
+        [
+          {
+            "node": "Switch Tipo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Tipo": {
+      "main": [
+        [
+          {
+            "node": "Trigger Reporte PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres Ultimo KPI",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Trello Cards",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trello Lists",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trello Members",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Back Commits",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Front Commits",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Back PRs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GH Front PRs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Historial",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Recomendaciones",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Hitos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Reporte PDF": {
+      "main": [
+        [
+          {
+            "node": "Resp Reporte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear KPIs": {
+      "main": [
+        [
+          {
+            "node": "Resp KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trello Cards": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trello Lists": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Trello Members": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "GH Back Commits": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "GH Front Commits": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "GH Back PRs": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "GH Front PRs": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 6
+          }
+        ]
+      ]
+    },
+    "PG Historial": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 7
+          }
+        ]
+      ]
+    },
+    "PG Recomendaciones": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 8
+          }
+        ]
+      ]
+    },
+    "PG Hitos": {
+      "main": [
+        [
+          {
+            "node": "Merge Chat",
+            "type": "main",
+            "index": 9
+          }
+        ]
+      ]
+    },
+    "Merge Chat": {
+      "main": [
+        [
+          {
+            "node": "IF Necesita Diff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Necesita Diff": {
+      "main": [
+        [
+          {
+            "node": "Diff Backend",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Diff Frontend",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Construir Contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Diff Backend": {
+      "main": [
+        [
+          {
+            "node": "Construir Contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Diff Frontend": {
+      "main": [
+        [
+          {
+            "node": "Construir Contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Contexto": {
+      "main": [
+        [
+          {
+            "node": "Gemini Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Chat": {
+      "main": [
+        [
+          {
+            "node": "Guardar Q&A",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar Q&A": {
+      "main": [
+        [
+          {
+            "node": "Resp Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Router Comandos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Ultimo KPI": {
+      "main": [
+        [
+          {
+            "node": "Formatear KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
