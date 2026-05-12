@@ -12,24 +12,24 @@
           ]
         }
       },
-      "id": "c4698827-d1f6-4943-9903-fd1b5834f7e7",
+      "id": "7e1e3bc2-30b9-4f59-af96-a7dee9cafd5e",
       "name": "Schedule Viernes 18:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
       "position": [
-        -480,
-        608
+        2160,
+        704
       ]
     },
     {
       "parameters": {},
-      "id": "3da69951-cda1-4ab2-a9d1-9ec503108a5b",
+      "id": "0dc2e7eb-6e73-4268-b195-757787140f31",
       "name": "On-Demand Trigger",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
       "position": [
-        -480,
-        832
+        2160,
+        928
       ]
     },
     {
@@ -93,7 +93,7 @@
             {
               "id": "w4c07",
               "name": "GOTENBERG_URL",
-              "value": "={{ $env.GOTENBERG_URL || 'http://gotenberg:3000' }}",
+              "value": "={{ ($env.GOTENBERG_URL && !$env.GOTENBERG_URL.includes(':3001')) ? $env.GOTENBERG_URL : 'http://gotenberg:3000' }}",
               "type": "string"
             },
             {
@@ -130,13 +130,13 @@
         },
         "options": {}
       },
-      "id": "253fbfe9-4017-48c5-b19c-90522a5fa735",
-      "name": "Configuraci\u00f3n",
+      "id": "4bc23c8e-4c97-41fe-98cc-6e17d48e1137",
+      "name": "Configuración",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -240,
-        704
+        2400,
+        800
       ]
     },
     {
@@ -144,16 +144,16 @@
         "operation": "executeQuery",
         "query": "SELECT fecha_ejecucion, hay_problemas, total_tareas, tareas_completadas, tareas_vencidas, progreso_pct, cantidad_problemas, severidad_maxima, kpis_json FROM analisis_proyecto WHERE fecha_ejecucion >= NOW() - ($1 || ' days')::interval ORDER BY fecha_ejecucion DESC;",
         "options": {
-          "queryReplacement": "={{ $node[\"Configuraci\u00f3n\"].json.rango_dias }}"
+          "queryReplacement": "={{ $node[\"Configuración\"].json.rango_dias }}"
         }
       },
-      "id": "dd0e59b3-0bfa-4c6e-8f4a-9677df6a5c5f",
-      "name": "PG An\u00e1lisis 7d",
+      "id": "496c2778-2c3a-4e6a-b416-2cbf0b61413d",
+      "name": "PG Análisis 7d",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        0,
-        0
+        2640,
+        96
       ],
       "credentials": {
         "postgres": {
@@ -168,13 +168,13 @@
         "query": "SELECT * FROM analisis_proyecto ORDER BY fecha_ejecucion DESC LIMIT 1;",
         "options": {}
       },
-      "id": "0cfcf966-62fc-4205-80e4-e93cb6a07ac6",
-      "name": "PG \u00daltimo An\u00e1lisis",
+      "id": "11fd492c-f38e-4514-a3ac-7c5c72c9efcc",
+      "name": "PG Último Análisis",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        0,
-        192
+        2640,
+        288
       ],
       "credentials": {
         "postgres": {
@@ -189,13 +189,13 @@
         "query": "SELECT DISTINCT ON (card_id) card_id, card_nombre, lista_nombre, miembro_nombre, fecha_vencimiento FROM estado_tareas WHERE completada = FALSE AND fecha_vencimiento < NOW() ORDER BY card_id, fecha DESC;",
         "options": {}
       },
-      "id": "bf00bd3f-0665-464d-aecb-fb9849622bd9",
+      "id": "3a5e8938-92e1-467e-b526-6a7662fd0488",
       "name": "PG Tareas Vencidas",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        0,
-        384
+        2640,
+        480
       ],
       "credentials": {
         "postgres": {
@@ -210,13 +210,13 @@
         "query": "SELECT nombre, tipo, fecha_inicio, fecha_fin, responsable, completado FROM hitos_proyecto WHERE fecha_fin >= CURRENT_DATE AND fecha_fin <= CURRENT_DATE + INTERVAL '30 days' ORDER BY fecha_fin ASC;",
         "options": {}
       },
-      "id": "39c6c739-3dd6-4c7e-aefe-bec47f64d2b1",
-      "name": "PG Hitos Pr\u00f3ximos",
+      "id": "06271841-50df-4c88-9c6b-d2822e4c3b2c",
+      "name": "PG Hitos Próximos",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        0,
-        576
+        2640,
+        672
       ],
       "credentials": {
         "postgres": {
@@ -230,16 +230,16 @@
         "operation": "executeQuery",
         "query": "SELECT fecha, tipo, descripcion FROM eventos_detectados WHERE fecha >= NOW() - ($1 || ' days')::interval ORDER BY fecha DESC LIMIT 100;",
         "options": {
-          "queryReplacement": "={{ $node[\"Configuraci\u00f3n\"].json.rango_dias }}"
+          "queryReplacement": "={{ $node[\"Configuración\"].json.rango_dias }}"
         }
       },
-      "id": "5bcf0025-1870-4a48-89d6-0f895b91de49",
+      "id": "0c0fe96f-cf85-49f9-b6e8-ef459b2b1351",
       "name": "PG Eventos 7d",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        0,
-        736
+        2640,
+        832
       ],
       "credentials": {
         "postgres": {
@@ -253,16 +253,16 @@
         "operation": "executeQuery",
         "query": "SELECT fecha, tipo, descripcion FROM recomendaciones WHERE aplicada = FALSE AND tipo = 'alerta_ia' AND fecha >= NOW() - ($1 || ' days')::interval ORDER BY fecha DESC LIMIT 20;",
         "options": {
-          "queryReplacement": "={{ $node[\"Configuraci\u00f3n\"].json.rango_dias }}"
+          "queryReplacement": "={{ $node[\"Configuración\"].json.rango_dias }}"
         }
       },
-      "id": "1399a2c1-9f23-48bd-a447-fdec0222841d",
+      "id": "88922d07-66b4-4241-aefb-4c0c3df1d5a3",
       "name": "PG Recomendaciones",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        0,
-        912
+        2640,
+        1008
       ],
       "credentials": {
         "postgres": {
@@ -277,13 +277,13 @@
         "query": "SELECT email, nombre FROM destinatarios_reporte WHERE activo = TRUE;",
         "options": {}
       },
-      "id": "1ae77b2b-2570-43fe-b3de-dd19d4ec8cca",
+      "id": "cc0c308a-0389-4bdd-8740-3c229bc9dfbb",
       "name": "PG Destinatarios",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        0,
-        1072
+        2640,
+        1168
       ],
       "credentials": {
         "postgres": {
@@ -294,13 +294,13 @@
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/repos/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_REPO_BACKEND }}/commits",
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuración\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Configuración\"].json.GITHUB_REPO_BACKEND }}/commits",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
             {
               "name": "since",
-              "value": "={{ $node[\"Configuraci\u00f3n\"].json.fecha_desde }}"
+              "value": "={{ $node[\"Configuración\"].json.fecha_desde }}"
             },
             {
               "name": "per_page",
@@ -313,7 +313,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $node[\"Configuraci\u00f3n\"].json.GITHUB_TOKEN_BACKEND || $node[\"Configuraci\u00f3n\"].json.GITHUB_TOKEN }}"
+              "value": "=Bearer {{ $node[\"Configuración\"].json.GITHUB_TOKEN_BACKEND || $node[\"Configuración\"].json.GITHUB_TOKEN }}"
             },
             {
               "name": "Accept",
@@ -323,24 +323,24 @@
         },
         "options": {}
       },
-      "id": "cac8122a-8e8f-4b54-95b6-a5e80dc1d6c3",
+      "id": "0f7cafc4-408a-4c5b-aba5-5d6a807e9cac",
       "name": "GitHub Back 7d",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        0,
-        1232
+        2640,
+        1328
       ]
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/repos/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_REPO_FRONTEND }}/commits",
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuración\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Configuración\"].json.GITHUB_REPO_FRONTEND }}/commits",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
             {
               "name": "since",
-              "value": "={{ $node[\"Configuraci\u00f3n\"].json.fecha_desde }}"
+              "value": "={{ $node[\"Configuración\"].json.fecha_desde }}"
             },
             {
               "name": "per_page",
@@ -353,7 +353,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $node[\"Configuraci\u00f3n\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Configuraci\u00f3n\"].json.GITHUB_TOKEN }}"
+              "value": "=Bearer {{ $node[\"Configuración\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Configuración\"].json.GITHUB_TOKEN }}"
             },
             {
               "name": "Accept",
@@ -363,39 +363,39 @@
         },
         "options": {}
       },
-      "id": "2bfec486-716f-427b-a6bf-df56e9d74aae",
+      "id": "b94939df-02c7-46d0-828f-abc1c0f4348b",
       "name": "GitHub Front 7d",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        0,
-        1376
+        2640,
+        1472
       ]
     },
     {
       "parameters": {
         "numberInputs": 9
       },
-      "id": "dd48b3b0-9898-4cc1-8796-5d21f11fa806",
+      "id": "15d490b0-6e61-4392-96bc-3be4aeffcaaa",
       "name": "Merge Reporte",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
       "position": [
-        288,
-        848
+        2928,
+        944
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Process heterogeneous array from Merge node\nconst items = $input.all().map(i => i.json);\n\nlet analisis7d = [], ultimo = null, vencidas = [], hitos = [], eventos = [], recos = [], destinatarios = [], backCommits = [], frontCommits = [];\n\n// Helper: detect object type by structure\nconst detectType = (obj) => {\n  if (!obj || typeof obj !== 'object') return 'unknown';\n  \n  if (obj.progreso_pct !== undefined) return 'analisis';\n  if (obj.card_id && obj.card_nombre) return 'tarea';\n  if (obj.email && obj.nombre) return 'destinatario';\n  if (obj.sha && obj.commit) return 'commit';\n  // CORRECCI\u00d3N AQU\u00cd:\n  if (obj.fecha_fin && obj.tipo && !obj.card_id) return 'hito'; \n  if (obj.descripcion && obj.tipo) {\n      // Diferenciar entre evento y recomendaci\u00f3n por contenido o tabla si es posible\n      return obj.aplicada !== undefined ? 'recomendacion' : 'evento';\n  }\n  \n  return 'unknown';\n};\n\n// Segregate: Merge data is heterogeneous array\nfor (const obj of items) {\n  const type = detectType(obj);\n  \n  if (type === 'analisis') {\n    analisis7d.push(obj);\n  } else if (type === 'tarea') {\n    vencidas.push(obj);\n  } else if (type === 'destinatario') {\n    destinatarios.push(obj);\n  } else if (type === 'commit') {\n    // Guess backend vs frontend by repo in commit message or branch hint\n    const msg = obj.commit?.message || '';\n    if (msg.toLowerCase().includes('front') || msg.toLowerCase().includes('ui') || msg.toLowerCase().includes('component')) {\n      frontCommits.push(obj);\n    } else {\n      backCommits.push(obj);\n    }\n  } else if (type === 'hito') {\n    hitos.push(obj);\n  } else if (type === 'recomendacion') {\n    recos.push(obj);\n  } else if (type === 'evento') {\n    eventos.push(obj);\n  }\n}\n\n// Sort an\u00e1lisis by date DESC to get latest first\nanalisis7d.sort((a, b) => new Date(b.fecha_ejecucion) - new Date(a.fecha_ejecucion));\nultimo = analisis7d[0] || {};\n\n// Parse KPIs if string\nconst k = ultimo.kpis_json || {};\nconst kpis = typeof k === 'string' ? JSON.parse(k) : k;\n\n// Calculate trend\nconst tendencia = analisis7d.length > 1 ? {\n  progreso_inicial: analisis7d[analisis7d.length - 1]?.progreso_pct || 0,\n  progreso_final: analisis7d[0]?.progreso_pct || 0,\n  delta: (analisis7d[0]?.progreso_pct || 0) - (analisis7d[analisis7d.length - 1]?.progreso_pct || 0),\n  ejecuciones: analisis7d.length\n} : null;\n\nconst prompt = `Genera un RESUMEN EJECUTIVO del reporte semanal del proyecto PetSafe (sistema veterinario). Usa tono profesional en espa\u00f1ol. Estructura:\n\n1. ESTADO GENERAL (1 p\u00e1rrafo, 3-4 frases)\n2. LOGROS DE LA SEMANA (bullets, m\u00e1x 4)\n3. RIESGOS CR\u00cdTICOS (bullets con prioridad A/M/B, m\u00e1x 4)\n4. PR\u00d3XIMOS PASOS (bullets accionables, m\u00e1x 4)\n\nDatos:\n${JSON.stringify({\n  kpis,\n  tendencia,\n  ultimo: {\n    progreso_pct: ultimo.progreso_pct,\n    total_tareas: ultimo.total_tareas,\n    tareas_completadas: ultimo.tareas_completadas,\n    tareas_vencidas: ultimo.tareas_vencidas,\n    cantidad_problemas: ultimo.cantidad_problemas\n  },\n  vencidas_count: vencidas.length,\n  hitos_proximos: hitos.slice(0, 3),\n  commits: { back: backCommits.length, front: frontCommits.length },\n  eventos_count: eventos.length\n})}\n\nResponde SOLO con HTML v\u00e1lido usando <h3>, <p>, <ul>, <li>, <strong>. Sin backticks ni markdown.`;\n\nconst data = {\n  fecha_reporte: new Date().toISOString(),\n  fecha_reporte_local: new Date().toLocaleString('es-EC', { timeZone: 'America/Guayaquil' }),\n  rango_dias: $node['Configuraci\u00f3n'].json.rango_dias,\n  ultimo_analisis: ultimo,\n  kpis,\n  tendencia,\n  analisis_historia: analisis7d,\n  tareas_vencidas: vencidas,\n  hitos_proximos: hitos,\n  eventos_recientes: eventos,\n  recomendaciones_pendientes: recos,\n  destinatarios: destinatarios.map(d => d.email),\n  destinatarios_info: destinatarios,\n  commits_back: backCommits.map(c => ({ sha: (c.sha || '').substring(0,7), autor: c.commit?.author?.name, fecha: c.commit?.author?.date, mensaje: (c.commit?.message || '').split('\\n')[0] })),\n  commits_front: frontCommits.map(c => ({ sha: (c.sha || '').substring(0,7), autor: c.commit?.author?.name, fecha: c.commit?.author?.date, mensaje: (c.commit?.message || '').split('\\n')[0] })),\n  total_commits_back: backCommits.length,\n  total_commits_front: frontCommits.length,\n  gemini_key: $env.GEMINI_API_KEY,\n  prompt\n};\n\nreturn [{ json: data }];\n"
+        "jsCode": "// Process heterogeneous array from Merge node\nconst items = $input.all().map(i => i.json);\n\nlet analisis7d = [], ultimo = null, vencidas = [], hitos = [], eventos = [], recos = [], destinatarios = [], backCommits = [], frontCommits = [];\n\n// Helper: detect object type by structure\nconst detectType = (obj) => {\n  if (!obj || typeof obj !== 'object') return 'unknown';\n  \n  if (obj.progreso_pct !== undefined) return 'analisis';\n  if (obj.card_id && obj.card_nombre) return 'tarea';\n  if (obj.email && obj.nombre) return 'destinatario';\n  if (obj.sha && obj.commit) return 'commit';\n  // CORRECCIÓN AQUÍ:\n  if (obj.fecha_fin && obj.tipo && !obj.card_id) return 'hito'; \n  if (obj.descripcion && obj.tipo) {\n      // Diferenciar entre evento y recomendación por contenido o tabla si es posible\n      return obj.aplicada !== undefined ? 'recomendacion' : 'evento';\n  }\n  \n  return 'unknown';\n};\n\n// Segregate: Merge data is heterogeneous array\nfor (const obj of items) {\n  const type = detectType(obj);\n  \n  if (type === 'analisis') {\n    analisis7d.push(obj);\n  } else if (type === 'tarea') {\n    vencidas.push(obj);\n  } else if (type === 'destinatario') {\n    destinatarios.push(obj);\n  } else if (type === 'commit') {\n    // Guess backend vs frontend by repo in commit message or branch hint\n    const msg = obj.commit?.message || '';\n    if (msg.toLowerCase().includes('front') || msg.toLowerCase().includes('ui') || msg.toLowerCase().includes('component')) {\n      frontCommits.push(obj);\n    } else {\n      backCommits.push(obj);\n    }\n  } else if (type === 'hito') {\n    hitos.push(obj);\n  } else if (type === 'recomendacion') {\n    recos.push(obj);\n  } else if (type === 'evento') {\n    eventos.push(obj);\n  }\n}\n\n// Sort análisis by date DESC to get latest first\nanalisis7d.sort((a, b) => new Date(b.fecha_ejecucion) - new Date(a.fecha_ejecucion));\nultimo = analisis7d[0] || {};\n\n// Parse KPIs if string\nconst k = ultimo.kpis_json || {};\nconst kpis = typeof k === 'string' ? JSON.parse(k) : k;\n\n// Calculate trend\nconst tendencia = analisis7d.length > 1 ? {\n  progreso_inicial: analisis7d[analisis7d.length - 1]?.progreso_pct || 0,\n  progreso_final: analisis7d[0]?.progreso_pct || 0,\n  delta: (analisis7d[0]?.progreso_pct || 0) - (analisis7d[analisis7d.length - 1]?.progreso_pct || 0),\n  ejecuciones: analisis7d.length\n} : null;\n\nconst prompt = `Genera un RESUMEN EJECUTIVO del reporte semanal del proyecto PetSafe (sistema veterinario). Usa tono profesional en español. Estructura:\n\n1. ESTADO GENERAL (1 párrafo, 3-4 frases)\n2. LOGROS DE LA SEMANA (bullets, máx 4)\n3. RIESGOS CRÍTICOS (bullets con prioridad A/M/B, máx 4)\n4. PRÓXIMOS PASOS (bullets accionables, máx 4)\n\nDatos:\n${JSON.stringify({\n  kpis,\n  tendencia,\n  ultimo: {\n    progreso_pct: ultimo.progreso_pct,\n    total_tareas: ultimo.total_tareas,\n    tareas_completadas: ultimo.tareas_completadas,\n    tareas_vencidas: ultimo.tareas_vencidas,\n    cantidad_problemas: ultimo.cantidad_problemas\n  },\n  vencidas_count: vencidas.length,\n  hitos_proximos: hitos.slice(0, 3),\n  commits: { back: backCommits.length, front: frontCommits.length },\n  eventos_count: eventos.length\n})}\n\nResponde SOLO con HTML válido usando <h3>, <p>, <ul>, <li>, <strong>. Sin backticks ni markdown.`;\n\nconst data = {\n  fecha_reporte: new Date().toISOString(),\n  fecha_reporte_local: new Date().toLocaleString('es-EC', { timeZone: 'America/Guayaquil' }),\n  rango_dias: $node['Configuración'].json.rango_dias,\n  ultimo_analisis: ultimo,\n  kpis,\n  tendencia,\n  analisis_historia: analisis7d,\n  tareas_vencidas: vencidas,\n  hitos_proximos: hitos,\n  eventos_recientes: eventos,\n  recomendaciones_pendientes: recos,\n  destinatarios: destinatarios.map(d => d.email),\n  destinatarios_info: destinatarios,\n  commits_back: backCommits.map(c => ({ sha: (c.sha || '').substring(0,7), autor: c.commit?.author?.name, fecha: c.commit?.author?.date, mensaje: (c.commit?.message || '').split('\\n')[0] })),\n  commits_front: frontCommits.map(c => ({ sha: (c.sha || '').substring(0,7), autor: c.commit?.author?.name, fecha: c.commit?.author?.date, mensaje: (c.commit?.message || '').split('\\n')[0] })),\n  total_commits_back: backCommits.length,\n  total_commits_front: frontCommits.length,\n  gemini_key: $env.GEMINI_API_KEY,\n  prompt\n};\n\nreturn [{ json: data }];\n"
       },
-      "id": "225a74e7-fb4f-4e70-be4e-cafc8788a6bb",
+      "id": "43ce7515-f5f5-446c-81c6-ef2e6b50f408",
       "name": "Build Report Data",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        512,
-        960
+        3152,
+        1056
       ]
     },
     {
@@ -407,32 +407,32 @@
         "jsonBody": "={{ ({ contents: [{ parts: [{ text: $json.prompt }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 1200 } }) }}",
         "options": {}
       },
-      "id": "466acc45-6293-4fc5-a51e-dfc8a51a1a98",
+      "id": "a93999f0-1f17-4c5a-ba72-475673ae2153",
       "name": "Gemini Executive Summary",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        720,
-        960
+        3360,
+        1056
       ]
     },
     {
       "parameters": {
-        "jsCode": "const gem = $json;\nconst data = $node['Build Report Data'].json;\n\n// Limpiar posibles etiquetas markdown que Gemini a veces devuelve\nlet rawSummary = gem?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';\nrawSummary = rawSummary.replace(/^```html\\s*/, '').replace(/```$/, '').trim();\n\nconst summaryHtml = rawSummary || \n  `<p><strong>Estado del proyecto:</strong> Progreso ${data.ultimo_analisis.progreso_pct || 0}% \u00b7 Equipo activo \u00b7 ${data.tareas_vencidas.length} tareas vencidas \u00b7 Proyecci\u00f3n: ${data.kpis.proyeccion_a_tiempo ? 'A tiempo' : 'En riesgo'}</p>\n   <p><strong>Focus:</strong> ${data.kpis.dias_hasta_fin} d\u00edas hasta fin. Velocidad ${data.kpis.velocidad_tareas_por_dia || 0}/d\u00eda.</p>`; \n\nconst fmt = (d) => d ? new Date(d).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil', year: 'numeric', month: 'short', day: 'numeric' }) : '-';\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));\n\nconst k = data.kpis || {};\nconst rowsKpis = [\n  ['Progreso general', `${data.ultimo_analisis.progreso_pct || 0}%`],\n  ['Velocidad (tareas/sem)', k.velocidad_semana ?? '-'],\n  ['% Tareas a tiempo', (k.pct_a_tiempo != null ? k.pct_a_tiempo + '%' : '-')],\n  ['Commits/d\u00eda (back)', k.commits_por_dia_back ?? '-'],\n  ['Commits/d\u00eda (front)', k.commits_por_dia_front ?? '-'],\n  ['PR open time (h) back', k.pr_open_time_back ?? '-'],\n  ['PR open time (h) front', k.pr_open_time_front ?? '-'],\n  ['PR merge ratio', k.pr_merge_ratio ?? '-'],\n  ['D\u00edas restantes', k.dias_hasta_fin ?? '-'],\n  ['Proyecci\u00f3n a tiempo', k.proyeccion_a_tiempo ? 'S\u00ed' : 'En riesgo']\n];\n\nconst trHtml = (arr) => arr.map(r => `<tr><td class=\"kpi-label\">${esc(r[0])}</td><td class=\"kpi-val\">${esc(r[1])}</td></tr>`).join('');\n\nconst vencidasHtml = data.tareas_vencidas.length \n  ? `<table class=\"data-table\">\n       <thead><tr><th>Tarea</th><th>Lista</th><th>Responsable</th><th>Vencida el</th></tr></thead>\n       <tbody>${data.tareas_vencidas.map(v => `<tr><td><strong>${esc(v.card_nombre)}</strong></td><td><span class=\"badge badge-gray\">${esc(v.lista_nombre)}</span></td><td>${esc(v.miembro_nombre || 'Sin asignar')}</td><td class=\"text-danger\">${fmt(v.fecha_vencimiento)}</td></tr>`).join('')}</tbody>\n     </table>` \n  : '<div class=\"success-box\">&#10003; Excelente, no hay tareas vencidas en este momento.</div>';\n\nconst hitosHtml = data.hitos_proximos.length \n  ? `<table class=\"data-table\">\n       <thead><tr><th>Hito Estrat\u00e9gico</th><th>Tipo</th><th>Fecha L\u00edmite</th><th>Responsable</th></tr></thead>\n       <tbody>${data.hitos_proximos.map(h => `<tr><td><strong>${esc(h.nombre)}</strong></td><td><span class=\"badge badge-blue\">${esc(h.tipo)}</span></td><td>${fmt(h.fecha_fin)}</td><td>${esc(h.responsable || 'Equipo')}</td></tr>`).join('')}</tbody>\n     </table>` \n  : '<p class=\"text-muted\">No hay hitos programados para los pr\u00f3ximos 30 d\u00edas.</p>';\n\nconst commitsHtml = (arr, titulo) => {\n  if (!arr.length) return '';\n  const lines = arr.slice(0, 8).map(c => {\n    const author = esc(c.autor).split(' ')[0];\n    const msg = esc(c.mensaje).slice(0, 65) + (c.mensaje.length > 65 ? '...' : '');\n    const date = fmt(c.fecha);\n    return `<div class=\"commit-item\"><span class=\"commit-sha\">${esc(c.sha)}</span> <span class=\"commit-author\">${author}</span><span class=\"commit-msg\">${msg}</span><span class=\"commit-date\">${date}</span></div>`;\n  }).join('');\n  return `<div class=\"commit-group\"><h4>M\u00f3dulo ${titulo}</h4>${lines}</div>`;\n};\n\nconst eventosHtml = data.eventos_recientes.length \n  ? `<div class=\"timeline\">${data.eventos_recientes.slice(0, 10).map(e => `<div class=\"timeline-item\"><div class=\"timeline-date\">${fmt(e.fecha)}</div><div class=\"timeline-content\"><strong>${esc(e.tipo)}:</strong> ${esc(e.descripcion)}</div></div>`).join('')}</div>` \n  : '<p class=\"text-muted\">Sin eventos relevantes registrados.</p>';\n\nconst recosHtml = data.recomendaciones_pendientes.length \n  ? `<div class=\"action-items\">${data.recomendaciones_pendientes.slice(0, 8).map(r => `<div class=\"action-item\"><div class=\"action-icon\">&#9888;&#65039;</div><div class=\"action-text\">${esc((r.descripcion || '').substring(0, 300))} <span class=\"text-muted\">(${fmt(r.fecha)})</span></div></div>`).join('')}</div>` \n  : '';\n\nconst tendenciaHtml = data.tendencia \n  ? `<div class=\"trend-box\">\n       <div class=\"trend-stat\">\n         <span class=\"trend-label\">Progreso Previo</span>\n         <span class=\"trend-value\">${data.tendencia.progreso_inicial}%</span>\n       </div>\n       <div class=\"trend-arrow\">&#8594;</div>\n       <div class=\"trend-stat\">\n         <span class=\"trend-label\">Progreso Actual</span>\n         <span class=\"trend-value\">${data.tendencia.progreso_final}%</span>\n       </div>\n       <div class=\"trend-stat highlight\">\n         <span class=\"trend-label\">Variaci\u00f3n</span>\n         <span class=\"trend-value ${data.tendencia.delta >= 0 ? 'text-success' : 'text-danger'}\">${data.tendencia.delta >= 0 ? '+' : ''}${data.tendencia.delta} pts</span>\n       </div>\n     </div>` \n  : '<p class=\"text-muted\">Datos insuficientes para calcular tendencia consolidada.</p>';\n\nconst html = `<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n<meta charset=\"utf-8\"/>\n<title>Reporte Ejecutivo de Avance - PetSafe</title>\n<link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\n<style>\n  @page {\n    size: A4;\n    margin: 20mm 0mm;\n    @bottom-center {\n      content: \"CONFIDENCIAL \u2014 PetSafe Project Management Office \u2014 P\u00e1gina \" counter(page) \" de \" counter(pages);\n      font-family: 'Inter', sans-serif;\n      font-size: 8pt;\n      color: #64748B;\n      padding-bottom: 10mm;\n    }\n  }\n  \n  :root {\n    --primary: #0F172A;\n    --secondary: #1E293B;\n    --accent: #2563EB;\n    --light-accent: #EFF6FF;\n    --text-main: #334155;\n    --text-muted: #64748B;\n    --border: #E2E8F0;\n    --bg-light: #F8FAFC;\n    --success: #059669;\n    --danger: #DC2626;\n  }\n\n  body {\n    font-family: 'Inter', sans-serif;\n    color: var(--text-main);\n    font-size: 10.5pt;\n    line-height: 1.5;\n    margin: 0;\n    padding: 0 20mm;\n  }\n\n  h1, h2, h3, h4 {\n    color: var(--primary);\n    margin-top: 0;\n    font-weight: 600;\n  }\n\n  /* Portada / Cabecera */\n  .header-cover {\n    border-bottom: 4px solid var(--accent);\n    padding: 25mm 0 15mm 0;\n    margin-bottom: 15mm;\n    display: flex;\n    justify-content: space-between;\n    align-items: flex-end;\n    page-break-after: avoid;\n  }\n  .header-title h1 {\n    font-size: 28pt;\n    font-weight: 800;\n    letter-spacing: -0.5px;\n    margin-bottom: 2mm;\n  }\n  .header-title h2 {\n    font-size: 14pt;\n    color: var(--text-muted);\n    font-weight: 400;\n  }\n  .header-meta {\n    text-align: right;\n    font-size: 9pt;\n    color: var(--text-muted);\n    background: var(--bg-light);\n    padding: 4mm 6mm;\n    border-radius: 6px;\n    border: 1px solid var(--border);\n  }\n  .header-meta strong {\n    color: var(--primary);\n  }\n\n  /* Secciones */\n  .section-title {\n    font-size: 14pt;\n    color: var(--secondary);\n    border-bottom: 1px solid var(--border);\n    padding-bottom: 2mm;\n    margin: 12mm 0 6mm 0;\n    page-break-after: avoid;\n    display: flex;\n    align-items: center;\n    gap: 2mm;\n  }\n  .section-title::before {\n    content: \"\";\n    display: inline-block;\n    width: 4px;\n    height: 14pt;\n    background-color: var(--accent);\n    border-radius: 2px;\n  }\n\n  /* Resumen Ejecutivo */\n  .executive-summary {\n    background: var(--light-accent);\n    border: 1px solid #BFDBFE;\n    border-radius: 8px;\n    padding: 6mm 8mm;\n    margin-bottom: 10mm;\n  }\n  .executive-summary h3 {\n    color: var(--accent);\n    font-size: 11pt;\n    text-transform: uppercase;\n    letter-spacing: 0.5px;\n    margin-bottom: 4mm;\n  }\n  .executive-summary p {\n    margin-bottom: 3mm;\n  }\n  .executive-summary ul {\n    margin-top: 2mm;\n    padding-left: 5mm;\n  }\n  .executive-summary li {\n    margin-bottom: 1.5mm;\n  }\n\n  /* Grid de KPIs */\n  .kpi-container {\n    display: grid;\n    grid-template-columns: 1fr 1fr;\n    gap: 6mm;\n    margin-bottom: 10mm;\n  }\n  .kpi-table {\n    width: 100%;\n    border-collapse: collapse;\n  }\n  .kpi-table td {\n    padding: 2.5mm 0;\n    border-bottom: 1px dashed var(--border);\n  }\n  .kpi-label {\n    color: var(--text-muted);\n  }\n  .kpi-val {\n    text-align: right;\n    font-weight: 600;\n    color: var(--primary);\n  }\n\n  /* Tendencia */\n  .trend-box {\n    display: flex;\n    align-items: center;\n    justify-content: space-between;\n    background: var(--bg-light);\n    border: 1px solid var(--border);\n    border-radius: 8px;\n    padding: 5mm 8mm;\n    margin-bottom: 10mm;\n  }\n  .trend-stat {\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n  }\n  .trend-label {\n    font-size: 8pt;\n    text-transform: uppercase;\n    color: var(--text-muted);\n    letter-spacing: 0.5px;\n    margin-bottom: 1mm;\n  }\n  .trend-value {\n    font-size: 18pt;\n    font-weight: 700;\n    color: var(--primary);\n  }\n  .trend-arrow {\n    font-size: 20pt;\n    color: var(--border);\n  }\n  .trend-stat.highlight {\n    background: #fff;\n    padding: 2mm 6mm;\n    border-radius: 6px;\n    box-shadow: 0 1px 3px rgba(0,0,0,0.05);\n  }\n\n  /* Tablas de Datos */\n  .data-table {\n    width: 100%;\n    border-collapse: collapse;\n    margin-bottom: 8mm;\n    font-size: 9.5pt;\n  }\n  .data-table th {\n    background: var(--bg-light);\n    color: var(--text-muted);\n    font-weight: 600;\n    text-transform: uppercase;\n    font-size: 8pt;\n    letter-spacing: 0.5px;\n    text-align: left;\n    padding: 3mm;\n    border-bottom: 2px solid var(--border);\n  }\n  .data-table td {\n    padding: 3mm;\n    border-bottom: 1px solid var(--border);\n    vertical-align: top;\n  }\n  .data-table tbody tr:nth-child(even) {\n    background-color: #FAFAFA;\n  }\n\n  /* Badges y Utilidades */\n  .badge {\n    display: inline-block;\n    padding: 1mm 2mm;\n    border-radius: 4px;\n    font-size: 7.5pt;\n    font-weight: 600;\n    text-transform: uppercase;\n  }\n  .badge-blue { background: #E0F2FE; color: #0284C7; }\n  .badge-gray { background: #F1F5F9; color: #475569; }\n  \n  .text-success { color: var(--success); }\n  .text-danger { color: var(--danger); }\n  .text-muted { color: var(--text-muted); }\n  \n  .success-box {\n    background: #ECFDF5;\n    color: #065F46;\n    padding: 4mm;\n    border-radius: 6px;\n    border: 1px solid #A7F3D0;\n    font-weight: 500;\n    margin-bottom: 8mm;\n  }\n\n  /* Commits */\n  .commit-group {\n    margin-bottom: 6mm;\n  }\n  .commit-group h4 {\n    font-size: 10pt;\n    margin-bottom: 2mm;\n    color: var(--text-muted);\n  }\n  .commit-item {\n    display: flex;\n    padding: 2mm 0;\n    border-bottom: 1px solid var(--border);\n    font-size: 9pt;\n    align-items: baseline;\n  }\n  .commit-sha {\n    font-family: monospace;\n    color: var(--accent);\n    width: 60px;\n    flex-shrink: 0;\n  }\n  .commit-author {\n    font-weight: 600;\n    width: 100px;\n    flex-shrink: 0;\n  }\n  .commit-msg {\n    flex-grow: 1;\n    color: var(--text-main);\n  }\n  .commit-date {\n    color: var(--text-muted);\n    font-size: 8pt;\n    width: 80px;\n    text-align: right;\n    flex-shrink: 0;\n  }\n\n  /* Timeline Eventos */\n  .timeline {\n    border-left: 2px solid var(--border);\n    padding-left: 5mm;\n    margin-left: 2mm;\n    margin-bottom: 8mm;\n  }\n  .timeline-item {\n    position: relative;\n    margin-bottom: 4mm;\n    font-size: 9.5pt;\n  }\n  .timeline-item::before {\n    content: \"\";\n    position: absolute;\n    left: -6.5mm;\n    top: 1.5mm;\n    width: 8px;\n    height: 8px;\n    border-radius: 50%;\n    background: var(--border);\n    border: 2px solid #fff;\n  }\n  .timeline-date {\n    font-size: 8pt;\n    color: var(--text-muted);\n    margin-bottom: 0.5mm;\n  }\n\n  /* Recomendaciones */\n  .action-items {\n    display: flex;\n    flex-direction: column;\n    gap: 3mm;\n    margin-bottom: 8mm;\n  }\n  .action-item {\n    display: flex;\n    gap: 3mm;\n    background: #FFFBEB;\n    border: 1px solid #FEF3C7;\n    padding: 3mm 4mm;\n    border-radius: 6px;\n  }\n  .action-icon {\n    flex-shrink: 0;\n  }\n  .action-text {\n    font-size: 9.5pt;\n    color: #92400E;\n  }\n</style>\n</head>\n<body>\n\n<div class=\"header-cover\">\n  <div class=\"header-title\">\n    <h1>&#9650; PetSafe Project</h1>\n    <h2>Reporte de Avance y Gesti\u00f3n</h2>\n  </div>\n  <div class=\"header-meta\">\n    <div>Fecha de emisi\u00f3n:<br><strong>${esc(data.fecha_reporte_local)}</strong></div>\n    <div style=\"margin-top:2mm\">Per\u00edodo de evaluaci\u00f3n:<br><strong>\u00daltimos ${data.rango_dias} d\u00edas</strong></div>\n  </div>\n</div>\n\n<div class=\"executive-summary\">\n  <h3>&#9674; Resumen Ejecutivo</h3>\n  ${summaryHtml}\n</div>\n\n<h2 class=\"section-title\">Indicadores de Rendimiento (KPIs)</h2>\n<div class=\"kpi-container\">\n  <table class=\"kpi-table\"><tbody>${trHtml(rowsKpis.slice(0, 5))}</tbody></table>\n  <table class=\"kpi-table\"><tbody>${trHtml(rowsKpis.slice(5))}</tbody></table>\n</div>\n\n<h2 class=\"section-title\">Evoluci\u00f3n del Progreso</h2>\n${tendenciaHtml}\n\n<h2 class=\"section-title\">Atenci\u00f3n Requerida: Tareas Vencidas</h2>\n${vencidasHtml}\n\n${data.hitos_proximos.length ? '<h2 class=\"section-title\">Roadmap: Hitos a 30 D\u00edas</h2>' : ''}\n${hitosHtml}\n\n<h2 class=\"section-title\">Registro de Actividad (Source Code)</h2>\n${commitsHtml(data.commits_back, 'Backend')}\n${commitsHtml(data.commits_front, 'Frontend')}\n\n${data.eventos_recientes.length ? '<h2 class=\"section-title\">Registro de Eventos Cr\u00edticos</h2>' : ''}\n${eventosHtml}\n\n${data.recomendaciones_pendientes.length ? '<h2 class=\"section-title\">Acciones Estrat\u00e9gicas Sugeridas</h2>' : ''}\n${recosHtml}\n\n</body>\n</html>`;\n\nconst fileName = `reporte-petsafe-${new Date().toISOString().slice(0,10)}.html`;\nconst summaryText = `Reporte semanal PetSafe: progreso ${data.ultimo_analisis.progreso_pct || 0}%, ${data.tareas_vencidas.length} tareas vencidas, ${data.total_commits_back + data.total_commits_front} commits, ${data.eventos_recientes.length} eventos.`;\n\nreturn [{\n  json: {\n    summaryText,\n    destinatarios: data.destinatarios,\n    destinatarios_info: data.destinatarios_info,\n    rango_dias: data.rango_dias,\n    fecha_reporte_local: data.fecha_reporte_local\n  },\n  binary: {\n    data: {\n      data: Buffer.from(html).toString('base64'),\n      mimeType: 'text/html',\n      fileName: 'index.html'\n    }\n  }\n}];"
+        "jsCode": "const gem = $json;\nconst data = $node['Build Report Data'].json;\n\n// Limpiar posibles etiquetas markdown que Gemini a veces devuelve\nlet rawSummary = gem?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';\nrawSummary = rawSummary.replace(/^```html\\s*/, '').replace(/```$/, '').trim();\n\nconst summaryHtml = rawSummary || \n  `<p><strong>Estado del proyecto:</strong> Progreso ${data.ultimo_analisis.progreso_pct || 0}% · Equipo activo · ${data.tareas_vencidas.length} tareas vencidas · Proyección: ${data.kpis.proyeccion_a_tiempo ? 'A tiempo' : 'En riesgo'}</p>\n   <p><strong>Focus:</strong> ${data.kpis.dias_hasta_fin} días hasta fin. Velocidad ${data.kpis.velocidad_tareas_por_dia || 0}/día.</p>`; \n\nconst fmt = (d) => d ? new Date(d).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil', year: 'numeric', month: 'short', day: 'numeric' }) : '-';\nconst esc = (s) => String(s ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));\n\nconst k = data.kpis || {};\nconst rowsKpis = [\n  ['Progreso general', `${data.ultimo_analisis.progreso_pct || 0}%`],\n  ['Velocidad (tareas/sem)', k.velocidad_semana ?? '-'],\n  ['% Tareas a tiempo', (k.pct_a_tiempo != null ? k.pct_a_tiempo + '%' : '-')],\n  ['Commits/día (back)', k.commits_por_dia_back ?? '-'],\n  ['Commits/día (front)', k.commits_por_dia_front ?? '-'],\n  ['PR open time (h) back', k.pr_open_time_back ?? '-'],\n  ['PR open time (h) front', k.pr_open_time_front ?? '-'],\n  ['PR merge ratio', k.pr_merge_ratio ?? '-'],\n  ['Días restantes', k.dias_hasta_fin ?? '-'],\n  ['Proyección a tiempo', k.proyeccion_a_tiempo ? 'Sí' : 'En riesgo']\n];\n\nconst trHtml = (arr) => arr.map(r => `<tr><td class=\"kpi-label\">${esc(r[0])}</td><td class=\"kpi-val\">${esc(r[1])}</td></tr>`).join('');\n\nconst vencidasHtml = data.tareas_vencidas.length \n  ? `<table class=\"data-table\">\n       <thead><tr><th>Tarea</th><th>Lista</th><th>Responsable</th><th>Vencida el</th></tr></thead>\n       <tbody>${data.tareas_vencidas.map(v => `<tr><td><strong>${esc(v.card_nombre)}</strong></td><td><span class=\"badge badge-gray\">${esc(v.lista_nombre)}</span></td><td>${esc(v.miembro_nombre || 'Sin asignar')}</td><td class=\"text-danger\">${fmt(v.fecha_vencimiento)}</td></tr>`).join('')}</tbody>\n     </table>` \n  : '<div class=\"success-box\">&#10003; Excelente, no hay tareas vencidas en este momento.</div>';\n\nconst hitosHtml = data.hitos_proximos.length \n  ? `<table class=\"data-table\">\n       <thead><tr><th>Hito Estratégico</th><th>Tipo</th><th>Fecha Límite</th><th>Responsable</th></tr></thead>\n       <tbody>${data.hitos_proximos.map(h => `<tr><td><strong>${esc(h.nombre)}</strong></td><td><span class=\"badge badge-blue\">${esc(h.tipo)}</span></td><td>${fmt(h.fecha_fin)}</td><td>${esc(h.responsable || 'Equipo')}</td></tr>`).join('')}</tbody>\n     </table>` \n  : '<p class=\"text-muted\">No hay hitos programados para los próximos 30 días.</p>';\n\nconst commitsHtml = (arr, titulo) => {\n  if (!arr.length) return '';\n  const lines = arr.slice(0, 8).map(c => {\n    const author = esc(c.autor).split(' ')[0];\n    const msg = esc(c.mensaje).slice(0, 65) + (c.mensaje.length > 65 ? '...' : '');\n    const date = fmt(c.fecha);\n    return `<div class=\"commit-item\"><span class=\"commit-sha\">${esc(c.sha)}</span> <span class=\"commit-author\">${author}</span><span class=\"commit-msg\">${msg}</span><span class=\"commit-date\">${date}</span></div>`;\n  }).join('');\n  return `<div class=\"commit-group\"><h4>Módulo ${titulo}</h4>${lines}</div>`;\n};\n\nconst eventosHtml = data.eventos_recientes.length \n  ? `<div class=\"timeline\">${data.eventos_recientes.slice(0, 10).map(e => `<div class=\"timeline-item\"><div class=\"timeline-date\">${fmt(e.fecha)}</div><div class=\"timeline-content\"><strong>${esc(e.tipo)}:</strong> ${esc(e.descripcion)}</div></div>`).join('')}</div>` \n  : '<p class=\"text-muted\">Sin eventos relevantes registrados.</p>';\n\nconst recosHtml = data.recomendaciones_pendientes.length \n  ? `<div class=\"action-items\">${data.recomendaciones_pendientes.slice(0, 8).map(r => `<div class=\"action-item\"><div class=\"action-icon\">&#9888;&#65039;</div><div class=\"action-text\">${esc((r.descripcion || '').substring(0, 300))} <span class=\"text-muted\">(${fmt(r.fecha)})</span></div></div>`).join('')}</div>` \n  : '';\n\nconst tendenciaHtml = data.tendencia \n  ? `<div class=\"trend-box\">\n       <div class=\"trend-stat\">\n         <span class=\"trend-label\">Progreso Previo</span>\n         <span class=\"trend-value\">${data.tendencia.progreso_inicial}%</span>\n       </div>\n       <div class=\"trend-arrow\">&#8594;</div>\n       <div class=\"trend-stat\">\n         <span class=\"trend-label\">Progreso Actual</span>\n         <span class=\"trend-value\">${data.tendencia.progreso_final}%</span>\n       </div>\n       <div class=\"trend-stat highlight\">\n         <span class=\"trend-label\">Variación</span>\n         <span class=\"trend-value ${data.tendencia.delta >= 0 ? 'text-success' : 'text-danger'}\">${data.tendencia.delta >= 0 ? '+' : ''}${data.tendencia.delta} pts</span>\n       </div>\n     </div>` \n  : '<p class=\"text-muted\">Datos insuficientes para calcular tendencia consolidada.</p>';\n\nconst html = `<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n<meta charset=\"utf-8\"/>\n<title>Reporte Ejecutivo de Avance - PetSafe</title>\n<link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap\" rel=\"stylesheet\">\n<style>\n  @page {\n    size: A4;\n    margin: 20mm 0mm;\n    @bottom-center {\n      content: \"CONFIDENCIAL — PetSafe Project Management Office — Página \" counter(page) \" de \" counter(pages);\n      font-family: 'Inter', sans-serif;\n      font-size: 8pt;\n      color: #64748B;\n      padding-bottom: 10mm;\n    }\n  }\n  \n  :root {\n    --primary: #0F172A;\n    --secondary: #1E293B;\n    --accent: #2563EB;\n    --light-accent: #EFF6FF;\n    --text-main: #334155;\n    --text-muted: #64748B;\n    --border: #E2E8F0;\n    --bg-light: #F8FAFC;\n    --success: #059669;\n    --danger: #DC2626;\n  }\n\n  body {\n    font-family: 'Inter', sans-serif;\n    color: var(--text-main);\n    font-size: 10.5pt;\n    line-height: 1.5;\n    margin: 0;\n    padding: 0 20mm;\n  }\n\n  h1, h2, h3, h4 {\n    color: var(--primary);\n    margin-top: 0;\n    font-weight: 600;\n  }\n\n  /* Portada / Cabecera */\n  .header-cover {\n    border-bottom: 4px solid var(--accent);\n    padding: 25mm 0 15mm 0;\n    margin-bottom: 15mm;\n    display: flex;\n    justify-content: space-between;\n    align-items: flex-end;\n    page-break-after: avoid;\n  }\n  .header-title h1 {\n    font-size: 28pt;\n    font-weight: 800;\n    letter-spacing: -0.5px;\n    margin-bottom: 2mm;\n  }\n  .header-title h2 {\n    font-size: 14pt;\n    color: var(--text-muted);\n    font-weight: 400;\n  }\n  .header-meta {\n    text-align: right;\n    font-size: 9pt;\n    color: var(--text-muted);\n    background: var(--bg-light);\n    padding: 4mm 6mm;\n    border-radius: 6px;\n    border: 1px solid var(--border);\n  }\n  .header-meta strong {\n    color: var(--primary);\n  }\n\n  /* Secciones */\n  .section-title {\n    font-size: 14pt;\n    color: var(--secondary);\n    border-bottom: 1px solid var(--border);\n    padding-bottom: 2mm;\n    margin: 12mm 0 6mm 0;\n    page-break-after: avoid;\n    display: flex;\n    align-items: center;\n    gap: 2mm;\n  }\n  .section-title::before {\n    content: \"\";\n    display: inline-block;\n    width: 4px;\n    height: 14pt;\n    background-color: var(--accent);\n    border-radius: 2px;\n  }\n\n  /* Resumen Ejecutivo */\n  .executive-summary {\n    background: var(--light-accent);\n    border: 1px solid #BFDBFE;\n    border-radius: 8px;\n    padding: 6mm 8mm;\n    margin-bottom: 10mm;\n  }\n  .executive-summary h3 {\n    color: var(--accent);\n    font-size: 11pt;\n    text-transform: uppercase;\n    letter-spacing: 0.5px;\n    margin-bottom: 4mm;\n  }\n  .executive-summary p {\n    margin-bottom: 3mm;\n  }\n  .executive-summary ul {\n    margin-top: 2mm;\n    padding-left: 5mm;\n  }\n  .executive-summary li {\n    margin-bottom: 1.5mm;\n  }\n\n  /* Grid de KPIs */\n  .kpi-container {\n    display: grid;\n    grid-template-columns: 1fr 1fr;\n    gap: 6mm;\n    margin-bottom: 10mm;\n  }\n  .kpi-table {\n    width: 100%;\n    border-collapse: collapse;\n  }\n  .kpi-table td {\n    padding: 2.5mm 0;\n    border-bottom: 1px dashed var(--border);\n  }\n  .kpi-label {\n    color: var(--text-muted);\n  }\n  .kpi-val {\n    text-align: right;\n    font-weight: 600;\n    color: var(--primary);\n  }\n\n  /* Tendencia */\n  .trend-box {\n    display: flex;\n    align-items: center;\n    justify-content: space-between;\n    background: var(--bg-light);\n    border: 1px solid var(--border);\n    border-radius: 8px;\n    padding: 5mm 8mm;\n    margin-bottom: 10mm;\n  }\n  .trend-stat {\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n  }\n  .trend-label {\n    font-size: 8pt;\n    text-transform: uppercase;\n    color: var(--text-muted);\n    letter-spacing: 0.5px;\n    margin-bottom: 1mm;\n  }\n  .trend-value {\n    font-size: 18pt;\n    font-weight: 700;\n    color: var(--primary);\n  }\n  .trend-arrow {\n    font-size: 20pt;\n    color: var(--border);\n  }\n  .trend-stat.highlight {\n    background: #fff;\n    padding: 2mm 6mm;\n    border-radius: 6px;\n    box-shadow: 0 1px 3px rgba(0,0,0,0.05);\n  }\n\n  /* Tablas de Datos */\n  .data-table {\n    width: 100%;\n    border-collapse: collapse;\n    margin-bottom: 8mm;\n    font-size: 9.5pt;\n  }\n  .data-table th {\n    background: var(--bg-light);\n    color: var(--text-muted);\n    font-weight: 600;\n    text-transform: uppercase;\n    font-size: 8pt;\n    letter-spacing: 0.5px;\n    text-align: left;\n    padding: 3mm;\n    border-bottom: 2px solid var(--border);\n  }\n  .data-table td {\n    padding: 3mm;\n    border-bottom: 1px solid var(--border);\n    vertical-align: top;\n  }\n  .data-table tbody tr:nth-child(even) {\n    background-color: #FAFAFA;\n  }\n\n  /* Badges y Utilidades */\n  .badge {\n    display: inline-block;\n    padding: 1mm 2mm;\n    border-radius: 4px;\n    font-size: 7.5pt;\n    font-weight: 600;\n    text-transform: uppercase;\n  }\n  .badge-blue { background: #E0F2FE; color: #0284C7; }\n  .badge-gray { background: #F1F5F9; color: #475569; }\n  \n  .text-success { color: var(--success); }\n  .text-danger { color: var(--danger); }\n  .text-muted { color: var(--text-muted); }\n  \n  .success-box {\n    background: #ECFDF5;\n    color: #065F46;\n    padding: 4mm;\n    border-radius: 6px;\n    border: 1px solid #A7F3D0;\n    font-weight: 500;\n    margin-bottom: 8mm;\n  }\n\n  /* Commits */\n  .commit-group {\n    margin-bottom: 6mm;\n  }\n  .commit-group h4 {\n    font-size: 10pt;\n    margin-bottom: 2mm;\n    color: var(--text-muted);\n  }\n  .commit-item {\n    display: flex;\n    padding: 2mm 0;\n    border-bottom: 1px solid var(--border);\n    font-size: 9pt;\n    align-items: baseline;\n  }\n  .commit-sha {\n    font-family: monospace;\n    color: var(--accent);\n    width: 60px;\n    flex-shrink: 0;\n  }\n  .commit-author {\n    font-weight: 600;\n    width: 100px;\n    flex-shrink: 0;\n  }\n  .commit-msg {\n    flex-grow: 1;\n    color: var(--text-main);\n  }\n  .commit-date {\n    color: var(--text-muted);\n    font-size: 8pt;\n    width: 80px;\n    text-align: right;\n    flex-shrink: 0;\n  }\n\n  /* Timeline Eventos */\n  .timeline {\n    border-left: 2px solid var(--border);\n    padding-left: 5mm;\n    margin-left: 2mm;\n    margin-bottom: 8mm;\n  }\n  .timeline-item {\n    position: relative;\n    margin-bottom: 4mm;\n    font-size: 9.5pt;\n  }\n  .timeline-item::before {\n    content: \"\";\n    position: absolute;\n    left: -6.5mm;\n    top: 1.5mm;\n    width: 8px;\n    height: 8px;\n    border-radius: 50%;\n    background: var(--border);\n    border: 2px solid #fff;\n  }\n  .timeline-date {\n    font-size: 8pt;\n    color: var(--text-muted);\n    margin-bottom: 0.5mm;\n  }\n\n  /* Recomendaciones */\n  .action-items {\n    display: flex;\n    flex-direction: column;\n    gap: 3mm;\n    margin-bottom: 8mm;\n  }\n  .action-item {\n    display: flex;\n    gap: 3mm;\n    background: #FFFBEB;\n    border: 1px solid #FEF3C7;\n    padding: 3mm 4mm;\n    border-radius: 6px;\n  }\n  .action-icon {\n    flex-shrink: 0;\n  }\n  .action-text {\n    font-size: 9.5pt;\n    color: #92400E;\n  }\n</style>\n</head>\n<body>\n\n<div class=\"header-cover\">\n  <div class=\"header-title\">\n    <h1>&#9650; PetSafe Project</h1>\n    <h2>Reporte de Avance y Gestión</h2>\n  </div>\n  <div class=\"header-meta\">\n    <div>Fecha de emisión:<br><strong>${esc(data.fecha_reporte_local)}</strong></div>\n    <div style=\"margin-top:2mm\">Período de evaluación:<br><strong>Últimos ${data.rango_dias} días</strong></div>\n  </div>\n</div>\n\n<div class=\"executive-summary\">\n  <h3>&#9674; Resumen Ejecutivo</h3>\n  ${summaryHtml}\n</div>\n\n<h2 class=\"section-title\">Indicadores de Rendimiento (KPIs)</h2>\n<div class=\"kpi-container\">\n  <table class=\"kpi-table\"><tbody>${trHtml(rowsKpis.slice(0, 5))}</tbody></table>\n  <table class=\"kpi-table\"><tbody>${trHtml(rowsKpis.slice(5))}</tbody></table>\n</div>\n\n<h2 class=\"section-title\">Evolución del Progreso</h2>\n${tendenciaHtml}\n\n<h2 class=\"section-title\">Atención Requerida: Tareas Vencidas</h2>\n${vencidasHtml}\n\n${data.hitos_proximos.length ? '<h2 class=\"section-title\">Roadmap: Hitos a 30 Días</h2>' : ''}\n${hitosHtml}\n\n<h2 class=\"section-title\">Registro de Actividad (Source Code)</h2>\n${commitsHtml(data.commits_back, 'Backend')}\n${commitsHtml(data.commits_front, 'Frontend')}\n\n${data.eventos_recientes.length ? '<h2 class=\"section-title\">Registro de Eventos Críticos</h2>' : ''}\n${eventosHtml}\n\n${data.recomendaciones_pendientes.length ? '<h2 class=\"section-title\">Acciones Estratégicas Sugeridas</h2>' : ''}\n${recosHtml}\n\n</body>\n</html>`;\n\nconst fileName = `reporte-petsafe-${new Date().toISOString().slice(0,10)}.html`;\nconst summaryText = `Reporte semanal PetSafe: progreso ${data.ultimo_analisis.progreso_pct || 0}%, ${data.tareas_vencidas.length} tareas vencidas, ${data.total_commits_back + data.total_commits_front} commits, ${data.eventos_recientes.length} eventos.`;\n\nreturn [{\n  json: {\n    summaryText,\n    destinatarios: data.destinatarios,\n    destinatarios_info: data.destinatarios_info,\n    rango_dias: data.rango_dias,\n    fecha_reporte_local: data.fecha_reporte_local\n  },\n  binary: {\n    data: {\n      data: Buffer.from(html).toString('base64'),\n      mimeType: 'text/html',\n      fileName: 'index.html'\n    }\n  }\n}];"
       },
-      "id": "377a0a6f-71c9-4175-a3ae-4a5af9e307b3",
+      "id": "0efe356a-f279-4bfa-a641-5d26d3726039",
       "name": "Build HTML + Binary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        944,
-        960
+        3584,
+        1056
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $node[\"Configuraci\u00f3n\"].json.GOTENBERG_URL }}/forms/chromium/convert/html",
+        "url": "={{ $node[\"Configuración\"].json.GOTENBERG_URL }}/forms/chromium/convert/html",
         "sendBody": true,
         "contentType": "multipart-form-data",
         "bodyParameters": {
@@ -453,39 +453,39 @@
           }
         }
       },
-      "id": "ca1bc995-a1d0-492d-9ffd-081902003517",
-      "name": "Gotenberg HTML\u2192PDF",
+      "id": "799e61a4-cab3-4d1d-a2b8-f41e864c2f10",
+      "name": "Gotenberg HTML→PDF",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1168,
-        960
+        3808,
+        1056
       ]
     },
     {
       "parameters": {
         "jsCode": "const meta = $node['Build HTML + Binary'].json;\nconst fileName = `reporte-petsafe-${new Date().toISOString().slice(0,10)}.pdf`;\nconst pdfBin = $binary.pdf;\nreturn [{\n  json: { ...meta, fileName },\n  binary: { pdf: { ...pdfBin, fileName, mimeType: 'application/pdf' } }\n}];\n"
       },
-      "id": "a72d57bf-6a19-440f-94b4-07bb7654b904",
+      "id": "014d30f1-da46-4648-bf38-1c8de654a48b",
       "name": "Rename PDF",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1392,
-        960
+        4032,
+        1056
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $node[\"Configuraci\u00f3n\"].json.DISCORD_WEBHOOK_URL }}",
+        "url": "={{ $node[\"Configuración\"].json.DISCORD_WEBHOOK_URL }}",
         "sendBody": true,
         "contentType": "multipart-form-data",
         "bodyParameters": {
           "parameters": [
             {
               "name": "payload_json",
-              "value": "={{ JSON.stringify({ content: '\ud83d\udcc4 **Reporte semanal PetSafe**\\n' + $json.summaryText, username: 'PetSafe Reports' }) }}"
+              "value": "={{ JSON.stringify({ content: '📄 **Reporte semanal PetSafe**\\n' + $json.summaryText, username: 'PetSafe Reports' }) }}"
             },
             {
               "parameterType": "formBinaryData",
@@ -496,32 +496,32 @@
         },
         "options": {}
       },
-      "id": "8a570ebd-92f3-46ab-b33d-88d5aa2a43b8",
+      "id": "42adef28-6d93-4c19-baa2-fac5f0a58c59",
       "name": "Discord Upload PDF",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1632,
-        832
+        4272,
+        928
       ]
     },
     {
       "parameters": {
-        "fromEmail": "={{ $node[\"Configuraci\u00f3n\"].json.SMTP_FROM_NAME }} <{{ $node[\"Configuraci\u00f3n\"].json.SMTP_FROM_EMAIL }}>",
+        "fromEmail": "={{ $node[\"Configuración\"].json.SMTP_FROM_NAME }} <{{ $node[\"Configuración\"].json.SMTP_FROM_EMAIL }}>",
         "toEmail": "={{ $json.destinatarios.join(',') }}",
-        "subject": "=\ud83d\udcca Reporte Semanal PetSafe \u2014 {{ $json.fecha_reporte_local }}",
-        "html": "=<p>Hola,</p><p>Adjunto el reporte semanal de gesti\u00f3n del proyecto <strong>PetSafe</strong>.</p><p><em>{{ $json.summaryText }}</em></p><p>Rango: \u00faltimos {{ $json.rango_dias }} d\u00edas.</p><p>\u2014 PetSafe PM Assistant</p>",
+        "subject": "=📊 Reporte Semanal PetSafe — {{ $json.fecha_reporte_local }}",
+        "html": "=<p>Hola,</p><p>Adjunto el reporte semanal de gestión del proyecto <strong>PetSafe</strong>.</p><p><em>{{ $json.summaryText }}</em></p><p>Rango: últimos {{ $json.rango_dias }} días.</p><p>— PetSafe PM Assistant</p>",
         "options": {
           "attachments": "pdf"
         }
       },
-      "id": "2fa6bfa5-efe9-4b1a-9eb3-ef6220c7cfa6",
+      "id": "4c3c4cac-a1dc-4a78-829f-829ed171d572",
       "name": "SMTP Enviar Email",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
       "position": [
-        1632,
-        992
+        4272,
+        1088
       ],
       "webhookId": "a4d370cb-12c7-4c71-a6d4-09a15504d5fa",
       "credentials": {
@@ -539,13 +539,13 @@
           "queryReplacement": "={{ [\n  'semanal',\n  Number($json.rango_dias || 7),\n  ($json.destinatarios || []).join('|'),\n  String($json.summaryText || '').replace(/,/g, ';')\n] }}"
         }
       },
-      "id": "e3a20e5c-6520-4943-9374-53e8850745a8",
+      "id": "37068841-7e42-47a7-9921-49dee3c1b205",
       "name": "PG Log Reporte",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1632,
-        1152
+        4272,
+        1248
       ],
       "credentials": {
         "postgres": {
@@ -571,7 +571,7 @@
           "cachedResultName": "alertas-proyecto",
           "cachedResultUrl": "https://discord.com/channels/1494441816911773737/1494442482673651933"
         },
-        "content": "={{ JSON.stringify({ content: '\ud83d\udcc4 **Reporte semanal PetSafe**\\n' + $json.summaryText, username: 'PetSafe Reports' }) }}",
+        "content": "={{ JSON.stringify({ content: '📄 **Reporte semanal PetSafe**\\n' + $json.summaryText, username: 'PetSafe Reports' }) }}",
         "options": {},
         "embeds": {
           "values": []
@@ -587,10 +587,10 @@
       "type": "n8n-nodes-base.discord",
       "typeVersion": 2,
       "position": [
-        1632,
-        640
+        4272,
+        736
       ],
-      "id": "b6c4b48b-673c-4670-899d-a8de9c7a20ba",
+      "id": "da2cd656-2b28-43b9-b6f7-cd7172acbd1c",
       "name": "Discord Upload PDF2",
       "webhookId": "53dccc43-33ee-4262-9b5f-977452f39ccf",
       "credentials": {
@@ -602,39 +602,39 @@
     },
     {
       "parameters": {},
-      "id": "0d58e704-e807-4626-be38-672e0ef3437a",
+      "id": "406f5e9a-813b-431c-b6e0-60bbb5b1bab9",
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
       "position": [
-        -480,
-        1072
+        2160,
+        1168
       ]
     },
     {
       "parameters": {
         "options": {}
       },
-      "id": "33b8e9fe-7afa-43d1-a71a-5cf71fb1f7bc",
+      "id": "10e98ce2-6f8d-4256-8c26-a1deabc7dc2a",
       "name": "Respuesta a Chat",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        1872,
-        832
+        4512,
+        928
       ]
     },
     {
       "parameters": {
         "options": {}
       },
-      "id": "34235b7a-8f70-4279-885e-956f7f501885",
+      "id": "fa8330e5-7fe9-444e-8d2f-78afb72c8c4c",
       "name": "Respuesta de Error a Chat",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        -240,
-        1072
+        2400,
+        1168
       ]
     },
     {
@@ -645,13 +645,13 @@
           "queryReplacement": "={{ [ $workflow.id || 'unknown', $workflow.name, $json.correlation_id || null, JSON.stringify({ report_type: 'semanal', rango_dias: $node['Rename PDF'].json.rango_dias || 7, destinatarios: ($node['Rename PDF'].json.destinatarios || []).length }) ] }}"
         }
       },
-      "id": "fb1befc5-06e6-4261-a644-34f9a70dae01",
+      "id": "f815c354-2cfd-41cd-bf38-6df36f482752",
       "name": "Audit Success",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1872,
-        1152
+        4512,
+        1248
       ],
       "credentials": {
         "postgres": {
@@ -668,13 +668,13 @@
           "queryReplacement": "={{ [ $json.correlation_id || null, 'PM Report', 'reporte_semanal', ('Reporte semanal ' + ($node['Rename PDF'].json.fecha_reporte_local || '')).slice(0, 500), JSON.stringify($node['Build Report Data'].json || {}), JSON.stringify({ rango_dias: $node['Build Report Data'].json.rango_dias || 7, commits_back: $node['Build Report Data'].json.total_commits_back || 0, commits_front: $node['Build Report Data'].json.total_commits_front || 0 }), JSON.stringify({ summary: $node['Build HTML + Binary'].json.summaryText || '' }), null, null, null, false, 'logged' ] }}"
         }
       },
-      "id": "db80e14f-5916-4a6b-a1ae-5d40c29eac0f",
+      "id": "e98d960b-ec0d-4bea-b743-125a0208877b",
       "name": "Decision Ledger Report",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1392,
-        1152
+        4032,
+        1248
       ],
       "credentials": {
         "postgres": {
@@ -690,7 +690,7 @@
       "main": [
         [
           {
-            "node": "Configuraci\u00f3n",
+            "node": "Configuración",
             "type": "main",
             "index": 0
           }
@@ -701,23 +701,23 @@
       "main": [
         [
           {
-            "node": "Configuraci\u00f3n",
+            "node": "Configuración",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Configuraci\u00f3n": {
+    "Configuración": {
       "main": [
         [
           {
-            "node": "PG An\u00e1lisis 7d",
+            "node": "PG Análisis 7d",
             "type": "main",
             "index": 0
           },
           {
-            "node": "PG \u00daltimo An\u00e1lisis",
+            "node": "PG Último Análisis",
             "type": "main",
             "index": 0
           },
@@ -727,7 +727,7 @@
             "index": 0
           },
           {
-            "node": "PG Hitos Pr\u00f3ximos",
+            "node": "PG Hitos Próximos",
             "type": "main",
             "index": 0
           },
@@ -759,7 +759,7 @@
         ]
       ]
     },
-    "PG An\u00e1lisis 7d": {
+    "PG Análisis 7d": {
       "main": [
         [
           {
@@ -770,7 +770,7 @@
         ]
       ]
     },
-    "PG \u00daltimo An\u00e1lisis": {
+    "PG Último Análisis": {
       "main": [
         [
           {
@@ -792,7 +792,7 @@
         ]
       ]
     },
-    "PG Hitos Pr\u00f3ximos": {
+    "PG Hitos Próximos": {
       "main": [
         [
           {
@@ -895,14 +895,14 @@
       "main": [
         [
           {
-            "node": "Gotenberg HTML\u2192PDF",
+            "node": "Gotenberg HTML→PDF",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gotenberg HTML\u2192PDF": {
+    "Gotenberg HTML→PDF": {
       "main": [
         [
           {
@@ -983,7 +983,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "a90d4e6d-d43f-4360-9d94-2356fc1da0cc",
+  "versionId": "93e401a9-a2a8-45ab-9fae-c52c482176eb",
   "meta": {
     "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
   },
