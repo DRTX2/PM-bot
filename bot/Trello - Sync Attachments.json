@@ -1,0 +1,182 @@
+{
+  "name": "Trello - Sync Attachments",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "trigger-sync",
+      "name": "Schedule Trigger 6h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT DISTINCT card_id FROM estado_tareas WHERE completada = false ORDER BY card_id;"
+      },
+      "id": "fetch-active-cards",
+      "name": "Fetch Active Card IDs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.trello.com/1/cards/{{ $json.card_id }}/attachments?fields=id,name,url,mimeType,bytes,date,idMember",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "trelloApi",
+        "options": {}
+      },
+      "id": "fetch-card-attachments",
+      "name": "Fetch Trello Attachments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        0
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const attachments = $input.all().map(item => item.json).flat();\nconst pdfs = attachments.filter(a => \n  a.mimeType === 'application/pdf' || \n  (a.name || '').toLowerCase().endsWith('.pdf')\n);\nreturn pdfs.map(a => ({ json: {\n  attachment_id: a.id,\n  card_id: a.idCard || $('Fetch Active Card IDs').item.json.card_id,\n  filename: a.name || 'unknown.pdf',\n  url: a.url || '',\n  mime_type: a.mimeType || 'application/pdf',\n  file_size_bytes: a.bytes || 0,\n  added_by: a.idMember || 'unknown',\n  added_at: a.date || new Date().toISOString()\n}}));"
+      },
+      "id": "extract-pdfs",
+      "name": "Extract PDF Attachments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "has-pdfs",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "larger"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "has-pdfs",
+      "name": "Has PDFs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO card_attachments (attachment_id, card_id, filename, url, mime_type, file_size_bytes, added_by, added_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz) ON CONFLICT (attachment_id) DO NOTHING;",
+        "options": {
+          "queryReplacement": "={{ [$json.attachment_id, $json.card_id, $json.filename, $json.url, $json.mime_type, $json.file_size_bytes, $json.added_by, $json.added_at] }}"
+        }
+      },
+      "id": "upsert-attachment",
+      "name": "Upsert Attachment Metadata",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1000,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger 6h": {
+      "main": [
+        [
+          {
+            "node": "Fetch Active Card IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Active Card IDs": {
+      "main": [
+        [
+          {
+            "node": "Fetch Trello Attachments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Trello Attachments": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Attachments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Attachments": {
+      "main": [
+        [
+          {
+            "node": "Has PDFs?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has PDFs?": {
+      "main": [
+        [
+          {
+            "node": "Upsert Attachment Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "errorWorkflow": "monitor-petsafe-error-handler"
+  }
+}

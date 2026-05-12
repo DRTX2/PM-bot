@@ -1,0 +1,166 @@
+{
+  "name": "AI - Release Guard",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-release-guard",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT hay_problemas, severidad_maxima, tareas_vencidas, progreso_pct, prs_abiertos_backend, prs_abiertos_frontend, recomendaciones_ia FROM analisis_proyecto ORDER BY fecha_ejecucion DESC LIMIT 1;"
+      },
+      "id": "fetch-last-analysis",
+      "name": "Fetch Last Analysis",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) as tareas_criticas FROM estado_tareas WHERE completada = false AND fecha_vencimiento < NOW() + INTERVAL '2 days';"
+      },
+      "id": "fetch-overdue",
+      "name": "Fetch At-Risk Tasks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $('Execute Workflow Trigger').item.json;\nconst analysis = $('Fetch Last Analysis').first()?.json || {};\nconst overdue = $json || {};\n\nreturn [{\n  json: {\n    correlation_id: event.correlation_id || `release-guard-${Date.now()}`,\n    repo: event.repo || 'unknown',\n    branch: event.branch || 'main',\n    actor: event.actor || 'system',\n    hay_problemas: analysis.hay_problemas || false,\n    severidad_maxima: analysis.severidad_maxima || 'none',\n    tareas_vencidas: analysis.tareas_vencidas || 0,\n    progreso_pct: analysis.progreso_pct || 0,\n    prs_abiertos_backend: analysis.prs_abiertos_backend || 0,\n    prs_abiertos_frontend: analysis.prs_abiertos_frontend || 0,\n    tareas_criticas_proximas: parseInt(overdue.tareas_criticas || '0'),\n    recomendaciones_previas: analysis.recomendaciones_ia || 'ninguna'\n  }\n}];"
+      },
+      "id": "merge-release-context",
+      "name": "Merge Release Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 0]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Eres el Release Guard de PetSafe. Decide si el release es seguro.\\n\\nEstado actual:\\n- Problemas activos: ' + $json.hay_problemas + '\\n- Severidad máxima: ' + $json.severidad_maxima + '\\n- Tareas vencidas: ' + $json.tareas_vencidas + '\\n- Progreso: ' + $json.progreso_pct + '%\\n- PRs abiertos backend/frontend: ' + $json.prs_abiertos_backend + '/' + $json.prs_abiertos_frontend + '\\n- Tareas críticas próximas (2d): ' + $json.tareas_criticas_proximas + '\\n- Recomendaciones previas: ' + $json.recomendaciones_previas + '\\n\\nRelease: ' + $json.branch + ' en ' + $json.repo + ' por ' + $json.actor + '\\n\\nResponde SÓLO con JSON:\\n{\\n  \"release_approved\": true,\\n  \"confidence\": 0.85,\\n  \"risk_level\": \"low|medium|high|critical\",\\n  \"blockers\": [],\\n  \"warnings\": [],\\n  \"recommendation\": \"mensaje accionable\",\\n  \"requires_human_approval\": true\\n}' }}",
+        "hasOutputParser": true
+      },
+      "id": "release-llm",
+      "name": "Gemini Release Guard",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [800, 0]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-1.5-pro",
+        "options": { "temperature": 0.0 }
+      },
+      "id": "gemini-model-pro",
+      "name": "Google Gemini Model Pro",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [800, 200],
+      "credentials": {
+        "googlePalmApi": { "id": "googlePalmApi", "name": "Google Gemini API" }
+      }
+    },
+    {
+      "parameters": {
+        "jsonString": "={{ $json.text }}"
+      },
+      "id": "parse-release",
+      "name": "Parse Release Decision",
+      "type": "n8n-nodes-base.jsonParse",
+      "typeVersion": 1,
+      "position": [1000, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const decision = $json;\nconst ctx = $('Merge Release Context').item.json;\n\nconst emoji = decision.release_approved ? '✅' : '🚫';\nconst status = decision.release_approved ? 'APROBADO' : 'BLOQUEADO';\nconst riskEmoji = { low: '🟢', medium: '🟡', high: '🟠', critical: '🔴' }[decision.risk_level] || '⚪';\n\nconst lines = [\n  `${emoji} **Release Guard — ${status}** ${riskEmoji}`,\n  ``,\n  `📦 **Release:** \\`${ctx.branch}\\` en \\`${ctx.repo}\\``,\n  `👤 **Solicitado por:** ${ctx.actor}`,\n  `📊 **Confianza:** ${Math.round((decision.confidence || 0) * 100)}%`,\n  ``\n];\n\nconst blockers = Array.isArray(decision.blockers) ? decision.blockers : [];\nconst warnings = Array.isArray(decision.warnings) ? decision.warnings : [];\n\nif (blockers.length > 0) {\n  lines.push(`🚫 **Bloqueos:`);\n  blockers.forEach(b => lines.push(`  - ${b}`));\n  lines.push(``);\n}\nif (warnings.length > 0) {\n  lines.push(`⚠️ **Advertencias:**`);\n  warnings.forEach(w => lines.push(`  - ${w}`));\n  lines.push(``);\n}\n\nlines.push(`💬 **Recomendación:** ${decision.recommendation}`);\nif (decision.requires_human_approval) {\n  lines.push(``, `🔑 *Requiere aprobación del Tech Lead.*`);\n}\n\nreturn [{ json: {\n  content: lines.join('\\n').slice(0, 2000),\n  release_approved: decision.release_approved,\n  risk_level: decision.risk_level,\n  confidence: decision.confidence,\n  blockers,\n  recommendation: decision.recommendation,\n  requires_human_approval: decision.requires_human_approval,\n  correlation_id: ctx.correlation_id\n}}];"
+      },
+      "id": "build-release-msg",
+      "name": "Build Release Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "content", "value": "={{ $json.content }}" }
+          ]
+        }
+      },
+      "id": "notify-discord",
+      "name": "Notify Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Build Release Message').item.json;\nreturn [{\n  json: {\n    correlation_id: d.correlation_id,\n    agent_role: 'Release Guard',\n    decision_type: 'release_gate',\n    input_summary: `Release gate for ${$('Merge Release Context').item.json.branch}`,\n    context_used: { analysis: { progreso_pct: $('Merge Release Context').item.json.progreso_pct } },\n    evidence: {},\n    decision: { release_approved: d.release_approved, blockers: d.blockers },\n    recommendation: d.recommendation,\n    confidence: d.confidence || 0.9,\n    risk_level: d.risk_level,\n    requires_human_approval: d.requires_human_approval\n  }\n}];"
+      },
+      "id": "prepare-log",
+      "name": "Prepare Log Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1600, 0]
+    },
+    {
+      "parameters": {
+        "workflowId": "System - AI Decision Logger",
+        "options": {}
+      },
+      "id": "log-release",
+      "name": "Log Release Decision",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1800, 0]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [[{ "node": "Fetch Last Analysis", "type": "main", "index": 0 }]]
+    },
+    "Fetch Last Analysis": {
+      "main": [[{ "node": "Fetch At-Risk Tasks", "type": "main", "index": 0 }]]
+    },
+    "Fetch At-Risk Tasks": {
+      "main": [[{ "node": "Merge Release Context", "type": "main", "index": 0 }]]
+    },
+    "Merge Release Context": {
+      "main": [[{ "node": "Gemini Release Guard", "type": "main", "index": 0 }]]
+    },
+    "Google Gemini Model Pro": {
+      "ai_languageModel": [[{ "node": "Gemini Release Guard", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Gemini Release Guard": {
+      "main": [[{ "node": "Parse Release Decision", "type": "main", "index": 0 }]]
+    },
+    "Parse Release Decision": {
+      "main": [[{ "node": "Build Release Message", "type": "main", "index": 0 }]]
+    },
+    "Build Release Message": {
+      "main": [[{ "node": "Notify Discord", "type": "main", "index": 0 }]]
+    },
+    "Notify Discord": {
+      "main": [[{ "node": "Prepare Log Payload", "type": "main", "index": 0 }]]
+    },
+    "Prepare Log Payload": {
+      "main": [[{ "node": "Log Release Decision", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "errorWorkflow": "monitor-petsafe-error-handler"
+  }
+}

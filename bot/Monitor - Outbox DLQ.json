@@ -1,0 +1,137 @@
+{
+  "name": "Monitor - Outbox DLQ",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH dead_all AS (SELECT * FROM events_outbox WHERE status = 'dead'), dead_sample AS (SELECT outbox_id, event_id, action, target, last_error FROM dead_all ORDER BY scheduled_at DESC LIMIT 5) SELECT (SELECT COUNT(*) FROM dead_all) AS dead_count, COALESCE(json_agg(dead_sample), '[]'::json) AS dead_samples FROM dead_sample;"
+      },
+      "id": "fetch-dead",
+      "name": "Fetch Dead Outbox",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-dead",
+              "leftValue": "={{ $json.dead_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-dead",
+      "name": "Has Dead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const count = Number($json.dead_count || 0);\nconst samples = Array.isArray($json.dead_samples) ? $json.dead_samples : [];\nconst lines = [];\nlines.push('[PetSafe/Outbox] DLQ detected');\nlines.push('Dead count: ' + count);\nif (samples.length) {\n  lines.push('Samples:');\n  samples.forEach((item) => {\n    const row = [item.outbox_id, item.event_id, item.target, item.action].filter(Boolean).join(' | ');\n    lines.push('- ' + row);\n  });\n}\nconst content = lines.join('\\n').slice(0, 1900);\nreturn [{ json: { content } }];"
+      },
+      "id": "format-message",
+      "name": "Format DLQ Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ content: $json.content }) }}",
+        "options": {}
+      },
+      "id": "send-discord",
+      "name": "Send DLQ Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 0]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Dead Outbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Dead Outbox": {
+      "main": [
+        [
+          {
+            "node": "Has Dead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Dead?": {
+      "main": [
+        [
+          {
+            "node": "Format DLQ Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format DLQ Message": {
+      "main": [
+        [
+          {
+            "node": "Send DLQ Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true
+  }
+}

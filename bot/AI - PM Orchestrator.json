@@ -1,0 +1,181 @@
+{
+  "name": "AI - PM Orchestrator",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-orchestrator",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $json;\nreturn [{\n  json: {\n    correlation_id: event.correlation_id || event.event_id || `orchestrator-${Date.now()}`,\n    source: event.source || 'unknown',\n    event_type: event.event_type || 'unknown',\n    actor: event.actor || 'system',\n    payload: typeof event.payload === 'string' ? event.payload : JSON.stringify(event.payload || event.normalized || {})\n  }\n}];"
+      },
+      "id": "prepare-prompt",
+      "name": "Prepare Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Eres el PM Orchestrator de PetSafe. Acaba de ocurrir un evento:\\n\\nSource: ' + $json.source + '\\nType: ' + $json.event_type + '\\nActor: ' + $json.actor + '\\nDetails: ' + $json.payload + '\\n\\nDecide qué sub-agente debe encargarse.\\nOpciones: CodeReviewScout | RiskAnalyst | ContextGuardian | None\\n\\nResponde SÓLO con JSON válido:\\n{\\n  \"assigned_agent\": \"NombreDelAgente\",\\n  \"reasoning\": \"razonamiento breve\",\\n  \"priority\": \"low|medium|high\",\\n  \"requires_human_approval\": false\\n}' }}",
+        "hasOutputParser": true
+      },
+      "id": "llm-chain",
+      "name": "Gemini Orchestrator Brain",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-1.5-flash",
+        "options": { "temperature": 0.1 }
+      },
+      "id": "gemini-model",
+      "name": "Google Gemini Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [400, 200],
+      "credentials": {
+        "googlePalmApi": { "id": "googlePalmApi", "name": "Google Gemini API" }
+      }
+    },
+    {
+      "parameters": {
+        "jsonString": "={{ $json.text }}"
+      },
+      "id": "parse-decision",
+      "name": "Parse Orchestrator Output",
+      "type": "n8n-nodes-base.jsonParse",
+      "typeVersion": 1,
+      "position": [600, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preserve both the routing decision AND the original context for sub-agents\nconst parsed = $json;\nconst ctx = $('Prepare Context').item.json;\nreturn [{\n  json: {\n    ...ctx,\n    assigned_agent: parsed.assigned_agent || 'None',\n    reasoning: parsed.reasoning || '',\n    priority: parsed.priority || 'low',\n    requires_human_approval: parsed.requires_human_approval || false\n  }\n}];"
+      },
+      "id": "merge-routing",
+      "name": "Merge Routing Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $json;\nreturn [{\n  json: {\n    correlation_id: d.correlation_id,\n    agent_role: 'PM Orchestrator',\n    decision_type: 'routing',\n    input_summary: `Event: ${d.event_type} from ${d.source}`,\n    context_used: { event_details: d.payload },\n    evidence: {},\n    decision: { routed_to: d.assigned_agent, priority: d.priority },\n    recommendation: d.reasoning,\n    confidence: 0.95,\n    risk_level: d.priority,\n    requires_human_approval: d.requires_human_approval\n  }\n}];"
+      },
+      "id": "prepare-log-payload",
+      "name": "Prepare Log Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 0]
+    },
+    {
+      "parameters": {
+        "workflowId": "System - AI Decision Logger",
+        "options": {}
+      },
+      "id": "log-decision",
+      "name": "Log AI Decision",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1200, 0]
+    },
+    {
+      "parameters": {
+        "mode": "expression",
+        "output": "={{ $('Merge Routing Decision').item.json.assigned_agent }}",
+        "fallbackOutput": 3,
+        "rules": {
+          "rules": [
+            { "outputKey": "CodeReviewScout", "value": "CodeReviewScout" },
+            { "outputKey": "RiskAnalyst", "value": "RiskAnalyst" },
+            { "outputKey": "ContextGuardian", "value": "ContextGuardian" }
+          ]
+        }
+      },
+      "id": "route-agent",
+      "name": "Route to Sub-Agent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1400, 0]
+    },
+    {
+      "parameters": {
+        "workflowId": "AI - Code Review Scout",
+        "options": {}
+      },
+      "id": "call-code-review",
+      "name": "Call Code Review Scout",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1600, -200]
+    },
+    {
+      "parameters": {
+        "workflowId": "AI - Risk Analyst & Workload Balancer",
+        "options": {}
+      },
+      "id": "call-risk-analyst",
+      "name": "Call Risk Analyst",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1600, 0]
+    },
+    {
+      "parameters": {
+        "workflowId": "AI - Context Guardian",
+        "options": {}
+      },
+      "id": "call-context-guardian",
+      "name": "Call Context Guardian",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1600, 200]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [[{ "node": "Prepare Context", "type": "main", "index": 0 }]]
+    },
+    "Prepare Context": {
+      "main": [[{ "node": "Gemini Orchestrator Brain", "type": "main", "index": 0 }]]
+    },
+    "Google Gemini Model": {
+      "ai_languageModel": [[{ "node": "Gemini Orchestrator Brain", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Gemini Orchestrator Brain": {
+      "main": [[{ "node": "Parse Orchestrator Output", "type": "main", "index": 0 }]]
+    },
+    "Parse Orchestrator Output": {
+      "main": [[{ "node": "Merge Routing Decision", "type": "main", "index": 0 }]]
+    },
+    "Merge Routing Decision": {
+      "main": [[{ "node": "Prepare Log Payload", "type": "main", "index": 0 }]]
+    },
+    "Prepare Log Payload": {
+      "main": [[{ "node": "Log AI Decision", "type": "main", "index": 0 }]]
+    },
+    "Log AI Decision": {
+      "main": [[{ "node": "Route to Sub-Agent", "type": "main", "index": 0 }]]
+    },
+    "Route to Sub-Agent": {
+      "main": [
+        [{ "node": "Call Code Review Scout", "type": "main", "index": 0 }],
+        [{ "node": "Call Risk Analyst", "type": "main", "index": 0 }],
+        [{ "node": "Call Context Guardian", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "errorWorkflow": "monitor-petsafe-error-handler"
+  }
+}

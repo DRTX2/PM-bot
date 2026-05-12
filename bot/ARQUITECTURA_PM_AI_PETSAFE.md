@@ -1,6 +1,6 @@
 # Arquitectura profesional para Project Manager AI PetSafe
 
-Fecha de revision: 2026-05-06  
+Fecha de revision: 2026-05-10  
 Scope revisado: workflows n8n en `bot/`, `bot-bridge`, `docker-compose.yml` y documentacion oficial actual de n8n para GitHub, Trello, manejo de errores, log streaming y secretos externos.
 
 ## Resumen ejecutivo
@@ -9,18 +9,43 @@ El sistema actual ya tiene una base valiosa: monitoreo programado, calculo de KP
 
 Los riesgos principales son:
 
-- GitHub y Trello se consumen mayormente por `httpRequest` y webhooks genericos, aunque n8n ofrece nodos oficiales `GitHub`, `GitHub Trigger`, `Trello` y `Trello Trigger`.
+- GitHub y Trello aun se consumen mayormente por `httpRequest` en la capa de snapshot/enriquecimiento, aunque el ingreso de eventos ya migro a `GitHub Trigger` y `Trello Trigger`.
 - La configuracion se replica en varios nodos `Set`, mezclando credenciales, IDs de tableros/repositorios y parametros operativos.
 - Los workflows mezclan ingestion, normalizacion, analisis, decisiones AI, persistencia y notificacion en los mismos flujos.
-- No hay una capa canonica fuerte de eventos, ni outbox/idempotencia formal, ni dead-letter queue.
-- La observabilidad esta basada en alertas puntuales a Discord, no en logs estructurados, metricas, trazas y auditoria de decisiones.
+- Ya existe una primera capa canonica de eventos para GitHub/Trello con `events_inbox` e idempotencia y un `events_outbox` operativo, pero aun falta replay y DLQ formal.
+- La observabilidad ya mejoro con `errorWorkflow` y `correlation_id` en ingress externos, pero aun no hay `workflow_runs_audit` operativo, metricas, trazas ni dashboard.
 - Algunas consultas SQL interpolan texto manualmente; eso es fragil y debe migrarse a parametros.
+- El repo refleja una base de endurecimiento importante, pero todavia hay que revalidar que el despliegue activo coincida con `docker-compose.yml`, `init.sql` y las credenciales montadas en runtime.
 
+Conclusion: la proxima evolucion debe convertir el sistema en una arquitectura event-driven con conectores nativos, adaptadores por dominio, modelo canonico de eventos completo, metricas DORA/flow, agentes especializados y controles operativos.
 
+## Estado actual al 2026-05-11
 
-- El despliegue local expone credenciales por defecto en `docker-compose.yml` y monta `init.sql` como archivo, pero localmente aparece como directorio vacio.
+Leyenda:
 
-Conclusion: la proxima evolucion debe convertir el sistema en una arquitectura event-driven con conectores nativos, adaptadores por dominio, modelo canonico de eventos, metricas DORA/flow, agentes especializados y controles operativos.
+- `DONE`: implementado y visible en repo/workflows.
+- `PARTIAL`: existe base operativa, pero falta cobertura completa o endurecimiento.
+- `PENDING`: aun no implementado.
+- `REVIEW`: hay cambios o claims que conviene revalidar en entorno real.
+
+| Modulo / capacidad | Estado | Nota |
+|---|---|---|
+| Triggers nativos GitHub/Trello | DONE | `Discord Eventos GitHub PetSafe` y `Discord Eventos Trello PetSafe` ya usan `GitHub Trigger` y `Trello Trigger`. |
+| Gemini nativo en chat/monitor/reporte | DONE | Chat, alertas IA y reporte semanal ya usan stack nativo LangChain + Gemini. |
+| `events_inbox` en schema | DONE | `init.sql` ya contiene `events_inbox`, indices y tablas asociadas. |
+| Ingestion canonica GitHub/Trello con idempotencia | DONE | Ambos workflows de eventos insertan en `events_inbox` con `ON CONFLICT (event_id) DO NOTHING`. |
+| `correlation_id` al ingreso de eventos | DONE | GitHub y Trello generan y persisten `correlation_id` canonico. |
+| `events_outbox` / replay / DLQ | PARTIAL | `Router - Project Events` rutea hacia `AI - PM Orchestrator` y `Executor - Discord Outbox`. Falta DLQ formal y replay. |
+| Observabilidad estructurada (`workflow_runs_audit`, `ai_decisions`) | DONE | `Error Handler` usa `workflow_runs_audit` y `System - AI Decision Logger` guarda todo rastro de IA en `ai_decisions`. |
+| Agentes IA Especializados | DONE | Implementados `PM Orchestrator`, `Code Review Scout`, `Context Guardian` y `Risk Analyst`. |
+| Sincronizacion bidireccional PR→Trello→Discord | DONE | `AI - Sync Bidireccional Activa` archiva tarjeta Trello al merge del PR y notifica Discord. |
+| Release Gate con IA | DONE | `AI - Release Guard` evalua estado del proyecto con Gemini y bloquea/aprueba deploys. |
+| Dashboard de aprobacion humana | DONE | `Dashboard - PM Approval Hub` expone HTML interactivo via webhook n8n para aprobar/rechazar decisiones de IA. |
+| Error workflow global en workflows criticos | DONE | Los workflows principales ya apuntan a `monitor-petsafe-error-handler`. |
+| SQL parametrizado en escrituras | PARTIAL | Varias inserciones ya usan `queryReplacement`, pero todavia queda deuda en algunos nodos heredados. |
+| GitHub/Trello con credenciales predefinidas donde aplica | PARTIAL | Ya se consolidaron varios nodos estaticos, pero aun quedan endpoints HTTP por migrar y revisar. |
+| Config resolver central / bloqueo de `$env` en code nodes | PARTIAL | Existe `System - Config Resolver`, pero el stack aun depende de `$env` en varios workflows. |
+| Seguridad de produccion y endurecimiento total | REVIEW | El repo refleja mejoras fuertes en compose e init, pero conviene revalidar despliegue real antes de marcar cerrado. |
 
 ## Fuentes verificadas
 
@@ -43,8 +68,8 @@ Workflows principales:
 - `Monitor PetSafe`: schedule principal, recoleccion Trello/GitHub/Postgres, KPIs, snapshots, cache Redis y decision de alerta.
 - `Monitor PetSafe - Alertas IA`: subworkflow para diagnostico IA y alerta Discord.
 - `Monitor PetSafe - Error Handler`: workflow de error separado.
-- `Discord Eventos GitHub PetSafe`: webhook generico para eventos GitHub.
-- `Discord Eventos Trello PetSafe`: webhook generico para eventos Trello.
+- `Discord Eventos GitHub PetSafe`: trigger nativo GitHub con normalizacion, idempotencia y notificacion.
+- `Discord Eventos Trello PetSafe`: trigger nativo Trello con normalizacion, idempotencia y notificacion.
 - `Construir Contexto Robusto`: detector de deltas por polling.
 - `Reporte PDF Semanal`: reporte semanal y on-demand.
 - `System - DB Seeder`: seed manual de estado conocido.
@@ -59,7 +84,7 @@ Infraestructura:
 
 ### Problemas actuales
 
-#### 1. Integraciones GitHub/Trello no son de primer nivel [DONE]
+#### 1. Integraciones GitHub/Trello no son de primer nivel [PARTIAL]
 
 El sistema usa `httpRequest` para obtener:
 
@@ -68,10 +93,7 @@ El sistema usa `httpRequest` para obtener:
 - Gemini por HTTP en `Construir Contexto Robusto` y `Reporte PDF Semanal`.
 - Discord webhooks para varias notificaciones.
 
-Tambien usa webhooks genericos para eventos GitHub/Trello:
-
-- `GitHub Event Webhook1`
-- `Trello Event Webhook`
+En eventos GitHub/Trello ya existe un primer paso nativo de ingestion, pero el resto del dominio todavia depende de varias consultas HTTP manuales y nombres historicos de nodos.
 
 Riesgo:
 
@@ -80,7 +102,7 @@ Riesgo:
 - Dificultad para rotar credenciales.
 - Falta de tipado semantico en operaciones.
 - Validacion y retries menos consistentes.
-- Webhooks manuales sin contrato formal ni verificacion explicita de firma.
+- Persisten huecos de contrato/observabilidad fuera del trigger nativo, especialmente en enrichment, replay y correlacion aguas abajo.
 
 Mejora:
 
@@ -89,7 +111,7 @@ Mejora:
 - Sustituir HTTP GitHub por `GitHub` node para PRs, issues, reviews, repositorios y workflow metadata cuando la operacion exista.
 - Mantener HTTP solo para GitHub commits con diff y GitHub Actions runs si el nodo nativo de la version instalada no cubre el endpoint requerido, pero usando credenciales predefinidas GitHub y no tokens manuales.
 
-#### 2. Configuracion duplicada [DONE]
+#### 2. Configuracion duplicada [PARTIAL]
 
 Los nodos `Config1`, `Configuracion`, `Configuracion1` y `Configuracion` del reporte repiten variables:
 
@@ -114,7 +136,7 @@ Mejora:
 - Mantener solo IDs funcionales no secretos en variables de entorno o tabla `project_config`.
 - Versionar un `config.schema.md` con nombres, owners, repos, board/list IDs, SLAs y calendarios.
 
-#### 3. Falta un modelo canonico de eventos [DONE]
+#### 3. Falta un modelo canonico de eventos [PARTIAL]
 
 Hoy los eventos se almacenan en `eventos_detectados`, pero cada origen produce shape propio y los eventos de polling/delta conviven con webhooks directos.
 
@@ -166,7 +188,7 @@ sent_at timestamptz,
 last_error text
 ```
 
-#### 4. Observabilidad insuficiente [DONE]
+#### 4. Observabilidad insuficiente [PARTIAL]
 
 Hay alertas a Discord, pero falta:
 
@@ -186,7 +208,7 @@ Mejora:
 - Registrar cada decision AI en `ai_decisions`.
 - Emitir metricas de health score, throughput, lead time, MTTR, defect rate y deployment frequency.
 
-#### 5. SQL fragil por interpolacion [DONE]
+#### 5. SQL fragil por interpolacion [PARTIAL]
 
 Ejemplos actuales interpolan texto en queries:
 
@@ -209,7 +231,7 @@ Mejora:
 - Guardar payloads grandes como JSONB.
 - Usar constraints e indices unicos para idempotencia.
 
-#### 6. AI orchestration sin gobierno suficiente [DONE]
+#### 6. AI orchestration sin gobierno suficiente [PARTIAL]
 
 El agente actual puede responder y consultar herramientas, pero aun no tiene:
 
@@ -227,7 +249,7 @@ Mejora:
 - Usar un `Action Executor` que aplique cambios solo si la decision cumple politicas.
 - Requerir aprobacion humana para cambios de estado criticos, asignaciones masivas, cierre de PRs, stop deploy o cambios de prioridad altos.
 
-#### 7. Punto unico de fallo en el puente Discord [DONE]
+#### 7. Punto unico de fallo en el puente Discord [PARTIAL]
 
 `bot-bridge` hace polling/event listening de Discord y llama al webhook n8n.
 
@@ -637,19 +659,18 @@ Debe coordinar:
 - Risk management: detecta vencidas, proyeccion y stales, pero no tiene risk register con owner, probabilidad, impacto y mitigacion.
 - Reviewer parcial: puede revisar diffs bajo demanda, pero no hay workflow de PR review automatico con criterios de calidad.
 - Dispatcher: existe un router de comandos, pero no decide agente/modelo/herramienta segun taxonomia de trabajo.
-- Observabilidad: hay alertas de error, pero no log streaming, correlation IDs ni dashboard operativo.
+- Observabilidad: ya hay `errorWorkflow` en workflows criticos y `correlation_id` en ingress GitHub/Trello, pero aun no hay `workflow_runs_audit`, `ai_decisions`, log streaming ni dashboard operativo.
+- Modelo canonico de eventos: ya existe `events_inbox` y deduplicacion de eventos GitHub/Trello al ingresar, pero todavia no hay event router completo, replay ni outbox operativo.
 - Sync bidireccional: lee Trello/GitHub y puede crear tarjeta via tool, pero no hay sincronizacion coherente PR-card-status-deploy.
 - Planificacion dinamica: calcula proyeccion, pero no considera feriados, capacidad, ausencias ni carga real asignable.
 - Mejora continua: detecta algunos problemas, pero no genera experimentos de proceso ni acciones Kaizen trazables.
 
 ### Funcionalidades faltantes
 
-- Triggers nativos GitHub/Trello.
 - Reemplazo de HTTP Trello/GitHub por nodos oficiales donde aplique.
 - Credenciales centralizadas por app.
-- Modelo canonico `events_inbox/outbox`.
+- Uso operativo completo de `events_inbox/outbox`.
 - DLQ.
-- Error workflow global configurado en todos los workflows.
 - Structured logging.
 - Audit log de decisiones AI.
 - Policy gate para acciones autonomas.
@@ -794,7 +815,7 @@ Metricas:
 - Merge ratio.
 - CI status freshness.
 
-### 5. Introducir event inbox/outbox [PENDING]
+### 5. Introducir event inbox/outbox [PARTIAL]
 
 Por que importa:
 
@@ -805,13 +826,20 @@ Impacto operativo:
 - Eventos no se pierden si falla Gemini/Discord/Postgres.
 - Las acciones externas son reintentables.
 
+Estado actual:
+
+- `init.sql` ya define `events_inbox` y `events_outbox`.
+- Los workflows `Discord Eventos GitHub PetSafe` y `Discord Eventos Trello PetSafe` ya insertan en `events_inbox` con `ON CONFLICT DO NOTHING`.
+- Ambos ingress generan `event_id` y `correlation_id`.
+- Ya existe `Router - Project Events` y consumo basico de `events_outbox`, con replay manual y monitor de DLQ, pero falta DLQ formal.
+
 Como implementarlo:
 
-- Crear migracion SQL.
-- Primer nodo despues de cada trigger: `Normalize Event`.
-- Segundo nodo: `Insert events_inbox ON CONFLICT DO NOTHING`.
-- Router procesa solo eventos nuevos.
-- Action executor escribe outbox antes de llamar a externos.
+- Mantener `Normalize Event` como primer paso canonico.
+- Mantener `Insert events_inbox ON CONFLICT DO NOTHING` como segundo paso.
+- Endurecer `Router - Project Events` para validar payloads y anexar metadata operativa.
+- Completar `Executor - Discord Outbox` con backoff adaptativo y DLQ formal.
+- Agregar replay / DLQ para eventos agotados o dependencias caidas.
 
 Metricas:
 
@@ -820,7 +848,7 @@ Metricas:
 - Retry count.
 - Processing latency.
 
-### 6. Structured logging y observabilidad
+### 6. Structured logging y observabilidad [PARTIAL]
 
 Por que importa:
 
@@ -832,12 +860,18 @@ Impacto operativo:
 - Auditoria.
 - Menor MTTR.
 
+Estado actual:
+
+- `correlation_id` ya existe al entrar por GitHub/Trello.
+- El `errorWorkflow` ya esta configurado en workflows criticos.
+- Las tablas `workflow_runs_audit` y `ai_decisions` existen en `init.sql`.
+- Falta insertar registros reales de forma sistematica y exponer salud operativa.
+
 Como implementarlo:
 
-- Crear `correlation_id` al entrar cada evento.
-- Propagarlo por workflows hijos.
+- Propagar `correlation_id` por workflows hijos.
 - Insertar `workflow_runs_audit`.
-- Configurar error workflow global.
+- Registrar decisiones AI en `ai_decisions`.
 - Activar log streaming si esta disponible.
 - Crear reportes de salud.
 
@@ -1039,18 +1073,18 @@ Metricas:
 
 ### Quick wins
 
-1. Configurar `Monitor PetSafe - Error Handler` como error workflow global para todos los workflows criticos.
-2. Migrar `Gemini Event Analysis1` y `Gemini Executive Summary` a nodos nativos LangChain/Gemini.
-3. Cambiar `GitHub Event Webhook1` por `GitHub Trigger`.
-4. Cambiar `Trello Event Webhook` por `Trello Trigger`.
-5. Migrar PRs GitHub a `GitHub` node.
-6. Migrar cards/members/checklists Trello a `Trello` node donde la UI instalada lo soporte.
-7. Reemplazar SQL interpolado por `queryReplacement`.
-8. Crear tabla `events_inbox`.
-9. Agregar `correlation_id` a todos los eventos y logs.
-10. Cambiar credenciales por defecto en `docker-compose.yml`.
-11. Resolver montaje de `init.sql`.
-12. Actualizar `!ayuda` para quitar referencias a webhooks manuales cuando los triggers nativos entren en produccion.
+1. `DONE` Configurar `Monitor PetSafe - Error Handler` como error workflow global para los workflows criticos.
+2. `DONE` Migrar `Gemini Event Analysis1` y `Gemini Executive Summary` a nodos nativos LangChain/Gemini.
+3. `DONE` Cambiar `GitHub Event Webhook1` por `GitHub Trigger`.
+4. `DONE` Cambiar `Trello Event Webhook` por `Trello Trigger`.
+5. `PENDING` Migrar PRs GitHub a `GitHub` node.
+6. `PENDING` Migrar cards/members/checklists Trello a `Trello` node donde la UI instalada lo soporte.
+7. `PARTIAL` Reemplazar SQL interpolado por `queryReplacement`.
+8. `DONE` Crear tabla `events_inbox`.
+9. `PARTIAL` Agregar `correlation_id` a todos los eventos y logs.
+10. `DONE` Cambiar credenciales por defecto en `docker-compose.yml`.
+11. `DONE` Resolver montaje de `init.sql`.
+12. `DONE` Actualizar `!ayuda` para quitar referencias a webhooks manuales cuando los triggers nativos entren en produccion.
 
 ### Mediano plazo
 
@@ -1203,13 +1237,11 @@ Observability
 
 ## 11. Proximos pasos recomendados
 
-1. Ejecutar migracion de triggers GitHub/Trello en un entorno de prueba.
-2. Crear credenciales n8n oficiales para GitHub y Trello.
-3. Importar workflows nuevos sin activar los webhooks viejos.
-4. Validar equivalencia de payloads con 5 eventos reales por origen.
-5. Cambiar rutas de produccion a triggers nativos.
-6. Desactivar webhooks manuales.
-7. Crear migraciones SQL para inbox/outbox/auditoria.
-8. Mover Gemini HTTP restante a nodos nativos.
-9. Activar error workflow global.
-10. Implementar primera version del `Decision Ledger`.
+1. Terminar la migracion de PRs GitHub y snapshots Trello a nodos nativos donde la UI instalada ya lo soporte.
+2. Propagar `correlation_id` a workflows hijos y comenzar a poblar `workflow_runs_audit`.
+3. Endurecer `Router - Project Events` con reglas por dominio y filtros por severidad.
+4. Completar `events_outbox` con DLQ formal y replay controlado.
+5. Cerrar la deuda restante de SQL interpolado.
+6. Validar en entorno real que los triggers GitHub/Trello produzcan el payload esperado en al menos 5 eventos por origen.
+7. Implementar primera version del `Decision Ledger`.
+8. Activar observabilidad operativa: health report, backlog, retries y fallas por integracion.

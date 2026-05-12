@@ -26,39 +26,9 @@
         "assignments": {
           "assignments": [
             {
-              "id": "w1c01",
-              "name": "TRELLO_API_KEY",
-              "value": "={{ $env.TRELLO_API_KEY }}",
-              "type": "string"
-            },
-            {
-              "id": "w1c02",
-              "name": "TRELLO_TOKEN",
-              "value": "={{ $env.TRELLO_TOKEN }}",
-              "type": "string"
-            },
-            {
               "id": "w1c03",
               "name": "TRELLO_BOARD_ID",
               "value": "={{ $env.TRELLO_BOARD_ID }}",
-              "type": "string"
-            },
-            {
-              "id": "w1c04",
-              "name": "GITHUB_TOKEN",
-              "value": "={{ $env.GITHUB_TOKEN }}",
-              "type": "string"
-            },
-            {
-              "id": "w1c04b",
-              "name": "GITHUB_TOKEN_BACKEND",
-              "value": "={{ $env.GITHUB_TOKEN_BACKEND || $env.GITHUB_TOKEN }}",
-              "type": "string"
-            },
-            {
-              "id": "w1c04f",
-              "name": "GITHUB_TOKEN_FRONTEND",
-              "value": "={{ $env.GITHUB_TOKEN_FRONTEND || $env.GITHUB_TOKEN }}",
               "type": "string"
             },
             {
@@ -86,12 +56,6 @@
               "type": "string"
             },
             {
-              "id": "w1c08",
-              "name": "GEMINI_API_KEY",
-              "value": "={{ $env.GEMINI_API_KEY }}",
-              "type": "string"
-            },
-            {
               "id": "w1c09",
               "name": "DISCORD_WEBHOOK_URL",
               "value": "={{ $env.DISCORD_WEBHOOK_URL }}",
@@ -102,7 +66,7 @@
         "options": {}
       },
       "id": "d852041c-e454-4a8b-bf73-71e6dd3e74a5",
-      "name": "Configuración",
+      "name": "Configuraci\u00f3n",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
@@ -112,18 +76,10 @@
     },
     {
       "parameters": {
-        "url": "=https://api.trello.com/1/boards/{{ $node[\"Configuración\"].json.TRELLO_BOARD_ID }}/cards",
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Configuraci\u00f3n\"].json.TRELLO_BOARD_ID }}/cards",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            {
-              "name": "key",
-              "value": "={{ $node[\"Configuración\"].json.TRELLO_API_KEY }}"
-            },
-            {
-              "name": "token",
-              "value": "={{ $node[\"Configuración\"].json.TRELLO_TOKEN }}"
-            },
             {
               "name": "fields",
               "value": "name,desc,due,dueComplete,idMembers,idList,dateLastActivity,labels"
@@ -138,7 +94,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "trelloApi"
       },
       "id": "cab166a4-b4b2-4ee3-8754-12dc9669b7f2",
       "name": "Trello Cards",
@@ -147,80 +105,64 @@
       "position": [
         -10992,
         3440
-      ]
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
     },
     {
       "parameters": {
-        "url": "=https://api.trello.com/1/boards/{{ $node[\"Configuración\"].json.TRELLO_BOARD_ID }}/lists",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "key",
-              "value": "={{ $node[\"Configuración\"].json.TRELLO_API_KEY }}"
-            },
-            {
-              "name": "token",
-              "value": "={{ $node[\"Configuración\"].json.TRELLO_TOKEN }}"
-            }
-          ]
-        },
-        "options": {}
+        "resource": "board",
+        "operation": "getLists",
+        "id": "={{ $node[\"Configuraci\\u00f3n\"].json.TRELLO_BOARD_ID }}",
+        "limit": 50
       },
       "id": "bea3f1fe-637b-4d7c-9cb4-415aea8594fb",
       "name": "Trello Lists",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.trello",
+      "typeVersion": 1,
       "position": [
         -10384,
         5392
-      ]
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
     },
     {
       "parameters": {
-        "url": "=https://api.trello.com/1/boards/{{ $node[\"Configuración\"].json.TRELLO_BOARD_ID }}/members",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "key",
-              "value": "={{ $node[\"Configuración\"].json.TRELLO_API_KEY }}"
-            },
-            {
-              "name": "token",
-              "value": "={{ $node[\"Configuración\"].json.TRELLO_TOKEN }}"
-            },
-            {
-              "name": "fields",
-              "value": "fullName,username"
-            }
-          ]
-        },
-        "options": {}
+        "resource": "board",
+        "operation": "getMembers",
+        "id": "={{ $node[\"Configuraci\\u00f3n\"].json.TRELLO_BOARD_ID }}",
+        "limit": 50
       },
       "id": "dbf7e4af-88d1-4bee-bec5-5e5481a3d2bb",
       "name": "Trello Members",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.trello",
+      "typeVersion": 1,
       "position": [
         -10256,
         5584
-      ]
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
     },
     {
       "parameters": {
-        "url": "=https://api.trello.com/1/boards/{{ $node[\"Configuración\"].json.TRELLO_BOARD_ID }}/checklists",
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Configuraci\u00f3n\"].json.TRELLO_BOARD_ID }}/checklists",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            {
-              "name": "key",
-              "value": "={{ $node[\"Configuración\"].json.TRELLO_API_KEY }}"
-            },
-            {
-              "name": "token",
-              "value": "={{ $node[\"Configuración\"].json.TRELLO_TOKEN }}"
-            },
             {
               "name": "fields",
               "value": "name,idCard"
@@ -231,7 +173,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "trelloApi"
       },
       "id": "8e0abe61-cc7a-4aae-84da-2864c7252c43",
       "name": "Trello Checklists",
@@ -240,18 +184,20 @@
       "position": [
         -10208,
         4720
-      ]
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/repos/{{ $node[\"Configuración\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Configuración\"].json.GITHUB_REPO_BACKEND }}/commits?per_page=30",
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_REPO_BACKEND }}/commits?per_page=30",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $node[\"Configuración\"].json.GITHUB_TOKEN_BACKEND || $node[\"Configuración\"].json.GITHUB_TOKEN }}"
-            },
             {
               "name": "Accept",
               "value": "application/vnd.github+json"
@@ -262,7 +208,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi"
       },
       "id": "c8396d68-ff00-4258-aabb-6de1b25630d0",
       "name": "GitHub Back Commits",
@@ -271,18 +219,20 @@
       "position": [
         -10416,
         5712
-      ]
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "Ef6o1UdEiDu28Ibq",
+          "name": "backend-account"
+        }
+      }
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/repos/{{ $node[\"Configuración\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Configuración\"].json.GITHUB_REPO_FRONTEND }}/commits?per_page=30",
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_REPO_FRONTEND }}/commits?per_page=30",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $node[\"Configuración\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Configuración\"].json.GITHUB_TOKEN }}"
-            },
             {
               "name": "Accept",
               "value": "application/vnd.github+json"
@@ -293,7 +243,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi"
       },
       "id": "181e2c60-a605-48e9-8607-c38f7f26cb1a",
       "name": "GitHub Front Commits",
@@ -302,80 +254,68 @@
       "position": [
         -10288,
         5040
-      ]
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "dkFcPmeSEHWQKN9i",
+          "name": "GitHub account"
+        }
+      }
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/repos/{{ $node[\"Configuración\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Configuración\"].json.GITHUB_REPO_BACKEND }}/pulls?state=all&per_page=20",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $node[\"Configuración\"].json.GITHUB_TOKEN_BACKEND || $node[\"Configuración\"].json.GITHUB_TOKEN }}"
-            },
-            {
-              "name": "Accept",
-              "value": "application/vnd.github+json"
-            },
-            {
-              "name": "User-Agent",
-              "value": "n8n-agent"
-            }
-          ]
-        },
-        "options": {}
+        "resource": "pullRequest",
+        "operation": "getAll",
+        "owner": "={{ $node[\"Configuraci\\u00f3n\"].json.GITHUB_OWNER_BACKEND }}",
+        "repository": "={{ $node[\"Configuraci\\u00f3n\"].json.GITHUB_REPO_BACKEND }}",
+        "state": "all",
+        "limit": 15
       },
       "id": "b1febec1-f38a-48ce-8fe3-208a5bc854e8",
       "name": "GitHub Back PRs",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
       "position": [
         -10288,
         5216
-      ]
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "Ef6o1UdEiDu28Ibq",
+          "name": "backend-account"
+        }
+      }
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/repos/{{ $node[\"Configuración\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Configuración\"].json.GITHUB_REPO_FRONTEND }}/pulls?state=all&per_page=20",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $node[\"Configuración\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Configuración\"].json.GITHUB_TOKEN }}"
-            },
-            {
-              "name": "Accept",
-              "value": "application/vnd.github+json"
-            },
-            {
-              "name": "User-Agent",
-              "value": "n8n-agent"
-            }
-          ]
-        },
-        "options": {}
+        "resource": "pullRequest",
+        "operation": "getAll",
+        "owner": "={{ $node[\"Configuraci\\u00f3n\"].json.GITHUB_OWNER_FRONTEND }}",
+        "repository": "={{ $node[\"Configuraci\\u00f3n\"].json.GITHUB_REPO_FRONTEND }}",
+        "state": "all",
+        "limit": 15
       },
       "id": "00982f97-4212-4728-a6f1-84bde6161222",
       "name": "GitHub Front PRs",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
       "position": [
         -10272,
         4848
-      ]
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "dkFcPmeSEHWQKN9i",
+          "name": "GitHub account"
+        }
+      }
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/repos/{{ $node[\"Configuración\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Configuración\"].json.GITHUB_REPO_BACKEND }}/actions/runs?per_page=5",
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_REPO_BACKEND }}/actions/runs?per_page=5",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $node[\"Configuración\"].json.GITHUB_TOKEN_BACKEND || $node[\"Configuración\"].json.GITHUB_TOKEN }}"
-            },
             {
               "name": "Accept",
               "value": "application/vnd.github+json"
@@ -386,7 +326,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi"
       },
       "id": "e10df617-e5c3-45f1-a1c0-821e417a1e1f",
       "name": "GitHub Back CI Runs",
@@ -395,18 +337,20 @@
       "position": [
         -10160,
         4544
-      ]
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "Ef6o1UdEiDu28Ibq",
+          "name": "backend-account"
+        }
+      }
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/repos/{{ $node[\"Configuración\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Configuración\"].json.GITHUB_REPO_FRONTEND }}/actions/runs?per_page=5",
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Configuraci\u00f3n\"].json.GITHUB_REPO_FRONTEND }}/actions/runs?per_page=5",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $node[\"Configuración\"].json.GITHUB_TOKEN_FRONTEND || $node[\"Configuración\"].json.GITHUB_TOKEN }}"
-            },
             {
               "name": "Accept",
               "value": "application/vnd.github+json"
@@ -417,7 +361,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi"
       },
       "id": "a2f663ca-abf3-4da8-9d3c-9ccf107f2233",
       "name": "GitHub Front CI Runs",
@@ -426,7 +372,13 @@
       "position": [
         -10112,
         4192
-      ]
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "dkFcPmeSEHWQKN9i",
+          "name": "GitHub account"
+        }
+      }
     },
     {
       "parameters": {
@@ -485,10 +437,10 @@
     },
     {
       "parameters": {
-        "jsCode": "const now = new Date();\nconst items = $input.all().map(i => i.json);\n\nconst MEMBER_MAP = {\n  'Fernando Joel Bonilla Guerrero': { github: 'JoelBonillaG', initials: 'FG' },\n  'Joel Bonilla': { github: 'JoelBonillaG', initials: 'FG' },\n  'David Manjarres': { github: 'DRTX2', initials: 'DM' },\n  'David Oswaldo Manjarres Quintero': { github: 'DRTX2', initials: 'DM' },\n  'David Josue Barragan Pozo': { github: 'DavidJosueP2', initials: 'DP' },\n  'David Josué Barragán Pozo': { github: 'DavidJosueP2', initials: 'DP' },\n  'David Barragán Pozo': { github: 'DavidJosueP2', initials: 'DP' },\n  'David Barragan Pozo': { github: 'DavidJosueP2', initials: 'DP' },\n  'Josue Joel Garcia Abata': { github: 'JosueGarciaAbata', initials: 'JA' },\n  'Josué Joel García Abata': { github: 'JosueGarciaAbata', initials: 'JA' },\n  'Josué García Abata': { github: 'JosueGarciaAbata', initials: 'JA' },\n  'Josue Garcia Abata': { github: 'JosueGarciaAbata', initials: 'JA' }\n};\n\nfunction resolveMember(fullName) {\n  if (!fullName) return { github: null, initials: '??' };\n  if (MEMBER_MAP[fullName]) return MEMBER_MAP[fullName];\n  const norm = fullName.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  for (const [k, v] of Object.entries(MEMBER_MAP)) {\n    if (k.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '') === norm) return v;\n  }\n  const parts = fullName.split(' ').filter(Boolean);\n  const initials = (parts[0]?.[0] || '?') + (parts[parts.length - 1]?.[0] || '');\n  return { github: null, initials: initials.toUpperCase() };\n}\n\nconst backRepo = $node['Configuración'].json.GITHUB_REPO_BACKEND;\nconst frontRepo = $node['Configuración'].json.GITHUB_REPO_FRONTEND;\n\nlet cards = [], lists = [], members = [], historial = [], hitos = [], checklists = [];\nlet bRuns = [], fRuns = [];\n\nitems.forEach(d => {\n  if (!d || typeof d !== 'object') return;\n  if (d.workflow_runs !== undefined && Array.isArray(d.workflow_runs)) {\n    const first = d.workflow_runs[0];\n    const repoName = first?.repository?.name || first?.head_repository?.name || '';\n    if (repoName === backRepo) bRuns = d.workflow_runs;\n    else if (repoName === frontRepo) fRuns = d.workflow_runs;\n    else if (!bRuns.length) bRuns = d.workflow_runs;\n    else fRuns = d.workflow_runs;\n    return;\n  }\n  if (d.idCard && Array.isArray(d.checkItems)) { checklists.push(d); return; }\n  if (d.nombre && d.tipo && d.fecha_fin !== undefined) { hitos.push(d); return; }\n  if (d.fecha_ejecucion !== undefined) { historial.push(d); return; }\n  if (d.id && d.name && d.idList !== undefined && d.due !== undefined) { cards.push(d); return; }\n  if (d.id && d.name && d.closed !== undefined && !d.idList) { lists.push(d); return; }\n  if (d.id && (d.fullName || d.username) && !d.idList && !d.name) { members.push(d); return; }\n});\n\nconst allCommits = items.filter(d => d && d.sha && d.commit);\nconst bCommits = allCommits.filter(c => c.url && c.url.includes('/' + backRepo + '/'));\nconst fCommits = allCommits.filter(c => c.url && c.url.includes('/' + frontRepo + '/'));\n\nconst allPRs = items.filter(d => d && d.number && d.state && d.html_url?.includes('/pull/'));\nconst bPRs = allPRs.filter(p => p.base?.repo?.name === backRepo);\nconst fPRs = allPRs.filter(p => p.base?.repo?.name === frontRepo);\n\nconst listaById = {};\nlists.forEach(l => { listaById[l.id] = l.name; });\nconst miembroById = {};\nmembers.forEach(m => { miembroById[m.id] = m.fullName || m.username; });\n\nconst checklistsByCard = {};\nchecklists.forEach(ch => {\n  if (!checklistsByCard[ch.idCard]) checklistsByCard[ch.idCard] = [];\n  checklistsByCard[ch.idCard].push(ch);\n});\n\nfunction normFase(s) {\n  return (s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n}\n\nconst tareasRaw = cards.map(c => {\n  const due = c.due ? new Date(c.due) : null;\n  const vencida = due && !c.dueComplete && due < now;\n  const diasRestantes = due ? Math.floor((due - now) / 86400000) : null;\n  const atts = c.attachments || [];\n  const enlaces = atts.filter(a => a.url && a.isUpload === false).map(a => ({ name: a.name || a.url, url: a.url }));\n  const archivos = atts.filter(a => a.isUpload === true).map(a => ({ name: a.name, url: a.url, mimeType: a.mimeType || '' }));\n  const pdfs = archivos.filter(a => (a.mimeType || '').includes('pdf') || (a.name || '').toLowerCase().endsWith('.pdf'));\n  const chArr = checklistsByCard[c.id] || [];\n  const chTotal = chArr.reduce((s, ch) => s + (ch.checkItems?.length || 0), 0);\n  const chDone = chArr.reduce((s, ch) => s + (ch.checkItems?.filter(i => i.state === 'complete').length || 0), 0);\n  const daysSince = c.dateLastActivity ? Math.floor((now - new Date(c.dateLastActivity)) / 86400000) : null;\n  const responsables = (c.idMembers || []).map(id => miembroById[id] || id);\n  return {\n    id: c.id,\n    nombre: c.name,\n    lista: listaById[c.idList] || 'desconocida',\n    completada: !!c.dueComplete,\n    fecha_limite: c.due,\n    dias_restantes: diasRestantes,\n    vencida: !!vencida,\n    responsables,\n    responsables_ids: c.idMembers || [],\n    adjuntos_count: atts.length,\n    enlaces,\n    archivos,\n    pdfs_count: pdfs.length,\n    checklist_total: chTotal,\n    checklist_done: chDone,\n    checklist_pct: chTotal > 0 ? Math.round(chDone / chTotal * 100) : null,\n    dias_sin_actividad: daysSince,\n    dateLastActivity: c.dateLastActivity,\n    stale: daysSince !== null && daysSince > 5 && !c.dueComplete,\n    sin_asignar: (c.idMembers || []).length === 0,\n    sin_fecha: !c.due\n  };\n});\n\nconst tareas = tareasRaw.filter(t => t.nombre && t.nombre.trim() !== '.');\n\nconst fases = {};\nfor (const t of tareas) {\n  const key = normFase(t.lista);\n  if (!fases[key]) fases[key] = { nombre: t.lista, tareas: [], completadas: 0, vencidas: 0, pendientes: 0 };\n  fases[key].tareas.push(t);\n  if (t.completada) fases[key].completadas++;\n  else if (t.vencida) fases[key].vencidas++;\n  else fases[key].pendientes++;\n}\nfor (const f of Object.values(fases)) {\n  f.total = f.tareas.length;\n  f.pct = f.total > 0 ? Math.round(f.completadas / f.total * 100) : 0;\n  if (f.vencidas > 0) f.semaforo = 'rojo';\n  else if (f.pct >= 80) f.semaforo = 'verde';\n  else if (f.pct >= 40) f.semaforo = 'amarillo';\n  else f.semaforo = 'gris';\n}\n\nconst vencidas = tareas.filter(t => t.vencida);\nconst completadas = tareas.filter(t => t.completada);\nconst pendientes = tareas.filter(t => !t.completada && !t.vencida);\nconst stales = tareas.filter(t => t.stale);\nconst sinAsignar = tareas.filter(t => t.sin_asignar);\nconst sinFecha = tareas.filter(t => t.sin_fecha);\nconst progreso = tareas.length > 0 ? Math.round(completadas.length / tareas.length * 100) : 0;\n\nconst sevenDaysAgo = new Date(now - 7 * 86400000);\nconst fourteenDaysAgo = new Date(now - 14 * 86400000);\nconst thirtyDaysAgo = new Date(now - 30 * 86400000);\n\nconst completadas7d = completadas.filter(t => t.dateLastActivity && new Date(t.dateLastActivity) >= sevenDaysAgo).length;\nconst velocidad = (completadas7d / 7).toFixed(2);\nconst aTiempo = completadas.filter(t => !t.fecha_limite || new Date(t.fecha_limite) >= new Date(t.dateLastActivity || 0)).length;\nconst pctATiempo = completadas.length > 0 ? Math.round(aTiempo / completadas.length * 100) : 100;\n\nconst commitsRecent = [...bCommits, ...fCommits].filter(c => c.commit?.author?.date && new Date(c.commit.author.date) >= fourteenDaysAgo);\nconst commitsPorDia = (commitsRecent.length / 14).toFixed(2);\n\nconst prsAbiertos = [...bPRs, ...fPRs].filter(p => p.state === 'open');\nconst prOpenTimes = prsAbiertos.map(p => (now - new Date(p.created_at)) / 86400000);\nconst avgPROpenDays = prOpenTimes.length > 0 ? (prOpenTimes.reduce((a, b) => a + b, 0) / prOpenTimes.length).toFixed(1) : '0';\nconst prsRecientes = [...bPRs, ...fPRs].filter(p => new Date(p.created_at) >= thirtyDaysAgo);\nconst mergeados = prsRecientes.filter(p => p.merged_at).length;\nconst cerrados = prsRecientes.filter(p => p.state === 'closed').length;\nconst mergeRatio = cerrados > 0 ? Math.round(mergeados / cerrados * 100) : 0;\n\nconst convRegex = /^(feat|fix|docs|style|refactor|test|chore|perf|ci|build)(\\(.+\\))?:/i;\nconst convCommits = commitsRecent.filter(c => convRegex.test((c.commit?.message || '').split('\\n')[0]));\nconst pctConv = commitsRecent.length > 0 ? Math.round(convCommits.length / commitsRecent.length * 100) : 0;\n\nconst authorsRecent = new Set(commitsRecent.map(c => c.author?.login || c.commit?.author?.email || '?').filter(x => x !== '?'));\nconst busFactor = authorsRecent.size;\n\nconst lastBackCommit = bCommits[0]?.commit?.author?.date;\nconst lastFrontCommit = fCommits[0]?.commit?.author?.date;\nconst silenceBack = lastBackCommit ? Math.floor((now - new Date(lastBackCommit)) / 86400000) : null;\nconst silenceFront = lastFrontCommit ? Math.floor((now - new Date(lastFrontCommit)) / 86400000) : null;\n\nconst bLastRun = bRuns[0];\nconst fLastRun = fRuns[0];\nconst ciBack = bLastRun ? { status: bLastRun.conclusion || bLastRun.status, date: bLastRun.updated_at, name: bLastRun.name, url: bLastRun.html_url, branch: bLastRun.head_branch, actor: bLastRun.actor?.login } : null;\nconst ciFront = fLastRun ? { status: fLastRun.conclusion || fLastRun.status, date: fLastRun.updated_at, name: fLastRun.name, url: fLastRun.html_url, branch: fLastRun.head_branch, actor: fLastRun.actor?.login } : null;\n\nconst hoyStr = now.toISOString().slice(0, 10);\nconst proximos = hitos.filter(h => h.fecha_fin >= hoyStr && !h.completado).slice(0, 5).map(h => ({\n  nombre: h.nombre, tipo: h.tipo, fecha_fin: h.fecha_fin,\n  dias_faltan: Math.floor((new Date(h.fecha_fin) - now) / 86400000),\n  responsable: h.responsable\n}));\nconst fin = hitos.find(h => h.tipo === 'entrega_final');\nconst diasHastaFin = fin ? Math.floor((new Date(fin.fecha_fin) - now) / 86400000) : null;\n\nlet proyeccion = 'sin datos';\nif (diasHastaFin !== null && pendientes.length > 0) {\n  const necesaria = pendientes.length / Math.max(diasHastaFin, 1);\n  if (parseFloat(velocidad) >= necesaria) proyeccion = 'on-track';\n  else if (parseFloat(velocidad) >= necesaria * 0.7) proyeccion = 'riesgo';\n  else proyeccion = 'retrasado';\n}\n\nconst workPerPerson = {};\nfor (const t of tareas) {\n  for (const r of t.responsables) {\n    const m = resolveMember(r);\n    if (!workPerPerson[r]) workPerPerson[r] = { trello_name: r, initials: m.initials, github: m.github, tareas_total: 0, tareas_done: 0, tareas_pending: 0, tareas_overdue: 0, commits_14d: 0 };\n    workPerPerson[r].tareas_total++;\n    if (t.completada) workPerPerson[r].tareas_done++;\n    else if (t.vencida) workPerPerson[r].tareas_overdue++;\n    else workPerPerson[r].tareas_pending++;\n  }\n}\nfor (const c of commitsRecent) {\n  const login = c.author?.login;\n  if (!login) continue;\n  for (const p of Object.values(workPerPerson)) {\n    if (p.github === login) p.commits_14d++;\n  }\n}\nconst ranking = Object.values(workPerPerson).sort((a, b) => (b.tareas_done + b.commits_14d) - (a.tareas_done + a.commits_14d));\n\nlet tendencia = 'sin historial suficiente';\nif (historial.length >= 3) {\n  const conProblemas = historial.filter(h => h.hay_problemas).length;\n  tendencia = conProblemas >= 3 ? conProblemas + '/' + historial.length + ' con problemas' : 'estable';\n}\n\nlet diffPrev = null;\nif (historial.length > 0) {\n  const prev = historial[0];\n  const prevKpis = (typeof prev.kpis_json === 'string' ? JSON.parse(prev.kpis_json) : prev.kpis_json) || {};\n  diffPrev = {\n    progreso: progreso - (prev.progreso_pct || 0),\n    vencidas: vencidas.length - (prev.tareas_vencidas || 0),\n    commits_14d: commitsRecent.length - (prevKpis.commits_14d || 0)\n  };\n}\n\nfunction formatCommits(list, limit) {\n  return list.slice(0, limit).map(c => ({\n    sha: (c.sha || '').slice(0, 7),\n    autor: c.commit?.author?.name || c.author?.login || '?',\n    login: c.author?.login || null,\n    mensaje: (c.commit?.message || '').split('\\n')[0].slice(0, 120),\n    fecha: c.commit?.author?.date,\n    url: c.html_url\n  }));\n}\nconst topBack = formatCommits(bCommits, 5);\nconst topFront = formatCommits(fCommits, 5);\n\nconst kpis = {\n  velocidad_tareas_por_dia: parseFloat(velocidad),\n  completadas_7d: completadas7d,\n  pct_a_tiempo: pctATiempo,\n  progreso_sprint_pct: progreso,\n  commits_por_dia: parseFloat(commitsPorDia),\n  commits_14d: commitsRecent.length,\n  pct_commits_convencionales: pctConv,\n  bus_factor_14d: busFactor,\n  silencio_back_dias: silenceBack,\n  silencio_front_dias: silenceFront,\n  pr_open_time_dias: parseFloat(avgPROpenDays),\n  pr_merge_ratio_30d: mergeRatio,\n  dias_hasta_fin: diasHastaFin,\n  proyeccion\n};\n\nconst problemas = [];\nif (vencidas.length > 0) problemas.push({ tipo: 'tareas_vencidas', severidad: 'alta', count: vencidas.length });\nif (proyeccion === 'retrasado') problemas.push({ tipo: 'proyeccion_retraso', severidad: 'alta' });\nif (proyeccion === 'riesgo') problemas.push({ tipo: 'proyeccion_riesgo', severidad: 'media' });\nif (parseFloat(avgPROpenDays) > 7 && prsAbiertos.length > 0) problemas.push({ tipo: 'pr_stale', severidad: 'media', count: prsAbiertos.filter(p => (now - new Date(p.updated_at)) / 86400000 > 7).length });\nif (parseFloat(commitsPorDia) < 0.5 && diasHastaFin !== null && diasHastaFin < 45) problemas.push({ tipo: 'baja_actividad', severidad: 'media' });\nif (ciBack && ciBack.status === 'failure') problemas.push({ tipo: 'ci_back_roto', severidad: 'alta' });\nif (ciFront && ciFront.status === 'failure') problemas.push({ tipo: 'ci_front_roto', severidad: 'alta' });\nif (stales.length > 3) problemas.push({ tipo: 'cards_stale', severidad: 'media', count: stales.length });\nif (busFactor < 2 && commitsRecent.length > 0 && diasHastaFin !== null && diasHastaFin < 45) problemas.push({ tipo: 'bus_factor_bajo', severidad: 'media' });\nif (sinAsignar.length > 0) problemas.push({ tipo: 'cards_sin_asignar', severidad: 'baja', count: sinAsignar.length });\n\nconst sev = problemas.map(p => p.severidad);\nconst severidadMax = sev.includes('alta') ? 'alta' : sev.includes('media') ? 'media' : 'baja';\n\nreturn [{\n  json: {\n    fecha: now.toISOString(),\n    hay_problemas: problemas.length > 0,\n    total_tarjetas: tareas.length,\n    total_completadas: completadas.length,\n    total_pendientes: pendientes.length,\n    tareas_vencidas_list: vencidas,\n    tareas_vencidas_count: vencidas.length,\n    progreso_pct: progreso,\n    fases,\n    ranking,\n    cards_stale: stales,\n    cards_sin_asignar: sinAsignar,\n    cards_sin_fecha: sinFecha,\n    kpis,\n    hitos_proximos: proximos,\n    tendencia_historial: tendencia,\n    diff_previa: diffPrev,\n    problemas_detectados: problemas,\n    severidad_max: severidadMax,\n    cantidad_problemas: problemas.length,\n    github: {\n      commits_back: bCommits.length,\n      commits_front: fCommits.length,\n      prs_abiertos_back: bPRs.filter(p => p.state === 'open').length,\n      prs_abiertos_front: fPRs.filter(p => p.state === 'open').length,\n      prs_detalle_abiertos: prsAbiertos.map(p => ({ numero: p.number, titulo: p.title, autor: p.user?.login, dias_abierto: Math.floor((now - new Date(p.created_at)) / 86400000), repo: p.base?.repo?.name, url: p.html_url })),\n      top_commits_back: topBack,\n      top_commits_front: topFront,\n      ci_back: ciBack,\n      ci_front: ciFront,\n      deploy_front_url: 'https://pet-safe-six.vercel.app',\n      back_repo_url: 'https://github.com/' + $node['Configuración'].json.GITHUB_OWNER_BACKEND + '/' + backRepo,\n      front_repo_url: 'https://github.com/' + $node['Configuración'].json.GITHUB_OWNER_FRONTEND + '/' + frontRepo\n    },\n    snapshot_tareas: tareas,\n    gemini_key: $node['Configuración'].json.GEMINI_API_KEY,\n    discord_url: $node['Configuración'].json.DISCORD_WEBHOOK_URL\n  }\n}];"
+        "jsCode": "const now = new Date();\nconst items = $input.all().map(i => i.json);\n\nconst MEMBER_MAP = {\n  'Fernando Joel Bonilla Guerrero': { github: 'JoelBonillaG', initials: 'FG' },\n  'Joel Bonilla': { github: 'JoelBonillaG', initials: 'FG' },\n  'David Manjarres': { github: 'DRTX2', initials: 'DM' },\n  'David Oswaldo Manjarres Quintero': { github: 'DRTX2', initials: 'DM' },\n  'David Josue Barragan Pozo': { github: 'DavidJosueP2', initials: 'DP' },\n  'David Josu\u00e9 Barrag\u00e1n Pozo': { github: 'DavidJosueP2', initials: 'DP' },\n  'David Barrag\u00e1n Pozo': { github: 'DavidJosueP2', initials: 'DP' },\n  'David Barragan Pozo': { github: 'DavidJosueP2', initials: 'DP' },\n  'Josue Joel Garcia Abata': { github: 'JosueGarciaAbata', initials: 'JA' },\n  'Josu\u00e9 Joel Garc\u00eda Abata': { github: 'JosueGarciaAbata', initials: 'JA' },\n  'Josu\u00e9 Garc\u00eda Abata': { github: 'JosueGarciaAbata', initials: 'JA' },\n  'Josue Garcia Abata': { github: 'JosueGarciaAbata', initials: 'JA' }\n};\n\nfunction resolveMember(fullName) {\n  if (!fullName) return { github: null, initials: '??' };\n  if (MEMBER_MAP[fullName]) return MEMBER_MAP[fullName];\n  const norm = fullName.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  for (const [k, v] of Object.entries(MEMBER_MAP)) {\n    if (k.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '') === norm) return v;\n  }\n  const parts = fullName.split(' ').filter(Boolean);\n  const initials = (parts[0]?.[0] || '?') + (parts[parts.length - 1]?.[0] || '');\n  return { github: null, initials: initials.toUpperCase() };\n}\n\nconst backRepo = $node['Configuraci\u00f3n'].json.GITHUB_REPO_BACKEND;\nconst frontRepo = $node['Configuraci\u00f3n'].json.GITHUB_REPO_FRONTEND;\n\nlet cards = [], lists = [], members = [], historial = [], hitos = [], checklists = [];\nlet bRuns = [], fRuns = [];\n\nitems.forEach(d => {\n  if (!d || typeof d !== 'object') return;\n  if (d.workflow_runs !== undefined && Array.isArray(d.workflow_runs)) {\n    const first = d.workflow_runs[0];\n    const repoName = first?.repository?.name || first?.head_repository?.name || '';\n    if (repoName === backRepo) bRuns = d.workflow_runs;\n    else if (repoName === frontRepo) fRuns = d.workflow_runs;\n    else if (!bRuns.length) bRuns = d.workflow_runs;\n    else fRuns = d.workflow_runs;\n    return;\n  }\n  if (d.idCard && Array.isArray(d.checkItems)) { checklists.push(d); return; }\n  if (d.nombre && d.tipo && d.fecha_fin !== undefined) { hitos.push(d); return; }\n  if (d.fecha_ejecucion !== undefined) { historial.push(d); return; }\n  if (d.id && d.name && d.idList !== undefined && d.due !== undefined) { cards.push(d); return; }\n  if (d.id && d.name && d.closed !== undefined && !d.idList) { lists.push(d); return; }\n  if (d.id && (d.fullName || d.username) && !d.idList && !d.name) { members.push(d); return; }\n});\n\nconst allCommits = items.filter(d => d && d.sha && d.commit);\nconst bCommits = allCommits.filter(c => c.url && c.url.includes('/' + backRepo + '/'));\nconst fCommits = allCommits.filter(c => c.url && c.url.includes('/' + frontRepo + '/'));\n\nconst allPRs = items.filter(d => d && d.number && d.state && d.html_url?.includes('/pull/'));\nconst bPRs = allPRs.filter(p => p.base?.repo?.name === backRepo);\nconst fPRs = allPRs.filter(p => p.base?.repo?.name === frontRepo);\n\nconst listaById = {};\nlists.forEach(l => { listaById[l.id] = l.name; });\nconst miembroById = {};\nmembers.forEach(m => { miembroById[m.id] = m.fullName || m.username; });\n\nconst checklistsByCard = {};\nchecklists.forEach(ch => {\n  if (!checklistsByCard[ch.idCard]) checklistsByCard[ch.idCard] = [];\n  checklistsByCard[ch.idCard].push(ch);\n});\n\nfunction normFase(s) {\n  return (s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n}\n\nconst tareasRaw = cards.map(c => {\n  const due = c.due ? new Date(c.due) : null;\n  const vencida = due && !c.dueComplete && due < now;\n  const diasRestantes = due ? Math.floor((due - now) / 86400000) : null;\n  const atts = c.attachments || [];\n  const enlaces = atts.filter(a => a.url && a.isUpload === false).map(a => ({ name: a.name || a.url, url: a.url }));\n  const archivos = atts.filter(a => a.isUpload === true).map(a => ({ name: a.name, url: a.url, mimeType: a.mimeType || '' }));\n  const pdfs = archivos.filter(a => (a.mimeType || '').includes('pdf') || (a.name || '').toLowerCase().endsWith('.pdf'));\n  const chArr = checklistsByCard[c.id] || [];\n  const chTotal = chArr.reduce((s, ch) => s + (ch.checkItems?.length || 0), 0);\n  const chDone = chArr.reduce((s, ch) => s + (ch.checkItems?.filter(i => i.state === 'complete').length || 0), 0);\n  const daysSince = c.dateLastActivity ? Math.floor((now - new Date(c.dateLastActivity)) / 86400000) : null;\n  const responsables = (c.idMembers || []).map(id => miembroById[id] || id);\n  return {\n    id: c.id,\n    nombre: c.name,\n    lista: listaById[c.idList] || 'desconocida',\n    completada: !!c.dueComplete,\n    fecha_limite: c.due,\n    dias_restantes: diasRestantes,\n    vencida: !!vencida,\n    responsables,\n    responsables_ids: c.idMembers || [],\n    adjuntos_count: atts.length,\n    enlaces,\n    archivos,\n    pdfs_count: pdfs.length,\n    checklist_total: chTotal,\n    checklist_done: chDone,\n    checklist_pct: chTotal > 0 ? Math.round(chDone / chTotal * 100) : null,\n    dias_sin_actividad: daysSince,\n    dateLastActivity: c.dateLastActivity,\n    stale: daysSince !== null && daysSince > 5 && !c.dueComplete,\n    sin_asignar: (c.idMembers || []).length === 0,\n    sin_fecha: !c.due\n  };\n});\n\nconst tareas = tareasRaw.filter(t => t.nombre && t.nombre.trim() !== '.');\n\nconst fases = {};\nfor (const t of tareas) {\n  const key = normFase(t.lista);\n  if (!fases[key]) fases[key] = { nombre: t.lista, tareas: [], completadas: 0, vencidas: 0, pendientes: 0 };\n  fases[key].tareas.push(t);\n  if (t.completada) fases[key].completadas++;\n  else if (t.vencida) fases[key].vencidas++;\n  else fases[key].pendientes++;\n}\nfor (const f of Object.values(fases)) {\n  f.total = f.tareas.length;\n  f.pct = f.total > 0 ? Math.round(f.completadas / f.total * 100) : 0;\n  if (f.vencidas > 0) f.semaforo = 'rojo';\n  else if (f.pct >= 80) f.semaforo = 'verde';\n  else if (f.pct >= 40) f.semaforo = 'amarillo';\n  else f.semaforo = 'gris';\n}\n\nconst vencidas = tareas.filter(t => t.vencida);\nconst completadas = tareas.filter(t => t.completada);\nconst pendientes = tareas.filter(t => !t.completada && !t.vencida);\nconst stales = tareas.filter(t => t.stale);\nconst sinAsignar = tareas.filter(t => t.sin_asignar);\nconst sinFecha = tareas.filter(t => t.sin_fecha);\nconst progreso = tareas.length > 0 ? Math.round(completadas.length / tareas.length * 100) : 0;\n\nconst sevenDaysAgo = new Date(now - 7 * 86400000);\nconst fourteenDaysAgo = new Date(now - 14 * 86400000);\nconst thirtyDaysAgo = new Date(now - 30 * 86400000);\n\nconst completadas7d = completadas.filter(t => t.dateLastActivity && new Date(t.dateLastActivity) >= sevenDaysAgo).length;\nconst velocidad = (completadas7d / 7).toFixed(2);\nconst aTiempo = completadas.filter(t => !t.fecha_limite || new Date(t.fecha_limite) >= new Date(t.dateLastActivity || 0)).length;\nconst pctATiempo = completadas.length > 0 ? Math.round(aTiempo / completadas.length * 100) : 100;\n\nconst commitsRecent = [...bCommits, ...fCommits].filter(c => c.commit?.author?.date && new Date(c.commit.author.date) >= fourteenDaysAgo);\nconst commitsPorDia = (commitsRecent.length / 14).toFixed(2);\n\nconst prsAbiertos = [...bPRs, ...fPRs].filter(p => p.state === 'open');\nconst prOpenTimes = prsAbiertos.map(p => (now - new Date(p.created_at)) / 86400000);\nconst avgPROpenDays = prOpenTimes.length > 0 ? (prOpenTimes.reduce((a, b) => a + b, 0) / prOpenTimes.length).toFixed(1) : '0';\nconst prsRecientes = [...bPRs, ...fPRs].filter(p => new Date(p.created_at) >= thirtyDaysAgo);\nconst mergeados = prsRecientes.filter(p => p.merged_at).length;\nconst cerrados = prsRecientes.filter(p => p.state === 'closed').length;\nconst mergeRatio = cerrados > 0 ? Math.round(mergeados / cerrados * 100) : 0;\n\nconst convRegex = /^(feat|fix|docs|style|refactor|test|chore|perf|ci|build)(\\(.+\\))?:/i;\nconst convCommits = commitsRecent.filter(c => convRegex.test((c.commit?.message || '').split('\\n')[0]));\nconst pctConv = commitsRecent.length > 0 ? Math.round(convCommits.length / commitsRecent.length * 100) : 0;\n\nconst authorsRecent = new Set(commitsRecent.map(c => c.author?.login || c.commit?.author?.email || '?').filter(x => x !== '?'));\nconst busFactor = authorsRecent.size;\n\nconst lastBackCommit = bCommits[0]?.commit?.author?.date;\nconst lastFrontCommit = fCommits[0]?.commit?.author?.date;\nconst silenceBack = lastBackCommit ? Math.floor((now - new Date(lastBackCommit)) / 86400000) : null;\nconst silenceFront = lastFrontCommit ? Math.floor((now - new Date(lastFrontCommit)) / 86400000) : null;\n\nconst bLastRun = bRuns[0];\nconst fLastRun = fRuns[0];\nconst ciBack = bLastRun ? { status: bLastRun.conclusion || bLastRun.status, date: bLastRun.updated_at, name: bLastRun.name, url: bLastRun.html_url, branch: bLastRun.head_branch, actor: bLastRun.actor?.login } : null;\nconst ciFront = fLastRun ? { status: fLastRun.conclusion || fLastRun.status, date: fLastRun.updated_at, name: fLastRun.name, url: fLastRun.html_url, branch: fLastRun.head_branch, actor: fLastRun.actor?.login } : null;\n\nconst hoyStr = now.toISOString().slice(0, 10);\nconst proximos = hitos.filter(h => h.fecha_fin >= hoyStr && !h.completado).slice(0, 5).map(h => ({\n  nombre: h.nombre, tipo: h.tipo, fecha_fin: h.fecha_fin,\n  dias_faltan: Math.floor((new Date(h.fecha_fin) - now) / 86400000),\n  responsable: h.responsable\n}));\nconst fin = hitos.find(h => h.tipo === 'entrega_final');\nconst diasHastaFin = fin ? Math.floor((new Date(fin.fecha_fin) - now) / 86400000) : null;\n\nlet proyeccion = 'sin datos';\nif (diasHastaFin !== null && pendientes.length > 0) {\n  const necesaria = pendientes.length / Math.max(diasHastaFin, 1);\n  if (parseFloat(velocidad) >= necesaria) proyeccion = 'on-track';\n  else if (parseFloat(velocidad) >= necesaria * 0.7) proyeccion = 'riesgo';\n  else proyeccion = 'retrasado';\n}\n\nconst workPerPerson = {};\nfor (const t of tareas) {\n  for (const r of t.responsables) {\n    const m = resolveMember(r);\n    if (!workPerPerson[r]) workPerPerson[r] = { trello_name: r, initials: m.initials, github: m.github, tareas_total: 0, tareas_done: 0, tareas_pending: 0, tareas_overdue: 0, commits_14d: 0 };\n    workPerPerson[r].tareas_total++;\n    if (t.completada) workPerPerson[r].tareas_done++;\n    else if (t.vencida) workPerPerson[r].tareas_overdue++;\n    else workPerPerson[r].tareas_pending++;\n  }\n}\nfor (const c of commitsRecent) {\n  const login = c.author?.login;\n  if (!login) continue;\n  for (const p of Object.values(workPerPerson)) {\n    if (p.github === login) p.commits_14d++;\n  }\n}\nconst ranking = Object.values(workPerPerson).sort((a, b) => (b.tareas_done + b.commits_14d) - (a.tareas_done + a.commits_14d));\n\nlet tendencia = 'sin historial suficiente';\nif (historial.length >= 3) {\n  const conProblemas = historial.filter(h => h.hay_problemas).length;\n  tendencia = conProblemas >= 3 ? conProblemas + '/' + historial.length + ' con problemas' : 'estable';\n}\n\nlet diffPrev = null;\nif (historial.length > 0) {\n  const prev = historial[0];\n  const prevKpis = (typeof prev.kpis_json === 'string' ? JSON.parse(prev.kpis_json) : prev.kpis_json) || {};\n  diffPrev = {\n    progreso: progreso - (prev.progreso_pct || 0),\n    vencidas: vencidas.length - (prev.tareas_vencidas || 0),\n    commits_14d: commitsRecent.length - (prevKpis.commits_14d || 0)\n  };\n}\n\nfunction formatCommits(list, limit) {\n  return list.slice(0, limit).map(c => ({\n    sha: (c.sha || '').slice(0, 7),\n    autor: c.commit?.author?.name || c.author?.login || '?',\n    login: c.author?.login || null,\n    mensaje: (c.commit?.message || '').split('\\n')[0].slice(0, 120),\n    fecha: c.commit?.author?.date,\n    url: c.html_url\n  }));\n}\nconst topBack = formatCommits(bCommits, 5);\nconst topFront = formatCommits(fCommits, 5);\n\nconst kpis = {\n  velocidad_tareas_por_dia: parseFloat(velocidad),\n  completadas_7d: completadas7d,\n  pct_a_tiempo: pctATiempo,\n  progreso_sprint_pct: progreso,\n  commits_por_dia: parseFloat(commitsPorDia),\n  commits_14d: commitsRecent.length,\n  pct_commits_convencionales: pctConv,\n  bus_factor_14d: busFactor,\n  silencio_back_dias: silenceBack,\n  silencio_front_dias: silenceFront,\n  pr_open_time_dias: parseFloat(avgPROpenDays),\n  pr_merge_ratio_30d: mergeRatio,\n  dias_hasta_fin: diasHastaFin,\n  proyeccion\n};\n\nconst problemas = [];\nif (vencidas.length > 0) problemas.push({ tipo: 'tareas_vencidas', severidad: 'alta', count: vencidas.length });\nif (proyeccion === 'retrasado') problemas.push({ tipo: 'proyeccion_retraso', severidad: 'alta' });\nif (proyeccion === 'riesgo') problemas.push({ tipo: 'proyeccion_riesgo', severidad: 'media' });\nif (parseFloat(avgPROpenDays) > 7 && prsAbiertos.length > 0) problemas.push({ tipo: 'pr_stale', severidad: 'media', count: prsAbiertos.filter(p => (now - new Date(p.updated_at)) / 86400000 > 7).length });\nif (parseFloat(commitsPorDia) < 0.5 && diasHastaFin !== null && diasHastaFin < 45) problemas.push({ tipo: 'baja_actividad', severidad: 'media' });\nif (ciBack && ciBack.status === 'failure') problemas.push({ tipo: 'ci_back_roto', severidad: 'alta' });\nif (ciFront && ciFront.status === 'failure') problemas.push({ tipo: 'ci_front_roto', severidad: 'alta' });\nif (stales.length > 3) problemas.push({ tipo: 'cards_stale', severidad: 'media', count: stales.length });\nif (busFactor < 2 && commitsRecent.length > 0 && diasHastaFin !== null && diasHastaFin < 45) problemas.push({ tipo: 'bus_factor_bajo', severidad: 'media' });\nif (sinAsignar.length > 0) problemas.push({ tipo: 'cards_sin_asignar', severidad: 'baja', count: sinAsignar.length });\n\nconst sev = problemas.map(p => p.severidad);\nconst severidadMax = sev.includes('alta') ? 'alta' : sev.includes('media') ? 'media' : 'baja';\n\nreturn [{\n  json: {\n    fecha: now.toISOString(),\n    hay_problemas: problemas.length > 0,\n    total_tarjetas: tareas.length,\n    total_completadas: completadas.length,\n    total_pendientes: pendientes.length,\n    tareas_vencidas_list: vencidas,\n    tareas_vencidas_count: vencidas.length,\n    progreso_pct: progreso,\n    fases,\n    ranking,\n    cards_stale: stales,\n    cards_sin_asignar: sinAsignar,\n    cards_sin_fecha: sinFecha,\n    kpis,\n    hitos_proximos: proximos,\n    tendencia_historial: tendencia,\n    diff_previa: diffPrev,\n    problemas_detectados: problemas,\n    severidad_max: severidadMax,\n    cantidad_problemas: problemas.length,\n    github: {\n      commits_back: bCommits.length,\n      commits_front: fCommits.length,\n      prs_abiertos_back: bPRs.filter(p => p.state === 'open').length,\n      prs_abiertos_front: fPRs.filter(p => p.state === 'open').length,\n      prs_detalle_abiertos: prsAbiertos.map(p => ({ numero: p.number, titulo: p.title, autor: p.user?.login, dias_abierto: Math.floor((now - new Date(p.created_at)) / 86400000), repo: p.base?.repo?.name, url: p.html_url })),\n      top_commits_back: topBack,\n      top_commits_front: topFront,\n      ci_back: ciBack,\n      ci_front: ciFront,\n      deploy_front_url: 'https://pet-safe-six.vercel.app',\n      back_repo_url: 'https://github.com/' + $node['Configuraci\u00f3n'].json.GITHUB_OWNER_BACKEND + '/' + backRepo,\n      front_repo_url: 'https://github.com/' + $node['Configuraci\u00f3n'].json.GITHUB_OWNER_FRONTEND + '/' + frontRepo\n    },\n    snapshot_tareas: tareas,\n    discord_url: $node['Configuraci\u00f3n'].json.DISCORD_WEBHOOK_URL\n  }\n}];"
       },
       "id": "98909d76-9a52-4701-8777-80602c0070c1",
-      "name": "Análisis + KPIs",
+      "name": "An\u00e1lisis + KPIs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -503,7 +455,7 @@
         "options": {}
       },
       "id": "e8155d45-a42e-4e65-b3e2-2e923c809645",
-      "name": "Guardar Análisis",
+      "name": "Guardar An\u00e1lisis",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
       "position": [
@@ -519,7 +471,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const analisisId = $json.id;\nconst snapshot = $node['Análisis + KPIs'].json.snapshot_tareas;\n\nconst rows = snapshot.map(t => {\n  const memId = (t.responsables_ids || [])[0] || null;\n  const memName = (t.responsables || [])[0] || null;\n  return {\n    analisis_id: analisisId,\n    card_id: t.id,\n    card_nombre: (t.nombre || '').slice(0, 500),\n    lista_nombre: t.lista,\n    miembro_id: memId,\n    miembro_nombre: memName,\n    fecha_vencimiento: t.fecha_limite,\n    completada: t.completada,\n    tiene_adjuntos: t.adjuntos_count > 0,\n    adjuntos_count: t.adjuntos_count\n  };\n});\n\nreturn rows.map(r => ({ json: r }));"
+        "jsCode": "const analisisId = $json.id;\nconst snapshot = $node['An\u00e1lisis + KPIs'].json.snapshot_tareas;\n\nconst rows = snapshot.map(t => {\n  const memId = (t.responsables_ids || [])[0] || null;\n  const memName = (t.responsables || [])[0] || null;\n  return {\n    analisis_id: analisisId,\n    card_id: t.id,\n    card_nombre: (t.nombre || '').slice(0, 500),\n    lista_nombre: t.lista,\n    miembro_id: memId,\n    miembro_nombre: memName,\n    fecha_vencimiento: t.fecha_limite,\n    completada: t.completada,\n    tiene_adjuntos: t.adjuntos_count > 0,\n    adjuntos_count: t.adjuntos_count\n  };\n});\n\nreturn rows.map(r => ({ json: r }));"
       },
       "id": "43a7fae4-eb7b-46d0-a980-1b2d46a738b5",
       "name": "Guardar Snapshot Tareas",
@@ -573,7 +525,7 @@
           "conditions": [
             {
               "id": "c1",
-              "leftValue": "={{ $node['Análisis + KPIs'].json.hay_problemas }}",
+              "leftValue": "={{ $node['An\u00e1lisis + KPIs'].json.hay_problemas }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -718,6 +670,52 @@
         -9120,
         3344
       ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_runs_audit (workflow_id, workflow_name, status, completed_at, correlation_id, metrics) VALUES ($1, $2, 'success', NOW(), $3, $4::jsonb);",
+        "options": {
+          "queryReplacement": "={{ [ $workflow.id || 'unknown', $workflow.name, $json.correlation_id || null, JSON.stringify({ source: 'monitor', total_tarjetas: $node['An\u00e1lisis + KPIs'].json.total_tarjetas || 0, vencidas: $node['An\u00e1lisis + KPIs'].json.tareas_vencidas_count || 0, severidad: $node['An\u00e1lisis + KPIs'].json.severidad_max || 'baja' }) ] }}"
+        }
+      },
+      "id": "6c8e0a49-98bf-4f1c-9c1f-8e06c5f3ce1b",
+      "name": "Audit Success",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -8880,
+        3584
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ai_decisions (correlation_id, agent_role, decision_type, input_summary, context_used, evidence, decision, recommendation, confidence, risk_level, requires_human_approval, status) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12);",
+        "options": {
+          "queryReplacement": "={{ [ $json.correlation_id || null, 'PM Monitor', 'monitor_kpis', ('Severidad: ' + ($node['An\u00e1lisis + KPIs'].json.severidad_max || 'baja') + ' | Problemas: ' + ($node['An\u00e1lisis + KPIs'].json.cantidad_problemas || 0)).slice(0, 500), JSON.stringify($node['An\u00e1lisis + KPIs'].json || {}), JSON.stringify({ kpis: $node['An\u00e1lisis + KPIs'].json.kpis || {} }), JSON.stringify({ snapshot: $node['An\u00e1lisis + KPIs'].json.snapshot_tareas ? 'ok' : 'none' }), null, null, ($node['An\u00e1lisis + KPIs'].json.severidad_max || null), false, 'logged' ] }}"
+        }
+      },
+      "id": "618a2d91-7c71-433a-a4d8-bc5cf315ebcb",
+      "name": "Decision Ledger Monitor",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -8880,
+        3720
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -726,14 +724,14 @@
       "main": [
         [
           {
-            "node": "Configuración",
+            "node": "Configuraci\u00f3n",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Configuración": {
+    "Configuraci\u00f3n": {
       "main": [
         [
           {
@@ -766,11 +764,11 @@
         ]
       ]
     },
-    "Análisis + KPIs": {
+    "An\u00e1lisis + KPIs": {
       "main": [
         [
           {
-            "node": "Guardar Análisis",
+            "node": "Guardar An\u00e1lisis",
             "type": "main",
             "index": 0
           },
@@ -778,11 +776,21 @@
             "node": "IF Hay Problemas",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Audit Success",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Decision Ledger Monitor",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
     },
-    "Guardar Análisis": {
+    "Guardar An\u00e1lisis": {
       "main": [
         [
           {
@@ -892,7 +900,7 @@
       "main": [
         [
           {
-            "node": "Análisis + KPIs",
+            "node": "An\u00e1lisis + KPIs",
             "type": "main",
             "index": 0
           }
@@ -903,7 +911,7 @@
       "main": [
         [
           {
-            "node": "Análisis + KPIs",
+            "node": "An\u00e1lisis + KPIs",
             "type": "main",
             "index": 0
           }
@@ -1046,7 +1054,8 @@
   "active": true,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate"
+    "binaryMode": "separate",
+    "errorWorkflow": "monitor-petsafe-error-handler"
   },
   "versionId": "565e720d-8964-4c1a-9b9c-e56a85cf667b",
   "meta": {

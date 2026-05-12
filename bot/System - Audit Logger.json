@@ -1,0 +1,44 @@
+{
+  "name": "System - Audit Logger",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-audit",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_runs_audit (workflow_id, workflow_name, status, started_at, completed_at, correlation_id, error_details, metrics) VALUES ($1, $2, $3, COALESCE($4::timestamptz, NOW()), COALESCE($5::timestamptz, NOW()), $6, $7::jsonb, $8::jsonb);",
+        "options": {
+          "queryReplacement": "={{ [ $json.workflow_id || 'unknown', $json.workflow_name || 'unknown', $json.status || 'unknown', $json.started_at || null, $json.completed_at || null, $json.correlation_id || null, $json.error_details || '{}', $json.metrics || '{}' ] }}"
+        }
+      },
+      "id": "insert-audit",
+      "name": "Insert Audit Record",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [200, 0]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Insert Audit Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true
+  }
+}

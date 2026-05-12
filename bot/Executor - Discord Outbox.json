@@ -1,0 +1,203 @@
+{
+  "name": "Executor - Discord Outbox",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE events_outbox SET status = 'sending' WHERE outbox_id IN (SELECT outbox_id FROM events_outbox WHERE status = 'pending' ORDER BY scheduled_at ASC LIMIT 50 FOR UPDATE SKIP LOCKED) RETURNING *;"
+      },
+      "id": "fetch-outbox",
+      "name": "Fetch Pending Outbox",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "has-outbox",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "check-outbox",
+      "name": "Has Outbox?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.payload || { content: 'outbox event' } }}",
+        "options": {
+          "ignoreResponseCode": true
+        }
+      },
+      "id": "send-discord",
+      "name": "Send Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [600, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "status-gte-200",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "status-lt-300",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 300,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "check-success",
+      "name": "Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [800, 0]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE events_outbox SET status = 'sent', sent_at = NOW() WHERE outbox_id = $1;",
+        "options": {
+          "queryReplacement": "={{ [ $node[\"Fetch Pending Outbox\"].json.outbox_id ] }}"
+        }
+      },
+      "id": "mark-sent",
+      "name": "Mark Sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1000, -120]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE events_outbox SET retry_count = retry_count + 1, last_error = $2, status = CASE WHEN retry_count + 1 >= 5 THEN 'dead' ELSE 'pending' END, scheduled_at = CASE WHEN retry_count + 1 >= 5 THEN scheduled_at ELSE NOW() + interval '5 minutes' END WHERE outbox_id = $1;",
+        "options": {
+          "queryReplacement": "={{ [ $node[\"Fetch Pending Outbox\"].json.outbox_id, JSON.stringify($json.body || $json.error || $json) ] }}"
+        }
+      },
+      "id": "mark-failed",
+      "name": "Mark Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1000, 120]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pending Outbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pending Outbox": {
+      "main": [
+        [
+          {
+            "node": "Has Outbox?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Outbox?": {
+      "main": [
+        [
+          {
+            "node": "Send Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Discord": {
+      "main": [
+        [
+          {
+            "node": "Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success?": {
+      "main": [
+        [
+          {
+            "node": "Mark Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "monitor-petsafe-error-handler",
+    "saveExecutionProgress": true
+  }
+}

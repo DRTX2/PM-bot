@@ -1,0 +1,362 @@
+{
+  "name": "AI - Sync Bidireccional Activa",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const payload = $json;\nconst action = payload.action;\nconst pr = payload.pull_request || {};\nconst merged = pr.merged === true;\nconst branch = (pr.head || {}).ref || '';\nconst actor = (pr.merged_by || pr.user || {}).login || 'unknown';\n\n// Extraer card ID de Trello desde el nombre del branch o título del PR\n// Convencion: branch name o titulo contiene 'trello-CARDID'\nconst cardMatch = (branch + ' ' + (pr.title || '')).match(/trello-([a-zA-Z0-9]+)/);\nconst trelloCardId = cardMatch ? cardMatch[1] : null;\n\nif (action !== 'closed' || !merged) {\n  return [{ json: { skip: true, reason: `PR action=${action}, merged=${merged}` } }];\n}\n\nreturn [{\n  json: {\n    skip: false,\n    action,\n    merged,\n    pr_number: pr.number,\n    pr_title: pr.title || '',\n    branch,\n    actor,\n    trello_card_id: trelloCardId,\n    repo: (payload.repository || {}).name || '',\n    sha: (pr.merge_commit_sha || '').slice(0, 7),\n    correlation_id: `sync-pr-${pr.number}-${Date.now()}`\n  }\n}];"
+      },
+      "id": "821ce096-59e9-4937-8542-ee525f06d64d",
+      "name": "Verify Merged & Extract Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3648,
+        1216
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "not-skip",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1855b2d-63e3-4c57-b9c8-8921990cc425",
+      "name": "Should Sync?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -3440,
+        1216
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "has-card",
+              "leftValue": "={{ $json.trello_card_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "63258210-2b34-40e9-93c1-121a2aff9cff",
+      "name": "Has Trello Card ID?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -3152,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "id": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.trello_card_id }}"
+        },
+        "updateFields": {
+          "closed": true
+        }
+      },
+      "id": "cd9dd49d-12b5-408e-8a96-f974b2b5e615",
+      "name": "Archive Trello Card",
+      "type": "n8n-nodes-base.trello",
+      "typeVersion": 1,
+      "position": [
+        -2928,
+        1088
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "createComment"
+      },
+      "id": "bf8bdeb6-0e54-4d4d-a685-aeec9f051758",
+      "name": "Comment on Trello Card",
+      "type": "n8n-nodes-base.trello",
+      "typeVersion": 1,
+      "position": [
+        -2704,
+        1088
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Verify Merged & Extract Context').item.json;\nconst content = [\n  `🔀 **PR Mergeado** en \\`${ctx.repo}\\``,\n  `📌 **PR #${ctx.pr_number}:** ${ctx.pr_title}`,\n  `🌿 Branch: \\`${ctx.branch}\\``,\n  `👤 Autor: **${ctx.actor}**`,\n  `🔗 Commit: \\`${ctx.sha}\\``,\n  ctx.trello_card_id ? `✅ Tarjeta Trello \\`${ctx.trello_card_id}\\` archivada y comentada.` : `⚠️ No se encontró referencia a Trello en el branch/título.`,\n  ``,\n  `🧑‍💻 **Testers:** Por favor verifiquen la build correspondiente.`\n].join('\\n');\n\nreturn [{ json: { content } }];"
+      },
+      "id": "3d4d2e0e-8bea-4f0a-8a2a-0f6fff7b598c",
+      "name": "Build Discord Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2928,
+        1312
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $json.content }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2acf23c-43f6-4a4d-b31e-91dbdc279a9d",
+      "name": "Notify Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2704,
+        1312
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "wcNFn0XHidnGmrHg",
+        "mode": "json",
+        "options": {}
+      },
+      "id": "78c3d588-9d31-44e5-b940-bfb2ef006f8a",
+      "name": "Log Sync Action",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        -2496,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "owner": {
+          "__rl": true,
+          "value": "={{ $env.GITHUB_OWNER_BACKEND }}",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "={{ $env.GITHUB_REPO_BACKEND }}",
+          "mode": "name"
+        },
+        "events": [
+          "pull_request"
+        ],
+        "options": {}
+      },
+      "id": "0daf496b-0f21-4056-9ee5-f165648711e9",
+      "name": "GitHub PR(Back) Trigger",
+      "type": "n8n-nodes-base.githubTrigger",
+      "typeVersion": 1,
+      "position": [
+        -3904,
+        1104
+      ],
+      "webhookId": "sync-bidireccional-github-back",
+      "credentials": {
+        "githubApi": {
+          "id": "Ef6o1UdEiDu28Ibq",
+          "name": "backend-account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "owner": {
+          "__rl": true,
+          "value": "={{ $env.GITHUB_OWNER|| $env.GITHUB_OWNER || $env.GITHUB_OWNER_BACKEND }}",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "={{ $env.GITHUB_REPO_FRONTEND }}",
+          "mode": "name"
+        },
+        "events": [
+          "pull_request"
+        ],
+        "options": {}
+      },
+      "id": "a7880053-26a6-4d7a-98ba-03e002e943c5",
+      "name": "GitHub PR(Front) Trigger1",
+      "type": "n8n-nodes-base.githubTrigger",
+      "typeVersion": 1,
+      "position": [
+        -3904,
+        1344
+      ],
+      "webhookId": "sync-bidireccional-github-front",
+      "credentials": {
+        "githubApi": {
+          "id": "Ef6o1UdEiDu28Ibq",
+          "name": "backend-account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Verify Merged & Extract Context": {
+      "main": [
+        [
+          {
+            "node": "Should Sync?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Sync?": {
+      "main": [
+        [
+          {
+            "node": "Has Trello Card ID?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Trello Card ID?": {
+      "main": [
+        [
+          {
+            "node": "Archive Trello Card",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Discord Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Discord Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Archive Trello Card": {
+      "main": [
+        [
+          {
+            "node": "Comment on Trello Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comment on Trello Card": {
+      "main": [
+        [
+          {
+            "node": "Log Sync Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Discord Notification": {
+      "main": [
+        [
+          {
+            "node": "Notify Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Discord": {
+      "main": [
+        [
+          {
+            "node": "Log Sync Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub PR(Back) Trigger": {
+      "main": [
+        [
+          {
+            "node": "Verify Merged & Extract Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub PR(Front) Trigger1": {
+      "main": [
+        [
+          {
+            "node": "Verify Merged & Extract Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "9a3b0032-97d3-49f0-b37d-d640212113ae",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "rRp6TRqUszFfcOZR",
+  "tags": []
+}

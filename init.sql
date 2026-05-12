@@ -202,3 +202,41 @@ CREATE TABLE IF NOT EXISTS ai_decisions (
 CREATE INDEX IF NOT EXISTS idx_ai_decisions_created ON ai_decisions (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ai_decisions_corr ON ai_decisions (correlation_id);
 CREATE INDEX IF NOT EXISTS idx_ai_decisions_status ON ai_decisions (status, requires_human_approval);
+
+-- Tabla de gestión de fases del proyecto (sincronizada con listas Trello)
+CREATE TABLE IF NOT EXISTS project_phases (
+    phase_id BIGSERIAL PRIMARY KEY,
+    list_id TEXT UNIQUE NOT NULL,           -- ID de lista en Trello
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    start_date DATE,
+    end_date DATE,
+    status TEXT NOT NULL DEFAULT 'active',  -- active | completed | on_hold
+    responsible TEXT,
+    description TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_phases_status ON project_phases (status);
+CREATE INDEX IF NOT EXISTS idx_project_phases_dates ON project_phases (start_date, end_date);
+
+-- Tabla de adjuntos con metadatos (evita procesar PDFs innecesariamente)
+CREATE TABLE IF NOT EXISTS card_attachments (
+    attachment_id TEXT PRIMARY KEY,         -- ID del attachment en Trello
+    card_id TEXT NOT NULL,
+    card_name TEXT,
+    list_id TEXT,
+    filename TEXT NOT NULL,
+    url TEXT NOT NULL,
+    mime_type TEXT,
+    file_size_bytes BIGINT,
+    added_by TEXT,
+    added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    summary_extracted TEXT,                 -- Resumen IA extraído on-demand
+    summary_extracted_at TIMESTAMPTZ,
+    tokens_used INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_attachments_card ON card_attachments (card_id);
+CREATE INDEX IF NOT EXISTS idx_card_attachments_list ON card_attachments (list_id);

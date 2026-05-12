@@ -19,7 +19,7 @@
             {
               "id": "e1s1",
               "name": "mensaje_error",
-              "value": "={{ `🚨 **Error en Monitor PetSafe** 🚨\n\n**Workflow:** ${$workflow.name}\n**Nodo:** ${$json.error?.node?.name || $json.node?.name || 'desconocido'}\n**Error:** ${$json.error?.message || $json.message || JSON.stringify($json).slice(0,300)}` }}",
+              "value": "={{ `\ud83d\udea8 **Error en Monitor PetSafe** \ud83d\udea8\n\n**Workflow:** ${$workflow.name}\n**Nodo:** ${$json.error?.node?.name || $json.node?.name || 'desconocido'}\n**Error:** ${$json.error?.message || $json.message || JSON.stringify($json).slice(0,300)}` }}",
               "type": "string"
             }
           ]
@@ -41,7 +41,7 @@
         "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ ({ content: ($json.mensaje_error || '🚨 Error desconocido en Monitor PetSafe — revisar ejecuciones en n8n').slice(0, 2000) }) }}",
+        "jsonBody": "={{ ({ content: ($json.mensaje_error || '\ud83d\udea8 Error desconocido en Monitor PetSafe \u2014 revisar ejecuciones en n8n').slice(0, 2000) }) }}",
         "options": {}
       },
       "id": "2e38716e-2920-4def-85dc-bb27a3e3f36b",
@@ -51,6 +51,23 @@
       "position": [
         208,
         16
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_runs_audit (workflow_id, workflow_name, status, completed_at, error_details) VALUES ($1, $2, $3, NOW(), $4::jsonb);",
+        "options": {
+          "queryReplacement": "={{ [ $workflow.id || 'unknown', $workflow.name, 'error', JSON.stringify({ node: $json.error?.node?.name || $json.node?.name, message: $json.error?.message || $json.message }) ] }}"
+        }
+      },
+      "id": "c6d64a9a-572e-43b8-a524-3c10f6294fb6",
+      "name": "Audit Log Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2000,
+        0
       ]
     }
   ],
@@ -72,6 +89,17 @@
         [
           {
             "node": "Alerta a Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alerta a Discord": {
+      "main": [
+        [
+          {
+            "node": "Audit Log Error",
             "type": "main",
             "index": 0
           }
