@@ -1,0 +1,71 @@
+{
+  "name": "System - Config Resolver",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "47f56fbb-7dd3-4019-96dd-2b7acd9debce",
+      "name": "On Execute",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        480,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "GITHUB_OWNER",
+              "value": "={{ $env.GITHUB_OWNER }}"
+            },
+            {
+              "name": "GITHUB_REPO",
+              "value": "={{ $env.GITHUB_REPO }}"
+            },
+            {
+              "name": "TRELLO_BOARD_ID",
+              "value": "={{ $env.TRELLO_BOARD_ID }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9b2a5886-e0c5-4cfe-b7a9-a17203f5cd18",
+      "name": "Set Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        688,
+        272
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On Execute": {
+      "main": [
+        [
+          {
+            "node": "Set Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "b35fb3cd-e308-4987-b271-32f81413bf9e",
+  "meta": {
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "W09tM8f7CVxGqvDn",
+  "tags": []
+}

@@ -1,0 +1,851 @@
+{
+  "id": "wf-pm-router-intenciones",
+  "name": "WF_PM_Router_Intenciones",
+  "active": true,
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "classify",
+      "name": "Classify Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const input = $json || {};\nconst env = process.env || {};\nconst msg = String(input.message || input.pregunta || input.content || input.mensaje_original || '').trim();\nconst low = msg.toLowerCase();\nconst user = input.user || input.usuario || input.actor || input.username || 'desconocido';\nconst userId = input.user_id || input.author_id || '';\nconst channel = String(input.channel_id || input.channelId || input.canal || '');\nconst channelName = input.channel_name || input.channelName || '';\n\nconst channelVars = {\n  tareas: 'DISCORD_CHANNEL_TAREAS',\n  bloqueos: 'DISCORD_CHANNEL_BLOQUEOS',\n  reportes: 'DISCORD_CHANNEL_REPORTES',\n  reuniones: 'DISCORD_CHANNEL_REUNIONES',\n  entregables: 'DISCORD_CHANNEL_ENTREGABLES',\n  riesgos: 'DISCORD_CHANNEL_RIESGOS',\n  avances: 'DISCORD_CHANNEL_AVANCES',\n  bot_log: 'DISCORD_CHANNEL_BOT_LOG',\n  admin: 'DISCORD_CHANNEL_ADMIN',\n};\nconst missing_config = Object.values(channelVars).filter((key) => !env[key]);\nconst channels = Object.fromEntries(Object.entries(channelVars).map(([k, v]) => [k, env[v] || '']));\n\nconst isCommand = /^\\/pm(\\s|$)/i.test(msg);\nconst cmdText = isCommand ? msg.replace(/^\\/pm\\s*/i, '').trim() : '';\nconst cmdParts = cmdText.split(/\\s+/).filter(Boolean);\nconst cmd = (cmdParts[0] || '').toLowerCase();\nconst sub = (cmdParts[1] || '').toLowerCase();\nconst rest = cmdParts.slice(2).join(' ');\n\nfunction clean(s) { return String(s || '').trim(); }\nfunction match(rx) { const m = msg.match(rx); return m ? clean(m[1]) : null; }\nfunction normalizePriority(value) {\n  const v = clean(value).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  if (['baja','media','alta','critica'].includes(v)) return v;\n  return null;\n}\nfunction normalizeState(value) {\n  const v = clean(value).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\s+/g, '_');\n  const map = { progreso: 'en_progreso', revision: 'en_revision', revisada: 'en_revision', hecho: 'completada', terminada: 'completada', terminado: 'completada' };\n  return ['pendiente','en_progreso','bloqueada','en_revision','completada','cancelada'].includes(v) ? v : (map[v] || null);\n}\nfunction parseDate(value) {\n  const v = clean(value).toLowerCase();\n  if (!v) return null;\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(v)) return v;\n  const d = new Date();\n  if (v.includes('hoy')) return d.toISOString().slice(0, 10);\n  if (v.includes('manana') || v.includes('mañana')) {\n    d.setDate(d.getDate() + 1);\n    return d.toISOString().slice(0, 10);\n  }\n  const days = { domingo: 0, lunes: 1, martes: 2, miercoles: 3, miércoles: 3, jueves: 4, viernes: 5, sabado: 6, sábado: 6 };\n  if (days[v] !== undefined) {\n    const diff = (days[v] + 7 - d.getDay()) % 7 || 7;\n    d.setDate(d.getDate() + diff);\n    return d.toISOString().slice(0, 10);\n  }\n  return null;\n}\n\nlet intencion = 'desconocido';\nlet sub_intencion = null;\nlet datos = {};\nlet canal_destino = 'DISCORD_CHANNEL_REPORTES';\n\nif (isCommand) {\n  switch (cmd) {\n    case '':\n    case 'ayuda':\n    case 'help':\n      intencion = 'ayuda';\n      break;\n    case 'estado':\n      intencion = 'estado_proyecto';\n      sub_intencion = sub || 'general';\n      break;\n    case 'tarea':\n      intencion = 'tarea';\n      sub_intencion = sub || 'listar';\n      datos.texto = rest || cmdParts.slice(1).join(' ');\n      canal_destino = 'DISCORD_CHANNEL_TAREAS';\n      break;\n    case 'avance':\n      intencion = 'avance';\n      sub_intencion = sub || 'registrar';\n      datos.texto = rest;\n      canal_destino = 'DISCORD_CHANNEL_AVANCES';\n      break;\n    case 'bloqueo':\n      intencion = 'bloqueo';\n      sub_intencion = sub || 'registrar';\n      datos.texto = rest;\n      canal_destino = 'DISCORD_CHANNEL_BLOQUEOS';\n      break;\n    case 'riesgo':\n      intencion = 'riesgo';\n      sub_intencion = sub || 'registrar';\n      datos.texto = rest;\n      canal_destino = 'DISCORD_CHANNEL_RIESGOS';\n      break;\n    case 'reporte':\n      intencion = 'reporte';\n      sub_intencion = sub || 'diario';\n      canal_destino = 'DISCORD_CHANNEL_REPORTES';\n      break;\n    case 'reunion':\n    case 'reunión':\n      intencion = 'reunion';\n      sub_intencion = sub || 'preparar';\n      datos.texto = rest || cmdParts.slice(1).join(' ');\n      canal_destino = 'DISCORD_CHANNEL_REUNIONES';\n      break;\n    case 'decision':\n    case 'decisión':\n      intencion = 'decision';\n      sub_intencion = sub || 'registrar';\n      datos.texto = rest || cmdParts.slice(1).join(' ');\n      canal_destino = 'DISCORD_CHANNEL_REUNIONES';\n      break;\n    case 'entregable':\n      intencion = 'entregable';\n      sub_intencion = sub || 'listar';\n      datos.texto = rest || cmdParts.slice(1).join(' ');\n      canal_destino = 'DISCORD_CHANNEL_ENTREGABLES';\n      break;\n    case 'pendientes':\n      intencion = 'tarea';\n      sub_intencion = 'pendientes';\n      canal_destino = 'DISCORD_CHANNEL_TAREAS';\n      break;\n    case 'atrasos':\n      intencion = 'tarea';\n      sub_intencion = 'atrasos';\n      canal_destino = 'DISCORD_CHANNEL_TAREAS';\n      break;\n    case 'sprint':\n      intencion = 'estado_proyecto';\n      sub_intencion = 'sprint';\n      break;\n    case 'retrospectiva':\n    case 'retro':\n      intencion = 'retrospectiva';\n      sub_intencion = sub || 'registrar';\n      datos.texto = rest || cmdParts.slice(1).join(' ');\n      break;\n    case 'recordatorio':\n    case 'recordatorios':\n      intencion = 'recordatorio';\n      sub_intencion = sub || 'revisar';\n      break;\n    case 'admin':\n      intencion = 'administracion';\n      sub_intencion = sub || 'estado';\n      datos.texto = rest;\n      canal_destino = 'DISCORD_CHANNEL_ADMIN';\n      break;\n    default:\n      intencion = 'desconocido';\n  }\n} else if (/crea(r)? (una )?tarea|nueva tarea|registra(r)? tarea|agregar tarea/i.test(low)) {\n  intencion = 'tarea'; sub_intencion = 'crear'; canal_destino = 'DISCORD_CHANNEL_TAREAS';\n} else if (/asigna(r)?\\s|asignale|asígnale/i.test(low)) {\n  intencion = 'tarea'; sub_intencion = 'asignar'; canal_destino = 'DISCORD_CHANNEL_TAREAS';\n} else if (/tareas? (pendiente|atrasad|vencid)|pendientes|atrasos/i.test(low)) {\n  intencion = 'tarea'; sub_intencion = /atrasad|vencid|atrasos/i.test(low) ? 'atrasos' : 'pendientes'; canal_destino = 'DISCORD_CHANNEL_TAREAS';\n} else if (/registr(ar|a) avance|termin[eé]|complet[eé]|avance diario|progreso/i.test(low)) {\n  intencion = 'avance'; sub_intencion = 'registrar'; canal_destino = 'DISCORD_CHANNEL_AVANCES';\n} else if (/bloque(o|ado)|impedimento|no puedo avanzar|detenid|trabado|atascado/i.test(low)) {\n  intencion = 'bloqueo'; sub_intencion = 'registrar'; canal_destino = 'DISCORD_CHANNEL_BLOQUEOS';\n} else if (/riesgo|peligro|amenaza|podr[ií]a fallar/i.test(low)) {\n  intencion = 'riesgo'; sub_intencion = 'registrar'; canal_destino = 'DISCORD_CHANNEL_RIESGOS';\n} else if (/reporte (diario|semanal)|genera(r)? reporte|resumen (del|de la) semana|estado (del|general)/i.test(low)) {\n  intencion = 'reporte'; sub_intencion = /semanal|semana/i.test(low) ? 'semanal' : 'diario'; canal_destino = 'DISCORD_CHANNEL_REPORTES';\n} else if (/reuni[oó]n|prepara(r)? la reuni|agenda|acta|acuerdo|compromiso/i.test(low)) {\n  intencion = 'reunion'; sub_intencion = /acta|acuerdo|compromiso/i.test(low) ? 'registrar_acta' : 'preparar'; canal_destino = 'DISCORD_CHANNEL_REUNIONES';\n} else if (/decisi[oó]n|decidimos|usaremos|registra(r)? esta decisi/i.test(low)) {\n  intencion = 'decision'; sub_intencion = 'registrar'; canal_destino = 'DISCORD_CHANNEL_REUNIONES';\n} else if (/entregable|document(o|aci)|versi[oó]n|informe|prototipo|entregables falt/i.test(low)) {\n  intencion = 'entregable'; sub_intencion = /registr|crear|agregar/i.test(low) ? 'registrar' : 'pendientes'; canal_destino = 'DISCORD_CHANNEL_ENTREGABLES';\n} else if (/retrospectiva|retro|qu[eé] sali[oó] bien|qu[eé] mejorar|lecciones aprendidas/i.test(low)) {\n  intencion = 'retrospectiva'; sub_intencion = 'registrar';\n} else if (/estado (actual|del proyecto|de petsafe)|resume(n|me)|c[oó]mo va(mos)?|overview/i.test(low)) {\n  intencion = 'estado_proyecto'; sub_intencion = 'general';\n} else if (/ayuda|help|c[oó]mo (te uso|funciona)/i.test(low)) {\n  intencion = 'ayuda';\n}\n\ndatos.responsable = match(/(?:asigna(?:r|le)?\\s+a\\s+|responsable:?\\s*|para\\s+)(@[^\\s]+|[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)?)/);\ndatos.fecha_limite = parseDate(match(/(?:para|antes del?|fecha:?|limite:?|l[ií]mite:?)\\s+(\\d{4}-\\d{2}-\\d{2}|ma[nñ]ana|hoy|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)/i));\ndatos.prioridad = normalizePriority(match(/prioridad:?\\s*(baja|media|alta|cr[ií]tica)/i));\ndatos.estado = normalizeState(match(/estado:?\\s*([a-záéíóúñ_ ]+)/i));\ndatos.id = Number(match(/#?(\\d+)/)) || null;\ndatos.porcentaje = Number(match(/(\\d{1,3})\\s*%/)) || null;\ndatos.probabilidad = match(/probabilidad:?\\s*(baja|media|alta)/i);\ndatos.impacto = match(/impacto:?\\s*(bajo|medio|alto|cr[ií]tico)/i);\ndatos.texto_original = msg;\ndatos.texto = datos.texto || msg;\n\nif (intencion === 'administracion' && channels.admin && channel && channel !== channels.admin) {\n  return [{ json: {\n    intencion: 'administracion_denegada',\n    sub_intencion: 'denegada',\n    respuesta: 'No tengo permisos para ejecutar esta accion desde este canal. Usa #admin-bot o solicita autorizacion.',\n    canal_destino: 'DISCORD_CHANNEL_ADMIN',\n    canal_id: channels.admin,\n    usuario: user,\n    user_id: userId,\n    canal_origen: channel,\n    canal_nombre: channelName,\n    mensaje_original: msg,\n    datos,\n    missing_config,\n    channels,\n    timestamp: new Date().toISOString()\n  }}];\n}\n\nreturn [{ json: {\n  intencion,\n  sub_intencion,\n  datos,\n  canal_destino,\n  canal_id: env[canal_destino] || channel || channels.reportes,\n  usuario: user,\n  user_id: userId,\n  canal_origen: channel,\n  canal_nombre: channelName,\n  mensaje_original: msg,\n  es_comando: isCommand,\n  missing_config,\n  channels,\n  timestamp: new Date().toISOString()\n}}];"
+      }
+    },
+    {
+      "id": "route",
+      "name": "Route by Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        500,
+        0
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.intencion }}",
+                  "operation": "equal",
+                  "value2": "tarea"
+                }
+              ],
+              "renameOutput": true,
+              "outputKey": "tarea"
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.intencion }}",
+                  "operation": "equal",
+                  "value2": "avance"
+                }
+              ],
+              "renameOutput": true,
+              "outputKey": "avance"
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.intencion }}",
+                  "operation": "equal",
+                  "value2": "bloqueo"
+                }
+              ],
+              "renameOutput": true,
+              "outputKey": "bloqueo"
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.intencion }}",
+                  "operation": "equal",
+                  "value2": "riesgo"
+                }
+              ],
+              "renameOutput": true,
+              "outputKey": "riesgo"
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.intencion }}",
+                  "operation": "equal",
+                  "value2": "reporte"
+                }
+              ],
+              "renameOutput": true,
+              "outputKey": "reporte"
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.intencion }}",
+                  "operation": "equal",
+                  "value2": "reunion"
+                }
+              ],
+              "renameOutput": true,
+              "outputKey": "reunion"
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.intencion }}",
+                  "operation": "equal",
+                  "value2": "decision"
+                }
+              ],
+              "renameOutput": true,
+              "outputKey": "decision"
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.intencion }}",
+                  "operation": "equal",
+                  "value2": "entregable"
+                }
+              ],
+              "renameOutput": true,
+              "outputKey": "entregable"
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.intencion }}",
+                  "operation": "equal",
+                  "value2": "retrospectiva"
+                }
+              ],
+              "renameOutput": true,
+              "outputKey": "retrospectiva"
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.intencion }}",
+                  "operation": "equal",
+                  "value2": "estado_proyecto"
+                }
+              ],
+              "renameOutput": true,
+              "outputKey": "estado"
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.intencion }}",
+                  "operation": "equal",
+                  "value2": "recordatorio"
+                }
+              ],
+              "renameOutput": true,
+              "outputKey": "recordatorio"
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.intencion }}",
+                  "operation": "equal",
+                  "value2": "ayuda"
+                }
+              ],
+              "renameOutput": true,
+              "outputKey": "ayuda"
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.intencion }}",
+                  "operation": "equal",
+                  "value2": "administracion"
+                }
+              ],
+              "renameOutput": true,
+              "outputKey": "admin"
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.intencion }}",
+                  "operation": "equal",
+                  "value2": "administracion_denegada"
+                }
+              ],
+              "renameOutput": true,
+              "outputKey": "admin_denegada"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "call-tareas",
+      "name": "Call WF_PM_Tareas",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        -420
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wf-pm-tareas",
+          "mode": "id",
+          "cachedResultName": "WF_PM_Tareas"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "call-avances",
+      "name": "Call WF_PM_Avances",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        -300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wf-pm-avances",
+          "mode": "id",
+          "cachedResultName": "WF_PM_Avances"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "call-bloqueos",
+      "name": "Call WF_PM_Bloqueos",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        -180
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wf-pm-bloqueos-riesgos",
+          "mode": "id",
+          "cachedResultName": "WF_PM_Bloqueos_Riesgos"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "call-riesgos",
+      "name": "Call WF_PM_Riesgos",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        -60
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wf-pm-bloqueos-riesgos",
+          "mode": "id",
+          "cachedResultName": "WF_PM_Bloqueos_Riesgos"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "call-reportes",
+      "name": "Call WF_PM_Reportes",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        60
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wf-pm-reportes",
+          "mode": "id",
+          "cachedResultName": "WF_PM_Reportes"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "call-reuniones",
+      "name": "Call WF_PM_Reuniones",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        180
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wf-pm-reuniones",
+          "mode": "id",
+          "cachedResultName": "WF_PM_Reuniones"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "call-decisiones",
+      "name": "Call WF_PM_Decisiones",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        300
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wf-pm-decisiones",
+          "mode": "id",
+          "cachedResultName": "WF_PM_Decisiones"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "call-entregables",
+      "name": "Call WF_PM_Entregables",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        420
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wf-pm-entregables",
+          "mode": "id",
+          "cachedResultName": "WF_PM_Entregables"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "call-retro",
+      "name": "Call WF_PM_Retrospectiva",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        540
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wf-pm-retrospectiva",
+          "mode": "id",
+          "cachedResultName": "WF_PM_Retrospectiva"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "call-estado",
+      "name": "Call WF_PM_Estado",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        660
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wf-pm-reportes",
+          "mode": "id",
+          "cachedResultName": "WF_PM_Reportes"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "call-recordatorios",
+      "name": "Call WF_PM_Recordatorios",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        780
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wf-pm-recordatorios",
+          "mode": "id",
+          "cachedResultName": "WF_PM_Recordatorios"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "help",
+      "name": "Format PM Help",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        820,
+        900
+      ],
+      "parameters": {
+        "jsCode": "const text = [\n  '**PetSafe PM Bot - comandos disponibles**',\n  '`/pm ayuda`',\n  '`/pm estado`',\n  '`/pm tarea crear [titulo] responsable: David limite: 2026-05-30 prioridad: alta`',\n  '`/pm tarea listar`, `/pm pendientes`, `/pm atrasos`',\n  '`/pm tarea actualizar #12 estado: en_progreso`',\n  '`/pm tarea asignar #12 responsable: David`',\n  '`/pm avance registrar #12 40% descripcion del avance`',\n  '`/pm bloqueo registrar descripcion prioridad: alta`',\n  '`/pm riesgo registrar descripcion probabilidad: alta impacto: critico`',\n  '`/pm reporte diario`, `/pm reporte semanal`',\n  '`/pm reunion preparar seguimiento sprint`',\n  '`/pm decision registrar usaremos Contabo como VPS`',\n  '`/pm entregable registrar Project Charter responsable: Joel limite: 2026-06-01`',\n  '`/pm retrospectiva bien|mejorar|accion texto`',\n  '`/pm admin estado` solo en #admin-bot',\n  '',\n  'Tambien entiendo lenguaje natural para crear tareas, registrar avances, bloqueos, riesgos, decisiones y reportes.'\n].join('\\n');\nreturn [{ json: { respuesta: text, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || $json.canal_origen } }];"
+      }
+    },
+    {
+      "id": "call-admin",
+      "name": "Call WF_PM_Admin",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        1020
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wf-pm-admin",
+          "mode": "id",
+          "cachedResultName": "WF_PM_Admin"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "admin-denied",
+      "name": "Admin Denied Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        820,
+        1140
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { respuesta: $json.respuesta, canal_destino: $json.canal_destino, canal_id: $json.canal_id, intencion: $json.intencion } }];"
+      }
+    },
+    {
+      "id": "fallback",
+      "name": "Unknown Intent Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        820,
+        1260
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: {\n  respuesta: 'No pude identificar completamente la accion. Puedes pedirme crear una tarea, registrar avance, reportar bloqueo, generar reporte o consultar pendientes.',\n  canal_destino: 'DISCORD_CHANNEL_BOT_LOG',\n  canal_id: process.env.DISCORD_CHANNEL_BOT_LOG || $json.canal_origen,\n  intencion: $json.intencion || 'desconocido'\n}}];"
+      }
+    },
+    {
+      "id": "merge-results",
+      "name": "Merge PM Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        360
+      ],
+      "parameters": {
+        "numberInputs": 15
+      }
+    },
+    {
+      "id": "audit-router",
+      "name": "Audit PM Command",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1360,
+        360
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO pm_command_log (comando, intencion, usuario, canal, datos_extraidos, respuesta_bot, exito)\nVALUES ($1, $2, $3, $4, $5::jsonb, $6, true)\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [ $(\"Classify Intent\").item.json.mensaje_original, $(\"Classify Intent\").item.json.intencion, $(\"Classify Intent\").item.json.usuario, $(\"Classify Intent\").item.json.canal_origen, JSON.stringify($(\"Classify Intent\").item.json.datos || {}), $(\"Merge PM Results\").item.json.respuesta || \"\" ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "return-response",
+      "name": "Return PM Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1580,
+        360
+      ],
+      "parameters": {
+        "jsCode": "const result = $('Merge PM Results').item.json;\nconst missing = $('Classify Intent').item.json.missing_config || [];\nlet respuesta = result.respuesta || result.response || 'Accion PM ejecutada.';\nif (missing.length) {\n  respuesta += '\\n\\nAviso de configuracion: faltan variables en n8n: ' + missing.join(', ') + '.';\n}\nreturn [{ json: { ...result, respuesta } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Classify Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Intent": {
+      "main": [
+        [
+          {
+            "node": "Route by Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Intent": {
+      "main": [
+        [
+          {
+            "node": "Call WF_PM_Tareas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call WF_PM_Avances",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call WF_PM_Bloqueos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call WF_PM_Riesgos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call WF_PM_Reportes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call WF_PM_Reuniones",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call WF_PM_Decisiones",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call WF_PM_Entregables",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call WF_PM_Retrospectiva",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call WF_PM_Estado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call WF_PM_Recordatorios",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format PM Help",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call WF_PM_Admin",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Admin Denied Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown Intent Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call WF_PM_Tareas": {
+      "main": [
+        [
+          {
+            "node": "Merge PM Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call WF_PM_Avances": {
+      "main": [
+        [
+          {
+            "node": "Merge PM Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Call WF_PM_Bloqueos": {
+      "main": [
+        [
+          {
+            "node": "Merge PM Results",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Call WF_PM_Riesgos": {
+      "main": [
+        [
+          {
+            "node": "Merge PM Results",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Call WF_PM_Reportes": {
+      "main": [
+        [
+          {
+            "node": "Merge PM Results",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Call WF_PM_Reuniones": {
+      "main": [
+        [
+          {
+            "node": "Merge PM Results",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "Call WF_PM_Decisiones": {
+      "main": [
+        [
+          {
+            "node": "Merge PM Results",
+            "type": "main",
+            "index": 6
+          }
+        ]
+      ]
+    },
+    "Call WF_PM_Entregables": {
+      "main": [
+        [
+          {
+            "node": "Merge PM Results",
+            "type": "main",
+            "index": 7
+          }
+        ]
+      ]
+    },
+    "Call WF_PM_Retrospectiva": {
+      "main": [
+        [
+          {
+            "node": "Merge PM Results",
+            "type": "main",
+            "index": 8
+          }
+        ]
+      ]
+    },
+    "Call WF_PM_Estado": {
+      "main": [
+        [
+          {
+            "node": "Merge PM Results",
+            "type": "main",
+            "index": 9
+          }
+        ]
+      ]
+    },
+    "Call WF_PM_Recordatorios": {
+      "main": [
+        [
+          {
+            "node": "Merge PM Results",
+            "type": "main",
+            "index": 10
+          }
+        ]
+      ]
+    },
+    "Format PM Help": {
+      "main": [
+        [
+          {
+            "node": "Merge PM Results",
+            "type": "main",
+            "index": 11
+          }
+        ]
+      ]
+    },
+    "Call WF_PM_Admin": {
+      "main": [
+        [
+          {
+            "node": "Merge PM Results",
+            "type": "main",
+            "index": 12
+          }
+        ]
+      ]
+    },
+    "Admin Denied Response": {
+      "main": [
+        [
+          {
+            "node": "Merge PM Results",
+            "type": "main",
+            "index": 13
+          }
+        ]
+      ]
+    },
+    "Unknown Intent Response": {
+      "main": [
+        [
+          {
+            "node": "Merge PM Results",
+            "type": "main",
+            "index": 14
+          }
+        ]
+      ]
+    },
+    "Merge PM Results": {
+      "main": [
+        [
+          {
+            "node": "Audit PM Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit PM Command": {
+      "main": [
+        [
+          {
+            "node": "Return PM Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "wf-pm-error-handler"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  }
+}

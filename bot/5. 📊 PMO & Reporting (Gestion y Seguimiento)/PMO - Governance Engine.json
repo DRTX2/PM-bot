@@ -1,0 +1,170 @@
+{
+  "name": "PMO - Governance Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "schedule-governance",
+      "name": "Schedule - PMO Governance",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "execute-governance",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS pmo_raid_items (raid_id UUID PRIMARY KEY DEFAULT gen_random_uuid(), correlation_id TEXT, item_type TEXT NOT NULL, title TEXT NOT NULL, description TEXT, severity TEXT NOT NULL DEFAULT 'medium', probability NUMERIC(4,3), impact TEXT, owner TEXT, status TEXT NOT NULL DEFAULT 'open', mitigation TEXT, due_date TIMESTAMPTZ, source TEXT, evidence JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\nCREATE TABLE IF NOT EXISTS pmo_action_items (action_id UUID PRIMARY KEY DEFAULT gen_random_uuid(), correlation_id TEXT, source TEXT, title TEXT NOT NULL, description TEXT, owner TEXT, priority TEXT NOT NULL DEFAULT 'medium', status TEXT NOT NULL DEFAULT 'open', due_date TIMESTAMPTZ, evidence JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), closed_at TIMESTAMPTZ);\nCREATE TABLE IF NOT EXISTS pmo_health_snapshots (snapshot_id BIGSERIAL PRIMARY KEY, correlation_id TEXT, health_score INTEGER NOT NULL, health_status TEXT NOT NULL, summary TEXT, metrics JSONB NOT NULL DEFAULT '{}'::jsonb, recommendations JSONB NOT NULL DEFAULT '[]'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\nCREATE TABLE IF NOT EXISTS ai_decisions (decision_id UUID PRIMARY KEY DEFAULT gen_random_uuid(), correlation_id TEXT, agent_role TEXT, decision_type TEXT, input_summary TEXT, recommendation TEXT, confidence DOUBLE PRECISION, risk_level TEXT, requires_human_approval BOOLEAN, status TEXT, created_at TIMESTAMPTZ DEFAULT NOW());\nCREATE TABLE IF NOT EXISTS estado_tareas (id BIGSERIAL PRIMARY KEY, card_id TEXT NOT NULL DEFAULT 'unknown', card_nombre TEXT, lista_nombre TEXT, miembro_nombre TEXT, fecha_vencimiento TIMESTAMPTZ, completada BOOLEAN NOT NULL DEFAULT FALSE, adjuntos_count INTEGER NOT NULL DEFAULT 0, fecha TIMESTAMPTZ NOT NULL DEFAULT NOW());\nCREATE TABLE IF NOT EXISTS events_outbox (outbox_id BIGSERIAL PRIMARY KEY, event_id TEXT, target TEXT NOT NULL DEFAULT 'discord', action TEXT NOT NULL DEFAULT 'notify', idempotency_key TEXT, payload JSONB NOT NULL DEFAULT '{}'::jsonb, status TEXT NOT NULL DEFAULT 'pending', retry_count INTEGER NOT NULL DEFAULT 0, scheduled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), sent_at TIMESTAMPTZ, last_error TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\nCREATE TABLE IF NOT EXISTS events_inbox (event_id TEXT PRIMARY KEY, source TEXT, event_type TEXT, received_at TIMESTAMPTZ DEFAULT NOW(), correlation_id TEXT, actor TEXT, processing_status TEXT DEFAULT 'pending', retry_count INTEGER DEFAULT 0, last_error TEXT, payload JSONB DEFAULT '{}'::jsonb, normalized JSONB DEFAULT '{}'::jsonb);\nCREATE TABLE IF NOT EXISTS card_attachments (attachment_id TEXT PRIMARY KEY, card_id TEXT, card_name TEXT, filename TEXT, url TEXT, summary_extracted TEXT, added_at TIMESTAMPTZ DEFAULT NOW());\nCREATE TABLE IF NOT EXISTS pmo_meetings (meeting_id UUID PRIMARY KEY DEFAULT gen_random_uuid(), title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'proposed', priority TEXT, scheduled_for TIMESTAMPTZ, requested_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\n\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS idempotency_key TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS correlation_id TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS source TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS objective TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS context_summary TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS requested_for TIMESTAMPTZ;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS duration_minutes INTEGER NOT NULL DEFAULT 30;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/Guayaquil';\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_status TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_notes TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_provider TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_event_id TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_url TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();\nSELECT\n  json_build_object(\n    'approvals_pending', (SELECT COUNT(*) FROM ai_decisions WHERE status = 'pending_approval'),\n    'approvals_high', (SELECT COUNT(*) FROM ai_decisions WHERE status = 'pending_approval' AND risk_level IN ('high','critical')),\n    'tasks_open', (SELECT COUNT(*) FROM estado_tareas WHERE completada = false),\n    'tasks_overdue', (SELECT COUNT(*) FROM estado_tareas WHERE completada = false AND fecha_vencimiento < NOW()),\n    'tasks_due_48h', (SELECT COUNT(*) FROM estado_tareas WHERE completada = false AND fecha_vencimiento BETWEEN NOW() AND NOW() + INTERVAL '48 hours'),\n    'outbox_dead', (SELECT COUNT(*) FROM events_outbox WHERE status = 'dead'),\n    'outbox_pending', (SELECT COUNT(*) FROM events_outbox WHERE status IN ('pending','sending')),\n    'inbox_failed', (SELECT COUNT(*) FROM events_inbox WHERE processing_status IN ('error','failed')),\n    'inbox_backlog', (SELECT COUNT(*) FROM events_inbox WHERE processing_status IN ('pending','processing','ingested')),\n    'docs_pending', (SELECT COUNT(*) FROM card_attachments WHERE summary_extracted IS NULL),\n    'meetings_open', (SELECT COUNT(*) FROM pmo_meetings WHERE status IN ('proposed','scheduled')),\n    'raid_open_high', (SELECT COUNT(*) FROM pmo_raid_items WHERE status = 'open' AND severity IN ('high','critical')),\n    'actions_overdue', (SELECT COUNT(*) FROM pmo_action_items WHERE status = 'open' AND due_date < NOW()),\n    'actions_open', (SELECT COUNT(*) FROM pmo_action_items WHERE status = 'open')\n  ) AS stats,\n  COALESCE((SELECT json_agg(t) FROM (SELECT card_id, card_nombre, lista_nombre, miembro_nombre, fecha_vencimiento FROM estado_tareas WHERE completada = false AND fecha_vencimiento < NOW() ORDER BY fecha_vencimiento ASC LIMIT 10) t), '[]'::json) AS overdue_tasks,\n  COALESCE((SELECT json_agg(t) FROM (SELECT decision_id, agent_role, input_summary, recommendation, risk_level, created_at FROM ai_decisions WHERE status = 'pending_approval' ORDER BY created_at ASC LIMIT 10) t), '[]'::json) AS pending_approvals,\n  COALESCE((SELECT json_agg(t) FROM (SELECT outbox_id, action, retry_count, last_error, scheduled_at FROM events_outbox WHERE status = 'dead' ORDER BY scheduled_at DESC LIMIT 10) t), '[]'::json) AS dead_outbox,\n  COALESCE((SELECT json_agg(t) FROM (SELECT event_id, source, event_type, retry_count, last_error, received_at FROM events_inbox WHERE processing_status IN ('error','failed') ORDER BY received_at DESC LIMIT 10) t), '[]'::json) AS failed_events,\n  COALESCE((SELECT json_agg(t) FROM (SELECT attachment_id, card_name, filename, added_at FROM card_attachments WHERE summary_extracted IS NULL ORDER BY added_at DESC LIMIT 10) t), '[]'::json) AS docs_pending,\n  COALESCE((SELECT json_agg(t) FROM (SELECT title, status, priority, scheduled_for, requested_by FROM pmo_meetings WHERE status IN ('proposed','scheduled') ORDER BY scheduled_for ASC NULLS LAST LIMIT 10) t), '[]'::json) AS meetings_open;"
+      },
+      "id": "fetch-pm-signals",
+      "name": "Fetch PMO Signals",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const parseObj = (v) => typeof v === 'string' ? JSON.parse(v || '{}') : (v || {});\nconst parseArr = (v) => Array.isArray(v) ? v : (typeof v === 'string' ? JSON.parse(v || '[]') : []);\nconst stats = parseObj($json.stats);\nconst overdueTasks = parseArr($json.overdue_tasks);\nconst approvals = parseArr($json.pending_approvals);\nconst deadOutbox = parseArr($json.dead_outbox);\nconst failedEvents = parseArr($json.failed_events);\nconst docsPending = parseArr($json.docs_pending);\nconst meetingsOpen = parseArr($json.meetings_open);\nconst n = (v) => Number(v || 0);\nconst today = new Date().toISOString().slice(0, 10);\nconst correlationId = `pmo-governance-${today}`;\nlet score = 100;\nscore -= Math.min(25, n(stats.tasks_overdue) * 5);\nscore -= Math.min(18, n(stats.approvals_high) * 6);\nscore -= Math.min(18, n(stats.outbox_dead) * 6);\nscore -= Math.min(15, n(stats.inbox_failed) * 5);\nscore -= Math.min(10, n(stats.docs_pending) * 2);\nscore -= Math.min(10, n(stats.actions_overdue) * 3);\nscore = Math.max(0, score);\nconst healthStatus = score >= 82 ? 'green' : score >= 62 ? 'yellow' : 'red';\nconst tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();\nconst inTwoDays = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();\nconst raids = [];\nconst actions = [];\nconst addRaid = (item) => raids.push({ correlation_id: correlationId, source: 'pmo_governance_engine', status: 'open', ...item });\nconst addAction = (item) => actions.push({ correlation_id: correlationId, source: 'pmo_governance_engine', status: 'open', ...item });\nif (n(stats.tasks_overdue)) {\n  addRaid({ item_type: 'issue', title: 'Tareas vencidas sin cierre', description: `${n(stats.tasks_overdue)} tareas vencidas detectadas.`, severity: n(stats.tasks_overdue) > 3 ? 'high' : 'medium', owner: 'PM', impact: 'Riesgo de retraso en entregables.', mitigation: 'Revisar owner, bloquear scope nuevo y acordar fecha real.', due_date: tomorrow, evidence: { overdueTasks } });\n  addAction({ title: 'Replanificar tareas vencidas', description: 'Revisar cada tarjeta vencida, confirmar owner y nueva fecha.', owner: 'PM', priority: 'high', due_date: tomorrow, evidence: { overdueTasks } });\n}\nif (n(stats.approvals_high)) {\n  addRaid({ item_type: 'dependency', title: 'Aprobaciones high/critical bloqueando avance', description: `${n(stats.approvals_high)} decisiones requieren aprobación humana.`, severity: 'high', owner: 'Tech Lead', impact: 'Bloqueo de decisiones técnicas o de entrega.', mitigation: 'Resolver en Approval Hub o convocar reunión PM.', due_date: tomorrow, evidence: { approvals } });\n  addAction({ title: 'Resolver aprobaciones críticas', description: 'Revisar Approval Hub y decidir aprobar/rechazar con contexto.', owner: 'Tech Lead', priority: 'high', due_date: tomorrow, evidence: { approvals } });\n}\nif (n(stats.outbox_dead) || n(stats.inbox_failed)) {\n  addRaid({ item_type: 'issue', title: 'Falla de confiabilidad en eventos/notificaciones', description: `${n(stats.outbox_dead)} outbox dead, ${n(stats.inbox_failed)} eventos fallidos.`, severity: 'high', owner: 'DevOps / Backend', impact: 'El PM bot puede perder señales o notificaciones.', mitigation: 'Revisar DLQ, replay controlado y error handler.', due_date: tomorrow, evidence: { deadOutbox, failedEvents } });\n  addAction({ title: 'Revisar DLQ e inbox fallido', description: 'Ejecutar monitor DLQ y replay solo después de validar causa raíz.', owner: 'DevOps / Backend', priority: 'high', due_date: tomorrow, evidence: { deadOutbox, failedEvents } });\n}\nif (n(stats.docs_pending)) {\n  addRaid({ item_type: 'risk', title: 'Documentos PDF sin resumen PM', description: `${n(stats.docs_pending)} adjuntos pendientes de resumen.`, severity: 'medium', owner: 'Documentacion / QA', impact: 'Se puede perder evidencia de entrega o aceptación.', mitigation: 'Procesar PDFs y extraer decisiones/pendientes.', due_date: inTwoDays, evidence: { docsPending } });\n  addAction({ title: 'Procesar PDFs pendientes', description: 'Ejecutar sync de adjuntos y resumen de documentos.', owner: 'Documentacion / QA', priority: 'medium', due_date: inTwoDays, evidence: { docsPending } });\n}\nif (!meetingsOpen.length && (n(stats.tasks_overdue) || n(stats.approvals_high) || n(stats.outbox_dead))) {\n  addAction({ title: 'Convocar reunión de desbloqueo', description: 'Usar PMO - Meeting Coordinator para alinear bloqueos, owners y fechas.', owner: 'PM', priority: 'medium', due_date: tomorrow, evidence: { stats } });\n}\nconst recommendations = actions.map(a => ({ title: a.title, owner: a.owner, due_date: a.due_date, priority: a.priority }));\nconst summary = healthStatus === 'green'\n  ? 'Proyecto estable. Mantener cadencia y monitoreo.'\n  : healthStatus === 'yellow'\n    ? 'Proyecto con señales de atención. Resolver acciones PMO antes de que escalen.'\n    : 'Proyecto en riesgo. Requiere intervención PM inmediata.';\nconst content = [\n  `**PMO Daily Governance - ${today}**`,\n  `**Health:** ${healthStatus.toUpperCase()} (${score}/100)`,\n  `**Resumen:** ${summary}`,\n  '',\n  `**Señales:** tareas vencidas ${n(stats.tasks_overdue)}, aprobaciones high ${n(stats.approvals_high)}, outbox dead ${n(stats.outbox_dead)}, docs pendientes ${n(stats.docs_pending)}.`,\n  '',\n  actions.length ? '**Acciones sugeridas:**' : '**Acciones sugeridas:** Ninguna crítica.',\n  ...actions.slice(0, 6).map(a => `- [${a.priority}] ${a.title} -> ${a.owner}`),\n  '',\n  `Correlation ID: \\`${correlationId}\\``\n].join('\\n');\nreturn [{ json: { correlation_id: correlationId, health_score: score, health_status: healthStatus, summary, metrics: stats, recommendations, raids, actions, discord_content: content, idempotency_key: `pmo-governance:${correlationId}:digest` } }];"
+      },
+      "id": "analyze-governance",
+      "name": "Analyze Governance Health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE UNIQUE INDEX IF NOT EXISTS pmo_raid_dedupe_idx ON pmo_raid_items (correlation_id, item_type, title) WHERE correlation_id IS NOT NULL;\nCREATE UNIQUE INDEX IF NOT EXISTS pmo_action_dedupe_idx ON pmo_action_items (correlation_id, title) WHERE correlation_id IS NOT NULL;\nCREATE UNIQUE INDEX IF NOT EXISTS events_outbox_idempotency_key_uq ON events_outbox (idempotency_key);\nWITH snapshot AS (\n  INSERT INTO pmo_health_snapshots (correlation_id, health_score, health_status, summary, metrics, recommendations)\n  VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)\n  RETURNING snapshot_id, health_score, health_status\n), raid_source AS (\n  SELECT * FROM jsonb_to_recordset($7::jsonb) AS x(correlation_id text, item_type text, title text, description text, severity text, probability numeric, impact text, owner text, status text, mitigation text, due_date timestamptz, source text, evidence jsonb)\n), raid_insert AS (\n  INSERT INTO pmo_raid_items (correlation_id, item_type, title, description, severity, probability, impact, owner, status, mitigation, due_date, source, evidence)\n  SELECT correlation_id, item_type, title, description, severity, probability, impact, owner, COALESCE(status,'open'), mitigation, due_date, source, COALESCE(evidence,'{}'::jsonb) FROM raid_source\n  ON CONFLICT (correlation_id, item_type, title) WHERE correlation_id IS NOT NULL DO UPDATE SET description = EXCLUDED.description, severity = EXCLUDED.severity, impact = EXCLUDED.impact, mitigation = EXCLUDED.mitigation, due_date = EXCLUDED.due_date, updated_at = NOW()\n  RETURNING 1\n), action_source AS (\n  SELECT * FROM jsonb_to_recordset($8::jsonb) AS x(correlation_id text, source text, title text, description text, owner text, priority text, status text, due_date timestamptz, evidence jsonb)\n), action_insert AS (\n  INSERT INTO pmo_action_items (correlation_id, source, title, description, owner, priority, status, due_date, evidence)\n  SELECT correlation_id, source, title, description, owner, priority, COALESCE(status,'open'), due_date, COALESCE(evidence,'{}'::jsonb) FROM action_source\n  ON CONFLICT (correlation_id, title) WHERE correlation_id IS NOT NULL DO UPDATE SET description = EXCLUDED.description, owner = EXCLUDED.owner, priority = EXCLUDED.priority, due_date = EXCLUDED.due_date, evidence = EXCLUDED.evidence, updated_at = NOW()\n  RETURNING 1\n), outbox AS (\n  INSERT INTO events_outbox (event_id, target, action, idempotency_key, payload)\n  VALUES (NULL, 'discord', 'notify', $9, $10::jsonb)\n  ON CONFLICT (idempotency_key) DO NOTHING\n)\nSELECT snapshot.snapshot_id, snapshot.health_score, snapshot.health_status, (SELECT COUNT(*) FROM raid_insert) AS raid_count, (SELECT COUNT(*) FROM action_insert) AS action_count FROM snapshot;",
+        "options": {
+          "queryReplacement": "={{ [ $json.correlation_id, $json.health_score, $json.health_status, $json.summary, JSON.stringify($json.metrics || {}), JSON.stringify($json.recommendations || []), JSON.stringify($json.raids || []), JSON.stringify($json.actions || []), $json.idempotency_key, JSON.stringify({ content: $json.discord_content }) ] }}"
+        }
+      },
+      "id": "persist-governance",
+      "name": "Persist PMO Governance",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        760,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: true, snapshot_id: $json.snapshot_id, health_score: $json.health_score, health_status: $json.health_status, raid_count: $json.raid_count, action_count: $json.action_count } }];"
+      },
+      "id": "return-governance",
+      "name": "Return Governance Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule - PMO Governance": {
+      "main": [
+        [
+          {
+            "node": "Fetch PMO Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch PMO Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch PMO Signals": {
+      "main": [
+        [
+          {
+            "node": "Analyze Governance Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Governance Health": {
+      "main": [
+        [
+          {
+            "node": "Persist PMO Governance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist PMO Governance": {
+      "main": [
+        [
+          {
+            "node": "Return Governance Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "id": "pmoGovernanceEngine",
+  "tags": []
+}

@@ -1,0 +1,201 @@
+{
+  "name": "AI - Context Guardian",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c2897a0d-c660-4046-bf34-76c7c6b68f74",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS estado_conocido (\n  id integer PRIMARY KEY,\n  nombre_estado text UNIQUE,\n  snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,\n  actualizado timestamptz NOT NULL DEFAULT NOW()\n);\nINSERT INTO estado_conocido (id, nombre_estado, snapshot)\nVALUES (1, 'inicializacion_sistema', '{\"version\":\"1.0.0\",\"source\":\"auto-seed\"}'::jsonb)\nON CONFLICT (id) DO NOTHING;\nSELECT snapshot FROM estado_conocido WHERE nombre_estado = 'inicializacion_sistema' LIMIT 1;",
+        "options": {}
+      },
+      "id": "854b8d8e-b31b-46db-9631-481d0d1fb990",
+      "name": "Fetch Project Rules",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -320,
+        192
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $('Execute Workflow Trigger').item.json || {};\nconst rules = $json.snapshot || {};\n\nreturn [{\n  json: {\n    correlation_id: event.correlation_id || `cg-${Date.now()}`,\n    event_type: event.event_type || 'debate',\n    actor: event.actor || 'system',\n    payload: typeof event.payload === 'string' ? event.payload : JSON.stringify(event.payload || {}),\n    project_rules: JSON.stringify(rules, null, 2)\n  }\n}];"
+      },
+      "id": "b37e6a26-cb77-451a-a291-7aa0a773ca97",
+      "name": "Prepare Guardian Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ `Eres el Context Guardian de PetSafe.\n\nTu responsabilidad es validar coherencia arquitectónica, convenciones técnicas y riesgos de producto.\n\n=== REGLAS DEL PROYECTO ===\n${$json.project_rules}\n\n=== EVENTO ===\nActor: ${$json.actor}\nTipo: ${$json.event_type}\nPayload:\n${$json.payload}\n\n=== TAREA ===\nAnaliza si hay:\n- Violaciones arquitectónicas\n- Riesgos técnicos\n- Falta de contexto\n- Problemas de escalabilidad\n- Riesgos de seguridad\n\nRESPONDE ÚNICAMENTE JSON VÁLIDO.\nNO USES markdown.\nNO USES bloques ```.\n\nFormato:\n{\n  \"evaluation\": \"texto\",\n  \"risk_level\": \"low|medium|high\",\n  \"guidance\": \"texto\",\n  \"requires_human_approval\": false\n}` }}"
+      },
+      "id": "958a204e-4182-481e-87d4-b97d5fbffb9a",
+      "name": "Gemini Context Guardian",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.6,
+      "position": [
+        160,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-1.5-pro",
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "20d2b3d7-a968-4fcd-8d9b-57707bd70a78",
+      "name": "Google Gemini Model Pro",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        160,
+        416
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "EcY5DyLsH2bNwVtM",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let raw = $json.text || $json.output || $json.response || '';\nraw = String(raw).replace(/```json/gi, '').replace(/```/g, '').trim();\nconst firstBrace = raw.indexOf('{');\nconst lastBrace = raw.lastIndexOf('}');\nif (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) raw = raw.slice(firstBrace, lastBrace + 1);\n\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (err) {\n  parsed = {\n    evaluation: raw,\n    risk_level: 'medium',\n    guidance: 'Model response could not be parsed cleanly.',\n    requires_human_approval: true,\n    parse_error: err.message\n  };\n}\n\nconst ctx = $('Prepare Guardian Context').item.json;\nconst risk = ['low', 'medium', 'high'].includes(String(parsed.risk_level || '').toLowerCase())\n  ? String(parsed.risk_level).toLowerCase()\n  : 'medium';\n\nreturn [{\n  json: {\n    correlation_id: ctx.correlation_id,\n    agent_role: 'Context Guardian',\n    decision_type: 'context_guardian',\n    input_summary: `Context review for ${ctx.event_type} by ${ctx.actor}`,\n    context_used: {\n      event_type: ctx.event_type,\n      actor: ctx.actor,\n      payload: ctx.payload,\n      project_rules: ctx.project_rules\n    },\n    evidence: {\n      model_output: parsed,\n      parse_error: parsed.parse_error || null\n    },\n    decision: {\n      evaluation: parsed.evaluation || 'Sin evaluación generada',\n      guidance: parsed.guidance || 'Revisar manualmente.'\n    },\n    recommendation: parsed.guidance || parsed.evaluation || 'Revisar manualmente la coherencia del cambio.',\n    confidence: parsed.confidence || 0.78,\n    risk_level: risk,\n    requires_human_approval: Boolean(parsed.requires_human_approval || risk === 'high')\n  }\n}];"
+      },
+      "id": "3165dc33-27fa-4c90-b7d1-c1ac493b9817",
+      "name": "Normalize Guardian Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wcNFn0XHidnGmrHg",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/wcNFn0XHidnGmrHg",
+          "cachedResultName": "System - AI Decision Logger"
+        },
+        "options": {}
+      },
+      "id": "9b00e69f-3ace-4c41-8715-70b7f7f077f6",
+      "name": "Log AI Decision",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        640,
+        192
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Project Rules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Project Rules": {
+      "main": [
+        [
+          {
+            "node": "Prepare Guardian Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Guardian Context": {
+      "main": [
+        [
+          {
+            "node": "Gemini Context Guardian",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Model Pro": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Gemini Context Guardian",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Context Guardian": {
+      "main": [
+        [
+          {
+            "node": "Normalize Guardian Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Guardian Output": {
+      "main": [
+        [
+          {
+            "node": "Log AI Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "487f2200-c37e-4e62-9a7a-c2b9e0ceea25",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "j21sSuSm2XWHrXSx",
+  "tags": []
+}

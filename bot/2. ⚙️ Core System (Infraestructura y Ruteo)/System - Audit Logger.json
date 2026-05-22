@@ -1,0 +1,66 @@
+{
+  "name": "System - Audit Logger",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "da54d29d-f5d2-4528-8310-9091384729ed",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS workflow_runs_audit (\n  run_id bigserial PRIMARY KEY,\n  workflow_id text NOT NULL,\n  workflow_name text,\n  status text,\n  started_at timestamptz NOT NULL DEFAULT NOW(),\n  completed_at timestamptz,\n  correlation_id text,\n  error_details jsonb,\n  metrics jsonb\n);\nINSERT INTO workflow_runs_audit (workflow_id, workflow_name, status, started_at, completed_at, correlation_id, error_details, metrics)\nVALUES ($1, $2, $3, COALESCE($4::timestamptz, NOW()), COALESCE($5::timestamptz, NOW()), $6, $7::jsonb, $8::jsonb);",
+        "options": {
+          "queryReplacement": "={{ [ $json.workflow_id || 'unknown', $json.workflow_name || 'unknown', $json.status || 'unknown', $json.started_at || null, $json.completed_at || null, $json.correlation_id || null, $json.error_details || '{}', $json.metrics || '{}' ] }}"
+        }
+      },
+      "id": "a9d69c12-68a9-4d51-9c57-9cfd7e651218",
+      "name": "Insert Audit Record",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        208,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Insert Audit Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "5eab2c2b-6e40-4f4e-9a71-e9cb62353254",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "nSdUx55AypMtiPlV",
+  "tags": []
+}

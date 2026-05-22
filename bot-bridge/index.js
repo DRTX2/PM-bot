@@ -2,6 +2,8 @@ require('dotenv').config();
 
 const { Client, GatewayIntentBits } = require('discord.js');
 const axios = require('axios');
+const http = require('http');
+const https = require('https');
 const { Queue, Worker } = require('bullmq');
 const IORedis = require('ioredis');
 const winston = require('winston');
@@ -9,13 +11,12 @@ const express = require('express');
 
 // Config
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
-const N8N_WEBHOOK = process.env.N8N_WEBHOOK || "http://localhost:5678/webhook/discord-chat";
+const N8N_WEBHOOK = process.env.N8N_WEBHOOK || "http://localhost:5678/webhook/discord-chat-v2";
+const N8N_PM_WEBHOOK = process.env.N8N_PM_WEBHOOK || "http://localhost:5678/webhook/pm-discord-entrada";
+const PM_FAST_PATH_ENABLED = process.env.PM_FAST_PATH_ENABLED !== 'false';
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379/0";
 const PORT = process.env.PORT || 3000;
-
-if (!DISCORD_BOT_TOKEN) {
-  throw new Error('Missing DISCORD_BOT_TOKEN environment variable.');
-}
+const PM_FAST_TIMEOUT_MS = Number(process.env.PM_FAST_TIMEOUT_MS || 10000);
 
 // Logging
 const logger = winston.createLogger({
@@ -28,6 +29,57 @@ const logger = winston.createLogger({
     new winston.transports.Console()
   ]
 });
+
+const n8n = axios.create({
+  timeout: 30000,
+  httpAgent: new http.Agent({ keepAlive: true, maxSockets: 20 }),
+  httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 20 }),
+});
+
+const pmChannelIds = new Set([
+  process.env.DISCORD_CHANNEL_TAREAS,
+  process.env.DISCORD_CHANNEL_AVANCES,
+  process.env.DISCORD_CHANNEL_BLOQUEOS,
+  process.env.DISCORD_CHANNEL_REPORTES,
+  process.env.DISCORD_CHANNEL_REUNIONES,
+  process.env.DISCORD_CHANNEL_ENTREGABLES,
+  process.env.DISCORD_CHANNEL_RIESGOS,
+  process.env.DISCORD_CHANNEL_ADMIN,
+  ...(process.env.PM_CHANNEL_IDS || '').split(','),
+].filter(Boolean).map((value) => String(value).trim()));
+
+function isPmMessage({ content, channelId }) {
+  return /^\/pm(\s|$)/i.test(content || '') || pmChannelIds.has(String(channelId || ''));
+}
+
+function buildPayload({ content, user, userId, channelId, channelName, messageId, isDm }) {
+  return {
+    content,
+    user,
+    user_id: userId,
+    channel_id: channelId,
+    channel_name: channelName,
+    message_id: messageId,
+    is_dm: Boolean(isDm),
+    source: 'discord',
+  };
+}
+
+function extractReply(data) {
+  if (typeof data === 'string') return data;
+  return data?.respuesta || data?.text || data?.message || data?.response || 'Procesando...';
+}
+
+async function sendReply({ channelId, messageId, content }) {
+  const channel = await client.channels.fetch(channelId);
+  if (!channel) return;
+  await channel.send({ content: String(content).slice(0, 2000), reply: { messageReference: messageId } });
+}
+
+async function callN8nAndReply({ webhookUrl, payload, channelId, messageId, timeout }) {
+  const res = await n8n.post(webhookUrl, payload, { timeout });
+  await sendReply({ channelId, messageId, content: extractReply(res.data) });
+}
 
 // Setup Discord Client
 const client = new Client({
@@ -44,30 +96,24 @@ const messageQueue = new Queue('discord-messages', { connection });
 
 // Worker
 const worker = new Worker('discord-messages', async job => {
-  const { content, user, channelId, messageId } = job.data;
+  const { content, user, userId, channelId, channelName, messageId, isDm } = job.data;
   logger.info('Processing job', { jobId: job.id, user, channelId });
 
   try {
-    const res = await axios.post(N8N_WEBHOOK, { content, user }, { timeout: 30000 });
-    const replyText = typeof res.data === 'string'
-      ? res.data
-      : (res.data?.text || res.data?.message || 'Procesando...');
-    
-    // Fetch channel and reply
-    const channel = await client.channels.fetch(channelId);
-    if (channel) {
-      await channel.send({ content: replyText, reply: { messageReference: messageId } });
-    }
+    await callN8nAndReply({
+      webhookUrl: N8N_WEBHOOK,
+      payload: buildPayload({ content, user, userId, channelId, channelName, messageId, isDm }),
+      channelId,
+      messageId,
+      timeout: 30000,
+    });
   } catch (error) {
     logger.error('Error connecting to n8n', { 
       error: error.message, 
       status: error.response?.status,
       data: error.response?.data
     });
-    const channel = await client.channels.fetch(channelId);
-    if (channel) {
-      await channel.send({ content: "Error conectando con n8n", reply: { messageReference: messageId } });
-    }
+    await sendReply({ channelId, messageId, content: 'Error conectando con n8n' });
     throw error;
   }
 }, { 
@@ -93,13 +139,39 @@ client.on('messageCreate', async (message) => {
     contentPreview: message.content.slice(0, 50)
   });
 
-  // Enqueue message
-  await messageQueue.add('process-message', {
+  const jobData = {
     content: message.content,
     user: message.author.username,
+    userId: message.author.id,
     channelId: message.channel.id,
-    messageId: message.id
-  }, {
+    channelName: message.channel.name || '',
+    messageId: message.id,
+    isDm: !message.guildId,
+  };
+
+  if (PM_FAST_PATH_ENABLED && isPmMessage(jobData)) {
+    try {
+      if (message.channel.sendTyping) {
+        await message.channel.sendTyping().catch(() => {});
+      }
+      await callN8nAndReply({
+        webhookUrl: N8N_PM_WEBHOOK,
+        payload: buildPayload(jobData),
+        channelId: jobData.channelId,
+        messageId: jobData.messageId,
+        timeout: PM_FAST_TIMEOUT_MS,
+      });
+      return;
+    } catch (error) {
+      logger.warn('Fast PM path failed, falling back to queue', {
+        error: error.message,
+        status: error.response?.status,
+      });
+    }
+  }
+
+  // Enqueue message
+  await messageQueue.add('process-message', jobData, {
     attempts: 3,
     backoff: { type: 'exponential', delay: 2000 },
     removeOnComplete: true,
@@ -109,15 +181,21 @@ client.on('messageCreate', async (message) => {
 
 client.on('error', (e) => logger.error('Discord Client Error', { error: e.message }));
 
-client.login(DISCORD_BOT_TOKEN).catch(e => logger.error('Login Error', { error: e.message }));
+if (DISCORD_BOT_TOKEN) {
+  client.login(DISCORD_BOT_TOKEN).catch(e => logger.error('Login Error', { error: e.message }));
+} else {
+  logger.warn('DISCORD_BOT_TOKEN is missing. bot-bridge is running in healthcheck-only mode.');
+}
 
 // Healthcheck Server
 const app = express();
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
-    discord: client.isReady() ? 'connected' : 'disconnected',
-    queue: 'active'
+    discord: DISCORD_BOT_TOKEN ? (client.isReady() ? 'connected' : 'disconnected') : 'disabled_missing_token',
+    queue: 'active',
+    pmFastPath: PM_FAST_PATH_ENABLED ? 'enabled' : 'disabled',
+    pmWebhook: N8N_PM_WEBHOOK,
   });
 });
 

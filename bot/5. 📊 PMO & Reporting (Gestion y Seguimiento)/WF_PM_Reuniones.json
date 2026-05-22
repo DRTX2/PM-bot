@@ -1,0 +1,145 @@
+{
+  "id": "wf-pm-reuniones",
+  "name": "WF_PM_Reuniones",
+  "active": true,
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "query-meeting",
+      "name": "Query Meeting Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT COALESCE(json_agg(t), '[]'::json) FROM (SELECT id,titulo,responsable,prioridad,fecha_limite FROM pm_tareas WHERE estado NOT IN ('completada','cancelada') ORDER BY fecha_limite NULLS LAST LIMIT 8) t) AS tareas,\n  (SELECT COALESCE(json_agg(b), '[]'::json) FROM (SELECT id,descripcion,severidad,responsable_afectado FROM pm_bloqueos WHERE estado <> 'resuelto' ORDER BY fecha_creacion DESC LIMIT 5) b) AS bloqueos,\n  (SELECT COALESCE(json_agg(r), '[]'::json) FROM (SELECT id,descripcion,prioridad_calculada FROM pm_riesgos WHERE estado='abierto' ORDER BY fecha_creacion DESC LIMIT 5) r) AS riesgos,\n  (SELECT COALESCE(json_agg(e), '[]'::json) FROM (SELECT id,nombre,responsable,fecha_limite,estado FROM pm_entregables WHERE estado NOT IN ('entregado','aprobado') ORDER BY fecha_limite NULLS LAST LIMIT 5) e) AS entregables;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "format-meeting",
+      "name": "Format Meeting Agenda",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const row = $json; const ctx = $('Execute Workflow Trigger').item.json || {};\nconst tareas = typeof row.tareas === 'string' ? JSON.parse(row.tareas) : row.tareas;\nconst bloqueos = typeof row.bloqueos === 'string' ? JSON.parse(row.bloqueos) : row.bloqueos;\nconst riesgos = typeof row.riesgos === 'string' ? JSON.parse(row.riesgos) : row.riesgos;\nconst entregables = typeof row.entregables === 'string' ? JSON.parse(row.entregables) : row.entregables;\nconst titulo = (ctx.datos?.texto || '').replace(/^\\/pm\\s+reunion\\s+\\w+/i, '').trim() || 'Reunion de seguimiento PetSafe';\nconst respuesta = [\n  `Agenda preparada: ${titulo}`,\n  '',\n  '1. Estado general: pendientes, atrasos y entregables proximos.',\n  '2. Tareas a revisar:',\n  ...(tareas.length ? tareas.map(t => `- #${t.id} ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - ' + t.fecha_limite : ''}`) : ['- Sin tareas activas.']),\n  '3. Bloqueos:',\n  ...(bloqueos.length ? bloqueos.map(b => `- #${b.id} [${b.severidad}] ${b.descripcion}`) : ['- Sin bloqueos activos.']),\n  '4. Riesgos:',\n  ...(riesgos.length ? riesgos.map(r => `- #${r.id} [${r.prioridad_calculada}] ${r.descripcion}`) : ['- Sin riesgos abiertos.']),\n  '5. Entregables:',\n  ...(entregables.length ? entregables.map(e => `- #${e.id} ${e.nombre} - ${e.responsable || 'sin responsable'}${e.fecha_limite ? ' - ' + e.fecha_limite : ''}`) : ['- Sin entregables pendientes.']),\n  '',\n  'Cierre esperado: registrar decisiones, acuerdos y compromisos con responsable y fecha.'\n].join('\\n');\nreturn [{ json: { respuesta, titulo, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen } }];"
+      }
+    },
+    {
+      "id": "store-meeting",
+      "name": "Store Meeting Agenda",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        760,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO pm_reuniones (titulo, tipo, agenda, creado_por)\nVALUES ($1, 'seguimiento', $2, $3)\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.titulo, $json.respuesta, $(\"Execute Workflow Trigger\").item.json.usuario ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "return-meeting",
+      "name": "Return Meeting Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        0
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: $('Format Meeting Agenda').item.json }];"
+      }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Query Meeting Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Meeting Context": {
+      "main": [
+        [
+          {
+            "node": "Format Meeting Agenda",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Meeting Agenda": {
+      "main": [
+        [
+          {
+            "node": "Store Meeting Agenda",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Meeting Agenda": {
+      "main": [
+        [
+          {
+            "node": "Return Meeting Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "wf-pm-error-handler"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  }
+}

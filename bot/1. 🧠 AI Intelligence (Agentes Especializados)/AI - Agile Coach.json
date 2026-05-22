@@ -1,0 +1,113 @@
+{
+  "name": "AI - Agile Coach",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "agile-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [0, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  ap.progreso_pct, ap.total_completadas, ap.total_tarjetas, ap.severidad_max,\n  ap.kpis, ap.fases, ap.github, ap.ranking, ap.cards_stale,\n  ap.problemas_detectados, ap.recomendaciones_ia, ap.fecha,\n  (SELECT COUNT(*) FROM ai_decisions WHERE decision_type = 'diagnostico_semanal' AND created_at > NOW() - INTERVAL '30 days') AS diagnosticos_30d,\n  (SELECT COUNT(*) FROM workflow_runs_audit WHERE status = 'error' AND completed_at > NOW() - INTERVAL '14 days') AS errores_14d,\n  (SELECT AVG(EXTRACT(EPOCH FROM (completed_at - created_at))/3600) FROM workflow_runs_audit WHERE status = 'success' AND completed_at > NOW() - INTERVAL '14 days') AS avg_cycle_hours\nFROM analisis_proyecto ap\nORDER BY ap.id DESC LIMIT 1;",
+        "options": {}
+      },
+      "id": "agile-fetch",
+      "name": "Fetch Retro Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [220, 400],
+      "credentials": { "postgres": { "id": "upx1y0H6Nw7XOqLJ", "name": "Postgres account" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $('Execute Workflow Trigger').item.json;\nconst row = $json || {};\nconst safeObj = v => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};\nconst safeArr = v => Array.isArray(v) ? v : [];\n\nconst kpis = safeObj(row.kpis);\nconst fases = safeObj(row.fases);\nconst github = safeObj(row.github);\nconst ranking = safeArr(row.ranking);\nconst stale = safeArr(row.cards_stale);\nconst problemas = safeArr(row.problemas_detectados);\nconst iaAnterior = String(row.recomendaciones_ia || '').slice(0, 500);\n\nconst diasFin = kpis.dias_hasta_fin || '?';\nconst velocidad = kpis.velocidad_tareas_por_dia || 0;\nconst completadas7d = kpis.completadas_7d || 0;\nconst silBack = kpis.silencio_back_dias || '-';\nconst silFront = kpis.silencio_front_dias || '-';\nconst busF = kpis.bus_factor_14d || 0;\nconst pctConv = kpis.pct_commits_convencionales || 0;\nconst prOpenTime = kpis.pr_open_time_dias || 0;\nconst prMergeRatio = kpis.pr_merge_ratio_30d || 0;\n\nconst fasesProblema = Object.values(fases)\n  .filter(f => f.semaforo === 'rojo' || f.semaforo === 'amarillo' || f.vencidas > 0)\n  .map(f => `${f.nombre}: ${f.pct}% (${f.vencidas} vencidas, ${f.pendientes} pendientes)`)\n  .join('; ') || 'Ninguna fase en alerta';\n\nconst rankingStr = ranking.slice(0, 5)\n  .map(r => `${r.trello_name}: done=${r.tareas_done}, pending=${r.tareas_pending}, overdue=${r.tareas_overdue}, commits14d=${r.commits_14d}`)\n  .join(' | ') || 'Sin datos de equipo';\n\nconst problemasStr = problemas\n  .map(p => `${p.tipo} (sev=${p.severidad}${p.count ? ', count='+p.count : ''})`)\n  .join(', ') || 'Ninguno detectado';\n\nconst staleStr = stale.slice(0, 5)\n  .map(t => `${t.nombre} (${t.dias_sin_actividad}d sin actividad, resp: ${(t.responsables || ['?'])[0] || 'sin asignar'})`)\n  .join(', ') || 'Ninguna';\n\nconst ciBack = github.ci_back ? `${github.ci_back.status} en ${github.ci_back.branch}` : 'sin datos';\nconst ciFront = github.ci_front ? `${github.ci_front.status} en ${github.ci_front.branch}` : 'sin datos';\n\nconst errores14d = Number(row.errores_14d || 0);\nconst avgCycleH = Number(row.avg_cycle_hours || 0).toFixed(1);\nconst diagnosticos30d = Number(row.diagnosticos_30d || 0);\n\nconst triggerMode = String(event.trigger_mode || 'retro').toLowerCase();\nconst isCiFailure = triggerMode === 'postmortem' || String(event.event_type || '').includes('ci_fail');\n\nlet misionText;\nif (isCiFailure) {\n  misionText = `Se ha detectado un fallo tecnico (${event.event_type || 'CI fallido'}). Actua como facilitador de POST-MORTEM: analiza la causa raiz probable (sin inventar, usa los datos), el impacto en el proyecto y redacta un documento de acciones correctivas.\\nEstructura obligatoria:\\nQUE PASO: Descripcion objetiva del incidente.\\nCAUSA RAIZ: Hipotesis basada en datos (CI, commits, PRs, actividad del equipo).\\nIMPACTO: Dias de retraso estimados o tareas afectadas.\\nACCIONES CORRECTIVAS: Minimo 3, asignadas por nombre real del equipo (FG, DM, DP, JA).\\nMEDIDA PREVENTIVA: Como evitar que se repita.`;\n} else {\n  misionText = `Actua como Agile Coach: facilita una retrospectiva basada en datos reales del ultimo periodo. Proporciona insights de mejora continua accionables.\\nEstructura obligatoria:\\nQUE SALIO BIEN: 2-3 aspectos positivos con datos que los respalden.\\nQUE SALIO MAL: 2-3 problemas reales identificados con datos.\\nQUE MEJORAR: 3 acciones especificas, asignadas por nombre (FG=Felipe Guerrero, DM=David Mendez, DP=David Perez, JA=Josue Asencio).\\nEXPERIMENTO SPRINT SIGUIENTE: Una mejora concreta y medible para probar la proxima semana.\\nSEMAFORO DE SALUD: verde/amarillo/rojo con justificacion numerica de una oracion.`;\n}\n\nconst prompt = `Eres el Agile Coach del proyecto PetSafe (clinica veterinaria, NestJS+Angular, cierre 10-jun-2026). Usa datos reales, texto plano, SIN markdown, SIN asteriscos, en espanol.\\n\\nDATA PERIODO ACTUAL\\nProgreso: ${row.progreso_pct}% (${row.total_completadas}/${row.total_tarjetas})\\nDias hasta cierre: ${diasFin} | Velocidad: ${velocidad} tareas/dia | Completadas 7d: ${completadas7d}\\nSilencio back: ${silBack}d | front: ${silFront}d\\nBus factor 14d: ${busF} | Commits convencionales: ${pctConv}%\\nPRs: avg ${prOpenTime}d abierto | merge ratio ${prMergeRatio}%\\nCI Backend: ${ciBack} | CI Frontend: ${ciFront}\\nErrores de sistema 14d: ${errores14d} | Ciclo promedio: ${avgCycleH}h\\nDiagnosticos IA 30d: ${diagnosticos30d}\\n\\nFASES CON PROBLEMAS: ${fasesProblema}\\nCARDS STALE: ${staleStr}\\nPROBLEMAS DETECTADOS: ${problemasStr}\\nCARGA EQUIPO: ${rankingStr}\\nNOTAS PREVIAS PM: ${iaAnterior}\\n\\n${misionText}`;\n\nreturn [{ json: {\n  correlation_id: event.correlation_id || `agile-${Date.now()}`,\n  event_type: event.event_type || 'retrospectiva',\n  actor: event.actor || 'system',\n  trigger_mode: isCiFailure ? 'postmortem' : 'retro',\n  prompt\n}}];"
+      },
+      "id": "agile-context",
+      "name": "Prepare Retro Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 400]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}"
+      },
+      "id": "agile-chain",
+      "name": "Gemini Agile Coach",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [660, 400]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": { "temperature": 0.4 }
+      },
+      "id": "agile-model",
+      "name": "Google Gemini Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [660, 608],
+      "credentials": { "googlePalmApi": { "id": "O6F3cHruroRP0y6x", "name": "Gemini - Jos" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.text ?? $json.output ?? $json.response ?? '';\nconst retroText = typeof raw === 'string' ? raw.trim() : JSON.stringify(raw);\nconst ctx = $('Prepare Retro Context').item.json;\nconst isPostmortem = ctx.trigger_mode === 'postmortem';\nconst title = isPostmortem ? '🚨 Post-Mortem PetSafe' : '🔄 Retrospectiva PetSafe';\nconst desc = isPostmortem ? 'Analisis de causa raiz y acciones correctivas.' : 'Reflexion agil del periodo con mejoras accionables.';\nconst color = isPostmortem ? 15158332 : 3066993;\nconst discord_payload = {\n  username: 'PM PetSafe · Agile Coach',\n  embeds: [{\n    title,\n    description: desc,\n    color,\n    fields: [{ name: isPostmortem ? '📋 Análisis Post-Mortem' : '📋 Retrospectiva', value: retroText.slice(0, 1024) }],\n    footer: { text: `Agile Coach · ${ctx.trigger_mode} · PM PetSafe AI` },\n    timestamp: new Date().toISOString()\n  }],\n  allowed_mentions: { parse: [] }\n};\nconst chunkSize = 1024;\nif (retroText.length > chunkSize) {\n  const extra = retroText.slice(chunkSize, chunkSize * 3);\n  if (extra) discord_payload.embeds[0].fields.push({ name: '📋 (continuación)', value: extra.slice(0, 1024) });\n}\nreturn [{ json: {\n  correlation_id: ctx.correlation_id,\n  agent_role: 'Agile Coach',\n  decision_type: ctx.trigger_mode,\n  input_summary: `${ctx.trigger_mode}: event=${ctx.event_type}`.slice(0,500),\n  context_used: { trigger_mode: ctx.trigger_mode, event_type: ctx.event_type },\n  evidence: { retro_text: retroText.slice(0,1000) },\n  decision: { retro: retroText.slice(0,500) },\n  recommendation: retroText.slice(0,500),\n  confidence: 0.85,\n  risk_level: isPostmortem ? 'high' : 'medium',\n  requires_human_approval: isPostmortem,\n  discord_payload\n}}];"
+      },
+      "id": "agile-payload",
+      "name": "Build Retro Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ai_decisions (correlation_id, agent_role, decision_type, input_summary, context_used, evidence, decision, recommendation, confidence, risk_level, requires_human_approval, status) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12);",
+        "options": {
+          "queryReplacement": "={{ [$json.correlation_id, $json.agent_role, $json.decision_type, $json.input_summary, JSON.stringify($json.context_used), JSON.stringify($json.evidence), JSON.stringify($json.decision), $json.recommendation.slice(0,1000), $json.confidence, $json.risk_level, $json.requires_human_approval, 'logged'] }}"
+        }
+      },
+      "id": "agile-log",
+      "name": "Log AI Decision",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1100, 200],
+      "credentials": { "postgres": { "id": "upx1y0H6Nw7XOqLJ", "name": "Postgres account" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.discord_payload) }}",
+        "options": {}
+      },
+      "id": "agile-discord",
+      "name": "Discord Agile Coach",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 400],
+      "continueOnFail": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": { "main": [[{ "node": "Fetch Retro Context", "type": "main", "index": 0 }]] },
+    "Fetch Retro Context": { "main": [[{ "node": "Prepare Retro Context", "type": "main", "index": 0 }]] },
+    "Prepare Retro Context": { "main": [[{ "node": "Gemini Agile Coach", "type": "main", "index": 0 }]] },
+    "Gemini Agile Coach": { "main": [[{ "node": "Build Retro Payload", "type": "main", "index": 0 }]] },
+    "Google Gemini Model": { "ai_languageModel": [[{ "node": "Gemini Agile Coach", "type": "ai_languageModel", "index": 0 }]] },
+    "Build Retro Payload": { "main": [[{ "node": "Log AI Decision", "type": "main", "index": 0 }, { "node": "Discord Agile Coach", "type": "main", "index": 0 }]] }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1", "binaryMode": "separate", "errorWorkflow": "O4qJYNx2qDrWB3wt" },
+  "meta": { "templateCredsSetupCompleted": true, "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5" },
+  "tags": []
+}

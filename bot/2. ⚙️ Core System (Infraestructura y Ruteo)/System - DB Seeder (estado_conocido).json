@@ -1,0 +1,139 @@
+{
+  "name": "System - DB Seeder (estado_conocido)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "9ed5cb57-af14-49fc-bb56-5a109628cf42",
+      "name": "When clicking \"Execute\"",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        640,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Centralizamos la data para que sea mantenible\nconst seedData = [\n  {\n    id: 1,\n    nombre_estado: 'inicializacion_sistema',\n    snapshot: {\n      version: \"1.1.0\",\n      last_sync: new Date().toISOString(),\n      metadata: {\n        env: \"production\",\n        owner: \"David Manjarres\"\n      }\n    }\n  }\n];\n\n// Mapeo nativo para n8n\nreturn seedData.map(item => ({ json: item }));"
+      },
+      "id": "43772ec4-e739-449e-9938-c3b3c870e9d3",
+      "name": "Define Seed Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "estado_conocido",
+          "mode": "list",
+          "cachedResultName": "estado_conocido"
+        },
+        "columns": {
+          "mappingMode": "defineInitially",
+          "value": {},
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "snapshot",
+              "displayName": "snapshot",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "actualizado",
+              "displayName": "actualizado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "a4963a0d-4ed3-4585-b7e0-09163edfd6e4",
+      "name": "Upsert Estado Conocido",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.2,
+      "position": [
+        1088,
+        96
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking \"Execute\"": {
+      "main": [
+        [
+          {
+            "node": "Define Seed Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define Seed Data": {
+      "main": [
+        [
+          {
+            "node": "Upsert Estado Conocido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "389708d0-3096-4e9c-a1c8-bfa995f4a601",
+  "meta": {
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "FFPLSwbkXbs0kuql",
+  "tags": []
+}

@@ -1,0 +1,188 @@
+{
+  "name": "Router - Project Events",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "d3687e42-25e3-4e8f-bb0c-16f54d8feaef",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS events_inbox (\n  event_id text PRIMARY KEY,\n  source text NOT NULL,\n  event_type text NOT NULL,\n  external_id text NOT NULL,\n  occurred_at timestamptz NOT NULL DEFAULT NOW(),\n  received_at timestamptz NOT NULL DEFAULT NOW(),\n  correlation_id text,\n  actor text,\n  entity_type text,\n  entity_id text,\n  repo text,\n  trello_card_id text,\n  pull_request_number integer,\n  commit_sha text,\n  payload jsonb NOT NULL DEFAULT '{}'::jsonb,\n  normalized jsonb,\n  processing_status text NOT NULL DEFAULT 'pending',\n  retry_count integer NOT NULL DEFAULT 0,\n  last_error text\n);\nCREATE TABLE IF NOT EXISTS events_outbox (\n  outbox_id bigserial PRIMARY KEY,\n  event_id text,\n  target text NOT NULL DEFAULT 'discord',\n  action text NOT NULL DEFAULT 'notify',\n  idempotency_key text,\n  payload jsonb NOT NULL DEFAULT '{}'::jsonb,\n  status text NOT NULL DEFAULT 'pending',\n  retry_count integer NOT NULL DEFAULT 0,\n  scheduled_at timestamptz NOT NULL DEFAULT NOW(),\n  sent_at timestamptz,\n  last_error text,\n  created_at timestamptz NOT NULL DEFAULT NOW()\n);\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS processing_status text NOT NULL DEFAULT 'pending';\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS retry_count integer NOT NULL DEFAULT 0;\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS last_error text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS idempotency_key text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT NOW();\nCREATE INDEX IF NOT EXISTS idx_events_inbox_status ON events_inbox (processing_status, received_at);\nCREATE UNIQUE INDEX IF NOT EXISTS events_outbox_idempotency_key_uq ON events_outbox (idempotency_key);\nUPDATE events_inbox\nSET processing_status = 'ingested', retry_count = retry_count + 1, last_error = 'Requeued stale processing event'\nWHERE processing_status = 'processing'\n  AND received_at < NOW() - INTERVAL '30 minutes'\n  AND retry_count < 3;\nUPDATE events_inbox\nSET processing_status = 'failed', last_error = COALESCE(last_error, 'Max router retries exceeded')\nWHERE processing_status = 'processing'\n  AND received_at < NOW() - INTERVAL '30 minutes'\n  AND retry_count >= 3;\nUPDATE events_inbox\nSET processing_status = 'skipped', last_error = 'Skipped by router: non-actionable unknown event'\nWHERE processing_status = 'ingested'\n  AND COALESCE(source, 'unknown') = 'unknown'\n  AND COALESCE(event_type, 'unknown') = 'unknown'\n  AND COALESCE(payload, '{}'::jsonb) = '{}'::jsonb\n  AND COALESCE(normalized, '{}'::jsonb) = '{}'::jsonb;\nUPDATE events_inbox\nSET processing_status = 'processing'\nWHERE event_id IN (\n  SELECT event_id\n  FROM events_inbox\n  WHERE processing_status = 'ingested'\n    AND NOT (\n      COALESCE(source, 'unknown') = 'unknown'\n      AND COALESCE(event_type, 'unknown') = 'unknown'\n      AND COALESCE(payload, '{}'::jsonb) = '{}'::jsonb\n      AND COALESCE(normalized, '{}'::jsonb) = '{}'::jsonb\n    )\n  ORDER BY received_at ASC\n  LIMIT 10\n  FOR UPDATE SKIP LOCKED\n)\nRETURNING *;",
+        "options": {}
+      },
+      "id": "9f600ad7-2d42-421e-b047-9d5cbe9eed43",
+      "name": "Fetch Ingested Events",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        208,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": "jT21FJtXSh2U8D0s",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "eded726e-2a8d-4b14-976b-d8a9ba1ccdb4",
+      "name": "Call Orchestrator",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $('Fetch Ingested Events').item.json || {};\nconst orchestratorResult = $json || {};\nconst normalized = event.normalized || {};\nconst source = event.source || normalized.source || 'event';\nconst eventType = event.event_type || normalized.event_type || 'evento';\nconst repo = event.repo || normalized.repo || '';\nconst actor = event.actor || normalized.actor || 'system';\nconst entityType = normalized.entity_type || event.entity_type || '';\nconst entityId = normalized.entity_id || event.entity_id || '';\nconst prNumber = normalized.pull_request_number || event.pull_request_number || null;\nconst cardId = normalized.trello_card_id || event.trello_card_id || null;\nconst branch = normalized.branch || event.branch || null;\nconst correlationId = event.correlation_id || normalized.correlation_id || null;\nconst url = normalized.url || null;\n\nconst lines = [];\nlines.push('[PetSafe/' + source + '] ' + eventType);\nif (actor) lines.push('Actor: ' + actor);\nif (repo) lines.push('Repo: ' + repo);\nif (entityType || entityId) lines.push('Entity: ' + [entityType, entityId].filter(Boolean).join(' '));\nif (prNumber) lines.push('PR: #' + prNumber);\nif (cardId) lines.push('Card: ' + cardId);\nif (branch) lines.push('Branch: ' + branch);\nif (correlationId) lines.push('Correlation: ' + correlationId);\nif (orchestratorResult.assigned_agent || orchestratorResult.routed === false) {\n  lines.push('Orchestrator: ' + (orchestratorResult.assigned_agent || 'None'));\n}\nif (url) lines.push(url);\n\nconst content = lines.join('\\n').slice(0, 1900);\n\nreturn [{\n  json: {\n    ...event,\n    orchestrator_result: orchestratorResult,\n    outbox_target: 'discord',\n    outbox_action: 'notify',\n    outbox_idempotency_key: event.event_id || correlationId || null,\n    outbox_payload: { content }\n  }\n}];"
+      },
+      "id": "b4f745df-fad9-40a4-b394-fee3200e5277",
+      "name": "Build Outbox Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ \"INSERT INTO events_outbox (event_id, target, action, idempotency_key, payload) VALUES ('\" + String($json.event_id || '').replace(/'/g, \"''\") + \"', '\" + String($json.outbox_target || 'discord').replace(/'/g, \"''\") + \"', '\" + String($json.outbox_action || 'notify').replace(/'/g, \"''\") + \"', '\" + String($json.outbox_idempotency_key || $json.event_id || '').replace(/'/g, \"''\") + \"', '\" + JSON.stringify($json.outbox_payload || {}).replace(/'/g, \"''\") + \"'::jsonb) ON CONFLICT (idempotency_key) DO NOTHING;\" }}",
+        "options": {}
+      },
+      "id": "7e0b17fa-3182-4ae6-aa0c-2eeb8391dbb2",
+      "name": "Insert Outbox",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        800,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ \"UPDATE events_inbox SET processing_status = 'processed' WHERE event_id = '\" + String($json.event_id || '').replace(/'/g, \"''\") + \"';\" }}",
+        "options": {}
+      },
+      "id": "9e143fa9-72b5-45e2-8497-c7b76e7b17b3",
+      "name": "Mark Processed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1008,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Ingested Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Ingested Events": {
+      "main": [
+        [
+          {
+            "node": "Call Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Orchestrator": {
+      "main": [
+        [
+          {
+            "node": "Build Outbox Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Outbox Payload": {
+      "main": [
+        [
+          {
+            "node": "Insert Outbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Outbox": {
+      "main": [
+        [
+          {
+            "node": "Mark Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "7cfa7ecf-77b1-4c36-aab9-107cd367d1fd",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "WTScoGIqYmzunxxV",
+  "tags": []
+}

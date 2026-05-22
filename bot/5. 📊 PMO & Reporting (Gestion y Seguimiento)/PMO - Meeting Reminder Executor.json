@@ -1,0 +1,123 @@
+{
+  "name": "PMO - Meeting Reminder Executor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "schedule-reminders",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS pmo_meeting_reminders (reminder_id BIGSERIAL PRIMARY KEY, meeting_id UUID, reminder_type TEXT NOT NULL, scheduled_at TIMESTAMPTZ NOT NULL, status TEXT NOT NULL DEFAULT 'pending', payload JSONB NOT NULL DEFAULT '{}'::jsonb, queued_at TIMESTAMPTZ, sent_at TIMESTAMPTZ, last_error TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\nCREATE TABLE IF NOT EXISTS pmo_meetings (meeting_id UUID PRIMARY KEY DEFAULT gen_random_uuid(), title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'scheduled', scheduled_for TIMESTAMPTZ, duration_minutes INTEGER NOT NULL DEFAULT 30, requested_by TEXT, priority TEXT, timezone TEXT DEFAULT 'America/Guayaquil');\n\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS idempotency_key TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS correlation_id TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS source TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS objective TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS context_summary TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS requested_for TIMESTAMPTZ;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS duration_minutes INTEGER NOT NULL DEFAULT 30;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/Guayaquil';\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_status TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_notes TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_provider TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_event_id TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_url TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();\nCREATE TABLE IF NOT EXISTS pmo_meeting_invitees (invitee_id BIGSERIAL PRIMARY KEY, meeting_id UUID REFERENCES pmo_meetings(meeting_id) ON DELETE CASCADE, name TEXT NOT NULL, role TEXT, reason TEXT, email TEXT, discord_id TEXT, is_client BOOLEAN NOT NULL DEFAULT FALSE, attendance_status TEXT NOT NULL DEFAULT 'invited', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(meeting_id, name));\n\nALTER TABLE pmo_meeting_invitees ADD COLUMN IF NOT EXISTS is_client BOOLEAN NOT NULL DEFAULT FALSE;\nALTER TABLE pmo_meeting_invitees ADD COLUMN IF NOT EXISTS attendance_status TEXT NOT NULL DEFAULT 'invited';\nSELECT COALESCE(json_agg(t), '[]'::json) AS reminders\nFROM (\n  SELECT r.reminder_id, r.reminder_type, r.scheduled_at, m.meeting_id, m.title, m.scheduled_for, m.duration_minutes, m.priority, m.requested_by,\n    COALESCE((SELECT json_agg(i) FROM (SELECT name, role, is_client FROM pmo_meeting_invitees WHERE meeting_id = m.meeting_id ORDER BY is_client DESC, name) i), '[]'::json) AS invitees\n  FROM pmo_meeting_reminders r\n  JOIN pmo_meetings m ON m.meeting_id = r.meeting_id\n  WHERE r.status = 'pending'\n    AND r.scheduled_at <= NOW()\n    AND m.status IN ('scheduled','confirmed')\n  ORDER BY r.scheduled_at ASC\n  LIMIT 20\n) t;"
+      },
+      "id": "fetch-due-reminders",
+      "name": "Fetch Due Reminders",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = typeof $json.reminders === 'string' ? JSON.parse($json.reminders || '[]') : ($json.reminders || []);\nconst fmt = (v) => v ? new Date(v).toLocaleString('es-EC', { timeZone: 'America/Guayaquil', dateStyle: 'medium', timeStyle: 'short' }) : '-';\nreturn rows.map((r) => {\n  const invitees = Array.isArray(r.invitees) ? r.invitees : (typeof r.invitees === 'string' ? JSON.parse(r.invitees || '[]') : []);\n  const label = r.reminder_type === '24h' ? 'en 24 horas' : 'en 30 minutos';\n  const content = [\n    `**Recordatorio de reunion PM (${label})**`,\n    `**${r.title}**`,\n    `Fecha: ${fmt(r.scheduled_for)}`,\n    `Duracion: ${r.duration_minutes || 30} min`,\n    invitees.length ? `Invitados: ${invitees.map(i => i.name).join(', ')}` : null,\n    `ID: \\`${r.meeting_id}\\``\n  ].filter(Boolean).join('\\n');\n  return { json: { ...r, content, idempotency_key: `meeting-reminder:${r.reminder_id}:${r.reminder_type}` } };\n});"
+      },
+      "id": "split-reminders",
+      "name": "Split Reminders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS events_outbox (outbox_id BIGSERIAL PRIMARY KEY, event_id TEXT, target TEXT NOT NULL DEFAULT 'discord', action TEXT NOT NULL DEFAULT 'notify', idempotency_key TEXT, payload JSONB NOT NULL DEFAULT '{}'::jsonb, status TEXT NOT NULL DEFAULT 'pending', retry_count INTEGER NOT NULL DEFAULT 0, scheduled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), sent_at TIMESTAMPTZ, last_error TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\nCREATE UNIQUE INDEX IF NOT EXISTS events_outbox_idempotency_key_uq ON events_outbox (idempotency_key);\nWITH outbox AS (\n  INSERT INTO events_outbox (event_id, target, action, idempotency_key, payload)\n  VALUES ($1, 'discord', 'notify', $2, $3::jsonb)\n  ON CONFLICT (idempotency_key) DO NOTHING\n  RETURNING outbox_id\n), reminder AS (\n  UPDATE pmo_meeting_reminders SET status = 'queued', queued_at = NOW()\n  WHERE reminder_id = $4::bigint\n  RETURNING reminder_id\n)\nSELECT (SELECT outbox_id FROM outbox LIMIT 1) AS outbox_id, (SELECT reminder_id FROM reminder LIMIT 1) AS reminder_id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.meeting_id, $json.idempotency_key, JSON.stringify({ content: $json.content }), $json.reminder_id ] }}"
+        }
+      },
+      "id": "queue-reminder",
+      "name": "Queue Reminder",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        720,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Due Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Due Reminders": {
+      "main": [
+        [
+          {
+            "node": "Split Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Reminders": {
+      "main": [
+        [
+          {
+            "node": "Queue Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "id": "pmoMeetingReminderExecutor",
+  "tags": []
+}

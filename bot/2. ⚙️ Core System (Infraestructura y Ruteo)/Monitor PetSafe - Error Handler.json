@@ -1,0 +1,129 @@
+{
+  "name": "Monitor PetSafe - Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c9114ced-075f-4de7-9312-4d981375ca61",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1856,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e1s1",
+              "name": "mensaje_error",
+              "value": "={{ `🚨 **Error en Monitor PetSafe** 🚨\n\n**Workflow:** ${$workflow.name}\n**Nodo:** ${$json.error?.node?.name || $json.node?.name || 'desconocido'}\n**Error:** ${$json.error?.message || $json.message || JSON.stringify($json).slice(0,300)}` }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b13fe22c-759c-4377-97d1-9df39694cfa2",
+      "name": "Formatear Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1600,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ content: ($json.mensaje_error || '🚨 Error desconocido en Monitor PetSafe — revisar ejecuciones en n8n').slice(0, 2000) }) }}",
+        "options": {}
+      },
+      "id": "c0b8fb3d-0e2f-4eb4-940a-cec121e95645",
+      "name": "Alerta a Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1360,
+        208
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_runs_audit (workflow_id, workflow_name, status, completed_at, error_details) VALUES ($1, $2, $3, NOW(), $4::jsonb);",
+        "options": {
+          "queryReplacement": "={{ [ $workflow.id || 'unknown', $workflow.name, 'error', JSON.stringify({ node: $json.error?.node?.name || $json.node?.name, message: $json.error?.message || $json.message }) ] }}"
+        }
+      },
+      "id": "c255c354-9a5a-40fd-8930-3785dd21d834",
+      "name": "Audit Log Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -1136,
+        208
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Formatear Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Error": {
+      "main": [
+        [
+          {
+            "node": "Alerta a Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alerta a Discord": {
+      "main": [
+        [
+          {
+            "node": "Audit Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f6dcc103-725c-4dad-919f-d23d30f4bea9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "O4qJYNx2qDrWB3wt",
+  "tags": []
+}

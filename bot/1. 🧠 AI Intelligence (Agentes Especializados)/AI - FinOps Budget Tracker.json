@@ -1,0 +1,144 @@
+{
+  "name": "AI - FinOps Budget Tracker",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "finops-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [0, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS finops_budget_snapshots (\n  id bigserial PRIMARY KEY,\n  fecha timestamptz NOT NULL DEFAULT NOW(),\n  presupuesto_total numeric(10,2) NOT NULL DEFAULT 2758.00,\n  gastado_rrhh numeric(10,2) NOT NULL DEFAULT 0,\n  gastado_infra numeric(10,2) NOT NULL DEFAULT 0,\n  gastado_indirectos numeric(10,2) NOT NULL DEFAULT 0,\n  gastado_total numeric(10,2) NOT NULL DEFAULT 0,\n  burn_rate_semanal numeric(10,2) NOT NULL DEFAULT 0,\n  semanas_transcurridas integer NOT NULL DEFAULT 0,\n  semanas_restantes integer NOT NULL DEFAULT 0,\n  pct_presupuesto_usado numeric(5,2) NOT NULL DEFAULT 0,\n  pct_proyecto_completado numeric(5,2) NOT NULL DEFAULT 0,\n  cpi numeric(5,2),\n  spi numeric(5,2),\n  eac numeric(10,2),\n  semaforo text NOT NULL DEFAULT 'verde',\n  ia_diagnostico text,\n  detalle jsonb\n);\nCREATE TABLE IF NOT EXISTS finops_team_rates (\n  id bigserial PRIMARY KEY,\n  miembro text NOT NULL UNIQUE,\n  rol text NOT NULL,\n  tarifa_hora numeric(6,2) NOT NULL,\n  horas_semana numeric(4,1) NOT NULL DEFAULT 8,\n  activo boolean NOT NULL DEFAULT true\n);\nINSERT INTO finops_team_rates (miembro, rol, tarifa_hora, horas_semana) VALUES\n  ('Manjarres David', 'Frontend', 4.00, 8),\n  ('Barragán David', 'Frontend', 4.00, 8),\n  ('García Josué', 'Backend', 4.00, 8),\n  ('Bonilla Joel', 'Backend + PM', 4.50, 12)\nON CONFLICT (miembro) DO NOTHING;\nSELECT\n  ap.progreso_pct, ap.total_completadas, ap.total_tarjetas,\n  ap.kpis, ap.fases, ap.ranking, ap.fecha,\n  (SELECT json_agg(r) FROM finops_team_rates r WHERE r.activo = true) AS team_rates,\n  (SELECT row_to_json(s) FROM finops_budget_snapshots s ORDER BY s.id DESC LIMIT 1) AS last_snapshot\nFROM analisis_proyecto ap ORDER BY ap.id DESC LIMIT 1;",
+        "options": {}
+      },
+      "id": "finops-fetch",
+      "name": "Fetch Budget Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [220, 400],
+      "credentials": { "postgres": { "id": "upx1y0H6Nw7XOqLJ", "name": "Postgres account" } }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/STRATIUM-UTA/PetSafe-Back/stats/contributors",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.GITHUB_TOKEN_BACKEND || $env.GITHUB_TOKEN }}" }, { "name": "Accept", "value": "application/vnd.github+json" }] },
+        "options": {}
+      },
+      "id": "finops-gh-back",
+      "name": "GitHub Contributors Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 200],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/JosueGarciaAbata/PetSafe-Front/stats/contributors",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.GITHUB_TOKEN_FRONTEND || $env.GITHUB_TOKEN }}" }, { "name": "Accept", "value": "application/vnd.github+json" }] },
+        "options": {}
+      },
+      "id": "finops-gh-front",
+      "name": "GitHub Contributors Frontend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 600],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $('Execute Workflow Trigger').item.json;\nconst pgRow = $('Fetch Budget Data').item.json || {};\nconst safeArr = v => Array.isArray(v) ? v : [];\nconst safeObj = v => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};\n\nconst contribBack = safeArr($('GitHub Contributors Backend').item.json);\nconst contribFront = safeArr($('GitHub Contributors Frontend').item.json);\nconst kpis = safeObj(pgRow.kpis);\nconst fases = safeObj(pgRow.fases);\nconst ranking = safeArr(pgRow.ranking);\nconst teamRates = safeArr(pgRow.team_rates);\nconst lastSnap = safeObj(pgRow.last_snapshot);\nconst progreso = Number(pgRow.progreso_pct || 0);\n\n// --- PROJECT BUDGET CONSTANTS ---\nconst BUDGET_TOTAL = 2758.00;\nconst BUDGET_RRHH = 2368.00;\nconst BUDGET_INFRA = 140.00;\nconst BUDGET_INDIRECTOS = 250.00;\nconst PROJECT_START = new Date('2026-02-03');\nconst PROJECT_END = new Date('2026-06-10');\nconst TOTAL_WEEKS = 16;\nconst VPS_MONTHLY = 15.00; // Contabo estimated\nconst now = new Date();\n\n// Weeks elapsed\nconst msElapsed = now - PROJECT_START;\nconst weeksElapsed = Math.max(1, Math.round(msElapsed / (7 * 86400000)));\nconst weeksRemaining = Math.max(0, TOTAL_WEEKS - weeksElapsed);\n\n// --- RRHH COST CALCULATION (dynamic from team rates + Trello activity) ---\nconst rateMap = {};\nfor (const r of teamRates) { rateMap[String(r.miembro).toLowerCase()] = r; }\n\n// Estimate hours worked per member from Trello ranking (tasks done = proxy for work)\nlet gastadoRRHH = 0;\nconst memberCosts = [];\nconst plannedWeeklyRRHH = teamRates.reduce((s, r) => s + (r.tarifa_hora * r.horas_semana), 0);\n\nfor (const r of teamRates) {\n  const weeklyRate = r.tarifa_hora * r.horas_semana;\n  const totalPlanned = weeklyRate * TOTAL_WEEKS;\n  const spent = weeklyRate * weeksElapsed;\n  gastadoRRHH += spent;\n  memberCosts.push({\n    nombre: r.miembro,\n    rol: r.rol,\n    tarifa: r.tarifa_hora,\n    horas_sem: r.horas_semana,\n    gasto_acum: Number(spent.toFixed(2)),\n    presupuesto: Number(totalPlanned.toFixed(2)),\n    pct_usado: Number(((spent / totalPlanned) * 100).toFixed(1))\n  });\n}\n\n// --- INFRA COST ---\nconst monthsElapsed = Math.max(1, Math.ceil(msElapsed / (30 * 86400000)));\nconst gastadoInfra = 80 + (VPS_MONTHLY * monthsElapsed); // Hardware=80 one-time + VPS monthly\n\n// --- INDIRECTOS ---\nconst gastadoIndirectos = (BUDGET_INDIRECTOS / TOTAL_WEEKS) * weeksElapsed;\n\nconst gastadoTotal = Number((gastadoRRHH + gastadoInfra + gastadoIndirectos).toFixed(2));\nconst burnRateSemanal = Number((gastadoTotal / weeksElapsed).toFixed(2));\nconst pctPresupuestoUsado = Number(((gastadoTotal / BUDGET_TOTAL) * 100).toFixed(2));\n\n// --- EARNED VALUE MANAGEMENT ---\nconst pctPlanificado = Number(((weeksElapsed / TOTAL_WEEKS) * 100).toFixed(2));\nconst BAC = BUDGET_TOTAL;\nconst PV = BAC * (pctPlanificado / 100);\nconst EV = BAC * (progreso / 100);\nconst AC = gastadoTotal;\nconst CPI = AC > 0 ? Number((EV / AC).toFixed(2)) : 1;\nconst SPI = PV > 0 ? Number((EV / PV).toFixed(2)) : 1;\nconst EAC = CPI > 0 ? Number((BAC / CPI).toFixed(2)) : BAC * 2;\nconst ETC = Math.max(0, Number((EAC - AC).toFixed(2)));\nconst VAC = Number((BAC - EAC).toFixed(2));\nconst burnProjected = burnRateSemanal * weeksRemaining + gastadoTotal;\n\n// Semáforo\nlet semaforo = 'verde';\nif (CPI < 0.85 || SPI < 0.8 || pctPresupuestoUsado > 90) semaforo = 'rojo';\nelse if (CPI < 0.95 || SPI < 0.9 || pctPresupuestoUsado > 75) semaforo = 'amarillo';\n\n// --- GitHub activity cost attribution ---\nconst ghNameMap = { 'davidmanjarres': 'Manjarres David', 'barragandavid': 'Barragán David', 'josuegarciaabata': 'García Josué', 'bonillajoel': 'Bonilla Joel' };\nconst commitsByAuthor = {};\nfor (const c of [...contribBack, ...contribFront]) {\n  const login = String(c.author?.login || '').toLowerCase();\n  const total = c.total || 0;\n  commitsByAuthor[login] = (commitsByAuthor[login] || 0) + total;\n}\n\nconst memberDetails = memberCosts.map(m => {\n  const loginKey = Object.keys(ghNameMap).find(k => ghNameMap[k] === m.nombre) || '';\n  const commits = commitsByAuthor[loginKey] || 0;\n  return `${m.nombre} (${m.rol}): $${m.gasto_acum}/$${m.presupuesto} (${m.pct_usado}%) · ${commits} commits`;\n}).join('\\n');\n\nconst prompt = `Eres el FinOps Controller del proyecto PetSafe (sistema veterinario, NestJS+Angular, cierre 10-jun-2026). Analiza los datos financieros y genera un diagnóstico de presupuesto y burn rate. Texto plano, SIN markdown, SIN asteriscos, en español.\\n\\nPRESUPUESTO APROBADO\\nTotal: $${BUDGET_TOTAL} | RRHH: $${BUDGET_RRHH} | Infra: $${BUDGET_INFRA} | Indirectos: $${BUDGET_INDIRECTOS}\\n\\nEJECUCION ACTUAL (semana ${weeksElapsed}/${TOTAL_WEEKS})\\nGastado total: $${gastadoTotal} de $${BUDGET_TOTAL} (${pctPresupuestoUsado}%)\\nRRHH: $${gastadoRRHH.toFixed(2)} | Infra: $${gastadoInfra.toFixed(2)} | Indirectos: $${gastadoIndirectos.toFixed(2)}\\nBurn rate semanal: $${burnRateSemanal}/semana\\nProyeccion al cierre: $${burnProjected.toFixed(2)}\\n\\nEARNED VALUE\\nCPI: ${CPI} (${CPI >= 1 ? 'eficiente' : 'ineficiente, gastando mas de lo que produce'})\\nSPI: ${SPI} (${SPI >= 1 ? 'a tiempo o adelantado' : 'retrasado respecto al plan'})\\nEAC (costo estimado final): $${EAC}\\nVAC (variacion al cierre): $${VAC} (${VAC >= 0 ? 'bajo presupuesto' : 'sobre presupuesto'})\\nETC (costo para terminar): $${ETC}\\nSemaforo: ${semaforo.toUpperCase()}\\n\\nAvance real del proyecto: ${progreso}% | Avance planificado: ${pctPlanificado}%\\nSemanas restantes: ${weeksRemaining}\\n\\nDETALLE POR MIEMBRO:\\n${memberDetails}\\n\\nSecciones obligatorias (max 3 oraciones cada una):\\nRESUMEN FINANCIERO: Estado general del presupuesto en una oracion.\\nBURN RATE: Si el ritmo actual es sostenible o requiere ajuste.\\nEARNED VALUE: Interpretacion del CPI y SPI para el negocio.\\nRIESGOS FINANCIEROS: Top 2 riesgos de costo o eficiencia.\\nRECOMENDACIONES: 2 acciones concretas para optimizar el gasto.`;\n\nreturn [{ json: {\n  correlation_id: event.correlation_id || `finops-${Date.now()}`,\n  event_type: event.event_type || 'finops_report',\n  prompt,\n  metrics: { presupuesto_total: BUDGET_TOTAL, gastado_rrhh: gastadoRRHH, gastado_infra: gastadoInfra, gastado_indirectos: gastadoIndirectos, gastado_total: gastadoTotal, burn_rate_semanal: burnRateSemanal, semanas_transcurridas: weeksElapsed, semanas_restantes: weeksRemaining, pct_presupuesto_usado: pctPresupuestoUsado, pct_proyecto_completado: progreso, cpi: CPI, spi: SPI, eac: EAC, etc: ETC, vac: VAC, semaforo, burn_projected: burnProjected, member_costs: memberCosts },\n  semaforo, gastadoTotal, CPI, SPI, EAC, pctPresupuestoUsado, burnRateSemanal, progreso, weeksElapsed, weeksRemaining, BUDGET_TOTAL, memberDetails\n}}];"
+      },
+      "id": "finops-context",
+      "name": "Build FinOps Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 400]
+    },
+    {
+      "parameters": { "promptType": "define", "text": "={{ $json.prompt }}" },
+      "id": "finops-chain",
+      "name": "Gemini FinOps Analyst",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [700, 400]
+    },
+    {
+      "parameters": { "modelName": "models/gemini-3.1-flash-lite", "options": { "temperature": 0.2 } },
+      "id": "finops-model",
+      "name": "Google Gemini Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [700, 608],
+      "credentials": { "googlePalmApi": { "id": "O6F3cHruroRP0y6x", "name": "Gemini - Jos" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.text ?? $json.output ?? $json.response ?? '';\nconst iaText = typeof raw === 'string' ? raw.trim() : JSON.stringify(raw);\nconst ctx = $('Build FinOps Context').item.json;\nconst m = ctx.metrics;\nconst semE = { verde: '🟢', amarillo: '🟡', rojo: '🔴' }[ctx.semaforo] || '⚪';\nconst colorMap = { rojo: 15158332, amarillo: 16761095, verde: 3066993 };\nconst cpiE = ctx.CPI >= 1 ? '✅' : ctx.CPI >= 0.9 ? '⚠️' : '❌';\nconst spiE = ctx.SPI >= 1 ? '✅' : ctx.SPI >= 0.9 ? '⚠️' : '❌';\nconst discord_payload = {\n  username: 'PM PetSafe · FinOps',\n  embeds: [{\n    title: `${semE} Reporte Financiero PetSafe · Semana ${ctx.weeksElapsed}/${ctx.weeksElapsed + ctx.weeksRemaining}`,\n    description: `Presupuesto: **$${ctx.BUDGET_TOTAL}** · Gastado: **$${ctx.gastadoTotal}** (${ctx.pctPresupuestoUsado}%)`,\n    color: colorMap[ctx.semaforo] || 3066993,\n    fields: [\n      { name: '🔥 Burn Rate', value: `**$${ctx.burnRateSemanal}**/semana · Proyección: $${m.burn_projected?.toFixed(2)}`, inline: true },\n      { name: '📊 Earned Value', value: `${cpiE} CPI: **${ctx.CPI}** · ${spiE} SPI: **${ctx.SPI}**`, inline: true },\n      { name: '🎯 EAC/VAC', value: `Costo estimado final: **$${ctx.EAC}** · Variación: **$${m.vac}**`, inline: false },\n      { name: '👥 Costo por Miembro', value: ctx.memberDetails.slice(0, 900), inline: false },\n      { name: '🤖 Diagnóstico FinOps', value: iaText.slice(0, 900), inline: false }\n    ],\n    footer: { text: 'FinOps Budget Tracker · PM PetSafe AI' },\n    timestamp: new Date().toISOString()\n  }]\n};\nreturn [{ json: {\n  correlation_id: ctx.correlation_id, agent_role: 'FinOps Budget Tracker', decision_type: 'finops_report',\n  input_summary: `FinOps: $${ctx.gastadoTotal}/$${ctx.BUDGET_TOTAL} (${ctx.pctPresupuestoUsado}%), CPI=${ctx.CPI}`.slice(0,500),\n  context_used: { gastado: ctx.gastadoTotal, cpi: ctx.CPI, spi: ctx.SPI },\n  evidence: { metrics: m, ia: iaText.slice(0,1000) },\n  decision: { semaforo: ctx.semaforo, eac: ctx.EAC }, recommendation: iaText.slice(0,500),\n  confidence: 0.9, risk_level: ctx.semaforo === 'rojo' ? 'high' : ctx.semaforo === 'amarillo' ? 'medium' : 'low',\n  requires_human_approval: ctx.semaforo === 'rojo', discord_payload, metrics: m, ia_text: iaText\n}}];"
+      },
+      "id": "finops-payload",
+      "name": "Build FinOps Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO finops_budget_snapshots (presupuesto_total,gastado_rrhh,gastado_infra,gastado_indirectos,gastado_total,burn_rate_semanal,semanas_transcurridas,semanas_restantes,pct_presupuesto_usado,pct_proyecto_completado,cpi,spi,eac,semaforo,ia_diagnostico,detalle) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb);",
+        "options": { "queryReplacement": "={{ [2758, $json.metrics.gastado_rrhh, $json.metrics.gastado_infra, $json.metrics.gastado_indirectos, $json.metrics.gastado_total, $json.metrics.burn_rate_semanal, $json.metrics.semanas_transcurridas, $json.metrics.semanas_restantes, $json.metrics.pct_presupuesto_usado, $json.metrics.pct_proyecto_completado, $json.metrics.cpi, $json.metrics.spi, $json.metrics.eac, $json.metrics.semaforo, $json.ia_text.slice(0,2000), JSON.stringify($json.metrics)] }}" }
+      },
+      "id": "finops-snapshot",
+      "name": "Persist FinOps Snapshot",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1140, 200],
+      "credentials": { "postgres": { "id": "upx1y0H6Nw7XOqLJ", "name": "Postgres account" } }
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "={{ $env.DISCORD_WEBHOOK_URL }}", "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.discord_payload) }}", "options": {}
+      },
+      "id": "finops-discord",
+      "name": "Discord FinOps Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1140, 400],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ai_decisions (correlation_id,agent_role,decision_type,input_summary,context_used,evidence,decision,recommendation,confidence,risk_level,requires_human_approval,status) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8,$9,$10,$11,$12);",
+        "options": { "queryReplacement": "={{ [$json.correlation_id,$json.agent_role,$json.decision_type,$json.input_summary,JSON.stringify($json.context_used),JSON.stringify($json.evidence),JSON.stringify($json.decision),$json.recommendation.slice(0,1000),$json.confidence,$json.risk_level,$json.requires_human_approval,'logged'] }}" }
+      },
+      "id": "finops-log",
+      "name": "Log AI Decision",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1140, 600],
+      "credentials": { "postgres": { "id": "upx1y0H6Nw7XOqLJ", "name": "Postgres account" } }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": { "main": [[{ "node": "Fetch Budget Data", "type": "main", "index": 0 }, { "node": "GitHub Contributors Backend", "type": "main", "index": 0 }, { "node": "GitHub Contributors Frontend", "type": "main", "index": 0 }]] },
+    "Fetch Budget Data": { "main": [[{ "node": "Build FinOps Context", "type": "main", "index": 0 }]] },
+    "GitHub Contributors Backend": { "main": [[{ "node": "Build FinOps Context", "type": "main", "index": 0 }]] },
+    "GitHub Contributors Frontend": { "main": [[{ "node": "Build FinOps Context", "type": "main", "index": 0 }]] },
+    "Build FinOps Context": { "main": [[{ "node": "Gemini FinOps Analyst", "type": "main", "index": 0 }]] },
+    "Gemini FinOps Analyst": { "main": [[{ "node": "Build FinOps Payload", "type": "main", "index": 0 }]] },
+    "Google Gemini Model": { "ai_languageModel": [[{ "node": "Gemini FinOps Analyst", "type": "ai_languageModel", "index": 0 }]] },
+    "Build FinOps Payload": { "main": [[{ "node": "Persist FinOps Snapshot", "type": "main", "index": 0 }, { "node": "Discord FinOps Report", "type": "main", "index": 0 }, { "node": "Log AI Decision", "type": "main", "index": 0 }]] }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1", "binaryMode": "separate", "errorWorkflow": "O4qJYNx2qDrWB3wt" },
+  "meta": { "templateCredsSetupCompleted": true, "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5" },
+  "tags": []
+}

@@ -1,0 +1,170 @@
+{
+  "name": "Monitor - Outbox DLQ",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "1a74e931-b2de-4d6c-8daf-c67dae1611a8",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS events_outbox (\n  outbox_id bigserial PRIMARY KEY,\n  event_id text,\n  target text NOT NULL DEFAULT 'discord',\n  action text NOT NULL DEFAULT 'notify',\n  idempotency_key text,\n  payload jsonb NOT NULL DEFAULT '{}'::jsonb,\n  status text NOT NULL DEFAULT 'pending',\n  retry_count integer NOT NULL DEFAULT 0,\n  scheduled_at timestamptz NOT NULL DEFAULT NOW(),\n  sent_at timestamptz,\n  last_error text,\n  created_at timestamptz NOT NULL DEFAULT NOW()\n);\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'pending';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS scheduled_at timestamptz NOT NULL DEFAULT NOW();\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS last_error text;\nWITH dead_all AS (SELECT * FROM events_outbox WHERE status = 'dead'), dead_sample AS (SELECT outbox_id, event_id, action, target, last_error FROM dead_all ORDER BY scheduled_at DESC LIMIT 5) SELECT COALESCE((SELECT COUNT(*)::int FROM dead_all), 0) AS dead_count, COALESCE(json_agg(dead_sample), '[]'::json) AS dead_samples FROM dead_sample;",
+        "options": {}
+      },
+      "id": "35743911-ab07-4f32-9049-c6de806958d8",
+      "name": "Fetch Dead Outbox",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        208,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-dead",
+              "leftValue": "={{ Number($json.dead_count || 0) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c6f37c02-d5fa-4009-ab5b-17d0d4101516",
+      "name": "Has Dead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const count = Number($json.dead_count || 0);\nconst samples = Array.isArray($json.dead_samples) ? $json.dead_samples : [];\nconst lines = [];\nlines.push('[PetSafe/Outbox] DLQ detected');\nlines.push('Dead count: ' + count);\nif (samples.length) {\n  lines.push('Samples:');\n  samples.forEach((item) => {\n    const row = [item.outbox_id, item.event_id, item.target, item.action].filter(Boolean).join(' | ');\n    lines.push('- ' + row);\n  });\n}\nconst content = lines.join('\\n').slice(0, 1900);\nreturn [{ json: { content } }];"
+      },
+      "id": "3979e64d-e107-424f-8537-1def4cc129bf",
+      "name": "Format DLQ Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ content: $json.content }) }}",
+        "options": {}
+      },
+      "id": "1851d5e9-6dcd-4c88-b77f-a9a3750463e4",
+      "name": "Send DLQ Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        0
+      ],
+      "continueOnFail": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Dead Outbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Dead Outbox": {
+      "main": [
+        [
+          {
+            "node": "Has Dead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Dead?": {
+      "main": [
+        [
+          {
+            "node": "Format DLQ Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format DLQ Message": {
+      "main": [
+        [
+          {
+            "node": "Send DLQ Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "8ef8eb42-f5fa-49c3-8f69-b2a2dc9cf73d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "MM6ND0jl2jEQgafa",
+  "tags": []
+}

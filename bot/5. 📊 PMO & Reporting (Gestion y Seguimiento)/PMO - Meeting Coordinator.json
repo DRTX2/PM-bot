@@ -1,0 +1,286 @@
+{
+  "name": "PMO - Meeting Coordinator",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "pm-meeting",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-meeting-request",
+      "name": "Webhook - Meeting Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "pmo-meeting-request"
+    },
+    {
+      "parameters": {},
+      "id": "execute-meeting-request",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json.body && typeof $json.body === 'object' ? $json.body : $json;\nconst entryMode = $json.body && typeof $json.body === 'object' ? 'webhook' : (input.entry_mode || 'execute');\nconst normalize = (value) => String(value || '').trim();\nconst text = [input.title, input.objective, input.context, input.reason, input.summary, input.event_type, JSON.stringify(input.payload || input.normalized || {})].filter(Boolean).join(' ').toLowerCase();\n\nconst directory = [\n  { name: 'Joel Bonilla', role: 'Cliente / Sponsor', tags: ['cliente','sponsor','stakeholder','aprobacion','aprobación','alcance','entrega','demo','cierre','manual','pdf','aceptacion','aceptación'], is_client: true },\n  { name: 'David Manjarres', role: 'Backend / Tech Lead', tags: ['backend','api','postgres','db','database','servidor','infra','deploy','discord','n8n','bug','pr','merge','arquitectura','riesgo'], is_client: false },\n  { name: 'David Josue Barragan', role: 'Frontend', tags: ['frontend','ui','ux','vercel','pantalla','dashboard','web','diseño','diseno','interfaz'], is_client: false },\n  { name: 'Fernando Bonilla', role: 'QA / Documentacion', tags: ['qa','test','pruebas','pdf','reporte','documento','documentacion','documentación','manual','evidencia'], is_client: false },\n  { name: 'Josue Garcia', role: 'QA / Integracion', tags: ['qa','integracion','integración','testing','validacion','validación','aceptacion','aceptación','trello'], is_client: false }\n];\n\nconst selected = new Map();\nconst add = (person, reason) => {\n  const key = normalize(person.name || person).toLowerCase();\n  if (!key) return;\n  selected.set(key, {\n    name: person.name || person,\n    role: person.role || 'Invitado',\n    reason: reason || person.reason || 'Solicitado por contexto',\n    email: person.email || null,\n    discord_id: person.discord_id || null,\n    is_client: Boolean(person.is_client)\n  });\n};\n\nconst explicit = Array.isArray(input.invitees) ? input.invitees : [];\nexplicit.forEach((p) => typeof p === 'string' ? add({ name: p }, 'Invitado explicitamente') : add(p, p.reason));\nfor (const person of directory) {\n  const hit = person.tags.find((tag) => text.includes(tag));\n  if (hit) add(person, `Contexto relacionado con ${hit}`);\n}\nif (/urgente|bloqueo|riesgo|release|entrega|aprobaci[oó]n|cliente|demo|cierre/.test(text)) {\n  add(directory[0], 'Cliente/Sponsor requerido por impacto o aprobacion');\n}\nif (!selected.size) {\n  add(directory[0], 'Sponsor por defecto para clasificar la reunion');\n  add(directory[1], 'Tech Lead por defecto para resolver contexto tecnico');\n}\n\nconst toLocalParts = (date = new Date()) => {\n  const local = new Date(date.getTime() - 5 * 60 * 60 * 1000);\n  return { y: local.getUTCFullYear(), m: local.getUTCMonth() + 1, d: local.getUTCDate(), h: local.getUTCHours(), min: local.getUTCMinutes(), dow: local.getUTCDay() };\n};\nconst isoFromLocal = (y, m, d, h, min = 0) => new Date(Date.UTC(y, m - 1, d, h + 5, min, 0, 0)).toISOString();\nconst addDaysLocal = (parts, days) => {\n  const dt = new Date(Date.UTC(parts.y, parts.m - 1, parts.d + days, 5, 0, 0));\n  const local = new Date(dt.getTime() - 5 * 60 * 60 * 1000);\n  return { y: local.getUTCFullYear(), m: local.getUTCMonth() + 1, d: local.getUTCDate(), h: 0, min: 0, dow: local.getUTCDay() };\n};\nconst nextBusinessDay = (parts, offset = 1) => {\n  let p = addDaysLocal(parts, offset);\n  while (p.dow === 0 || p.dow === 6) p = addDaysLocal(p, 1);\n  return p;\n};\nconst roundHalfHour = (iso) => {\n  const d = new Date(iso);\n  const mins = d.getUTCMinutes();\n  const add = mins === 0 ? 0 : mins <= 30 ? 30 - mins : 60 - mins;\n  d.setUTCMinutes(mins + add, 0, 0);\n  return d.toISOString();\n};\nconst parsePreferred = () => {\n  const raw = normalize(input.scheduled_for || input.preferred_time || input.when || input.fecha || input.context || input.title);\n  if (input.scheduled_for || input.preferred_time || input.when || input.fecha) {\n    const parsed = new Date(raw);\n    if (!Number.isNaN(parsed.getTime())) return roundHalfHour(parsed.toISOString());\n  }\n  const now = new Date();\n  const today = toLocalParts(now);\n  let day = null;\n  if (/pasado\\s+ma[ñn]ana/.test(raw.toLowerCase())) day = nextBusinessDay(today, 2);\n  else if (/ma[ñn]ana|tomorrow/.test(raw.toLowerCase())) day = nextBusinessDay(today, 1);\n  else if (/hoy|today/.test(raw.toLowerCase())) day = today;\n  const isoDate = raw.match(/(20\\d{2})-(\\d{1,2})-(\\d{1,2})(?:[ tT]+(\\d{1,2})(?::(\\d{2}))?)?/);\n  if (isoDate) {\n    const h = Number(isoDate[4] || 10);\n    const mi = Number(isoDate[5] || 0);\n    return roundHalfHour(isoFromLocal(Number(isoDate[1]), Number(isoDate[2]), Number(isoDate[3]), h, mi));\n  }\n  const latamDate = raw.match(/(\\d{1,2})[\\/-](\\d{1,2})[\\/-](20\\d{2})(?:\\s+(\\d{1,2})(?::(\\d{2}))?)?/);\n  if (latamDate) {\n    const h = Number(latamDate[4] || 10);\n    const mi = Number(latamDate[5] || 0);\n    return roundHalfHour(isoFromLocal(Number(latamDate[3]), Number(latamDate[2]), Number(latamDate[1]), h, mi));\n  }\n  const time = raw.match(/\\b(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?\\b/i);\n  if (day && time) {\n    let h = Number(time[1]);\n    const mi = Number(time[2] || 0);\n    const mer = String(time[3] || '').toLowerCase();\n    if (mer === 'pm' && h < 12) h += 12;\n    if (mer === 'am' && h === 12) h = 0;\n    return roundHalfHour(isoFromLocal(day.y, day.m, day.d, h, mi));\n  }\n  if (day) return roundHalfHour(isoFromLocal(day.y, day.m, day.d, 10, 0));\n  const fallback = nextBusinessDay(today, 1);\n  return roundHalfHour(isoFromLocal(fallback.y, fallback.m, fallback.d, 10, 0));\n};\n\nconst durationRaw = Number.parseInt(input.duration_minutes || input.duration || (/demo|review|revisi[oó]n/.test(text) ? 45 : 30), 10);\nconst duration = Math.max(15, Math.min(120, Number.isFinite(durationRaw) ? durationRaw : 30));\nconst priority = ['low','medium','high','critical'].includes(String(input.priority || '').toLowerCase()) ? String(input.priority).toLowerCase() : (/bloqueo|critical|urgente|produccion|producción/.test(text) ? 'high' : 'medium');\nconst correlationId = input.correlation_id || input.event_id || `meeting-${Date.now()}`;\nconst title = normalize(input.title) || (priority === 'high' ? 'Reunion de desbloqueo PM' : 'Reunion de coordinacion PM');\nconst objective = normalize(input.objective || input.reason || input.summary) || 'Alinear contexto, responsables, siguientes acciones y riesgos.';\nconst contextSummary = normalize(input.context || input.input_summary || input.event_type || '') || 'Solicitud generada desde el bot PM.';\nconst idempotencyKey = input.idempotency_key || `meeting:${correlationId}:${title.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').slice(0,48)}`;\nconst invitees = Array.from(selected.values());\nconst requestedFor = parsePreferred();\n\nreturn [{ json: {\n  entry_mode: entryMode,\n  correlation_id: correlationId,\n  source: input.source || 'bot',\n  requested_by: input.requested_by || input.actor || input.usuario || 'pm_bot',\n  title, objective, context_summary: contextSummary, priority,\n  requested_for: requestedFor,\n  duration_minutes: duration,\n  status: input.status || 'scheduled',\n  idempotency_key: idempotencyKey,\n  invitees,\n  timezone: 'America/Guayaquil',\n  scheduling_policy: {\n    working_days: 'Mon-Fri',\n    windows: ['09:00-12:00', '14:00-17:30'],\n    slot_minutes: 30,\n    conflict_policy: 'no_overlapping_invitees'\n  }\n} }];"
+      },
+      "id": "normalize-webhook-meeting",
+      "name": "Normalize Meeting Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json.body && typeof $json.body === 'object' ? $json.body : $json;\nconst entryMode = $json.body && typeof $json.body === 'object' ? 'webhook' : (input.entry_mode || 'execute');\nconst normalize = (value) => String(value || '').trim();\nconst text = [input.title, input.objective, input.context, input.reason, input.summary, input.event_type, JSON.stringify(input.payload || input.normalized || {})].filter(Boolean).join(' ').toLowerCase();\n\nconst directory = [\n  { name: 'Joel Bonilla', role: 'Cliente / Sponsor', tags: ['cliente','sponsor','stakeholder','aprobacion','aprobación','alcance','entrega','demo','cierre','manual','pdf','aceptacion','aceptación'], is_client: true },\n  { name: 'David Manjarres', role: 'Backend / Tech Lead', tags: ['backend','api','postgres','db','database','servidor','infra','deploy','discord','n8n','bug','pr','merge','arquitectura','riesgo'], is_client: false },\n  { name: 'David Josue Barragan', role: 'Frontend', tags: ['frontend','ui','ux','vercel','pantalla','dashboard','web','diseño','diseno','interfaz'], is_client: false },\n  { name: 'Fernando Bonilla', role: 'QA / Documentacion', tags: ['qa','test','pruebas','pdf','reporte','documento','documentacion','documentación','manual','evidencia'], is_client: false },\n  { name: 'Josue Garcia', role: 'QA / Integracion', tags: ['qa','integracion','integración','testing','validacion','validación','aceptacion','aceptación','trello'], is_client: false }\n];\n\nconst selected = new Map();\nconst add = (person, reason) => {\n  const key = normalize(person.name || person).toLowerCase();\n  if (!key) return;\n  selected.set(key, {\n    name: person.name || person,\n    role: person.role || 'Invitado',\n    reason: reason || person.reason || 'Solicitado por contexto',\n    email: person.email || null,\n    discord_id: person.discord_id || null,\n    is_client: Boolean(person.is_client)\n  });\n};\n\nconst explicit = Array.isArray(input.invitees) ? input.invitees : [];\nexplicit.forEach((p) => typeof p === 'string' ? add({ name: p }, 'Invitado explicitamente') : add(p, p.reason));\nfor (const person of directory) {\n  const hit = person.tags.find((tag) => text.includes(tag));\n  if (hit) add(person, `Contexto relacionado con ${hit}`);\n}\nif (/urgente|bloqueo|riesgo|release|entrega|aprobaci[oó]n|cliente|demo|cierre/.test(text)) {\n  add(directory[0], 'Cliente/Sponsor requerido por impacto o aprobacion');\n}\nif (!selected.size) {\n  add(directory[0], 'Sponsor por defecto para clasificar la reunion');\n  add(directory[1], 'Tech Lead por defecto para resolver contexto tecnico');\n}\n\nconst toLocalParts = (date = new Date()) => {\n  const local = new Date(date.getTime() - 5 * 60 * 60 * 1000);\n  return { y: local.getUTCFullYear(), m: local.getUTCMonth() + 1, d: local.getUTCDate(), h: local.getUTCHours(), min: local.getUTCMinutes(), dow: local.getUTCDay() };\n};\nconst isoFromLocal = (y, m, d, h, min = 0) => new Date(Date.UTC(y, m - 1, d, h + 5, min, 0, 0)).toISOString();\nconst addDaysLocal = (parts, days) => {\n  const dt = new Date(Date.UTC(parts.y, parts.m - 1, parts.d + days, 5, 0, 0));\n  const local = new Date(dt.getTime() - 5 * 60 * 60 * 1000);\n  return { y: local.getUTCFullYear(), m: local.getUTCMonth() + 1, d: local.getUTCDate(), h: 0, min: 0, dow: local.getUTCDay() };\n};\nconst nextBusinessDay = (parts, offset = 1) => {\n  let p = addDaysLocal(parts, offset);\n  while (p.dow === 0 || p.dow === 6) p = addDaysLocal(p, 1);\n  return p;\n};\nconst roundHalfHour = (iso) => {\n  const d = new Date(iso);\n  const mins = d.getUTCMinutes();\n  const add = mins === 0 ? 0 : mins <= 30 ? 30 - mins : 60 - mins;\n  d.setUTCMinutes(mins + add, 0, 0);\n  return d.toISOString();\n};\nconst parsePreferred = () => {\n  const raw = normalize(input.scheduled_for || input.preferred_time || input.when || input.fecha || input.context || input.title);\n  if (input.scheduled_for || input.preferred_time || input.when || input.fecha) {\n    const parsed = new Date(raw);\n    if (!Number.isNaN(parsed.getTime())) return roundHalfHour(parsed.toISOString());\n  }\n  const now = new Date();\n  const today = toLocalParts(now);\n  let day = null;\n  if (/pasado\\s+ma[ñn]ana/.test(raw.toLowerCase())) day = nextBusinessDay(today, 2);\n  else if (/ma[ñn]ana|tomorrow/.test(raw.toLowerCase())) day = nextBusinessDay(today, 1);\n  else if (/hoy|today/.test(raw.toLowerCase())) day = today;\n  const isoDate = raw.match(/(20\\d{2})-(\\d{1,2})-(\\d{1,2})(?:[ tT]+(\\d{1,2})(?::(\\d{2}))?)?/);\n  if (isoDate) {\n    const h = Number(isoDate[4] || 10);\n    const mi = Number(isoDate[5] || 0);\n    return roundHalfHour(isoFromLocal(Number(isoDate[1]), Number(isoDate[2]), Number(isoDate[3]), h, mi));\n  }\n  const latamDate = raw.match(/(\\d{1,2})[\\/-](\\d{1,2})[\\/-](20\\d{2})(?:\\s+(\\d{1,2})(?::(\\d{2}))?)?/);\n  if (latamDate) {\n    const h = Number(latamDate[4] || 10);\n    const mi = Number(latamDate[5] || 0);\n    return roundHalfHour(isoFromLocal(Number(latamDate[3]), Number(latamDate[2]), Number(latamDate[1]), h, mi));\n  }\n  const time = raw.match(/\\b(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?\\b/i);\n  if (day && time) {\n    let h = Number(time[1]);\n    const mi = Number(time[2] || 0);\n    const mer = String(time[3] || '').toLowerCase();\n    if (mer === 'pm' && h < 12) h += 12;\n    if (mer === 'am' && h === 12) h = 0;\n    return roundHalfHour(isoFromLocal(day.y, day.m, day.d, h, mi));\n  }\n  if (day) return roundHalfHour(isoFromLocal(day.y, day.m, day.d, 10, 0));\n  const fallback = nextBusinessDay(today, 1);\n  return roundHalfHour(isoFromLocal(fallback.y, fallback.m, fallback.d, 10, 0));\n};\n\nconst durationRaw = Number.parseInt(input.duration_minutes || input.duration || (/demo|review|revisi[oó]n/.test(text) ? 45 : 30), 10);\nconst duration = Math.max(15, Math.min(120, Number.isFinite(durationRaw) ? durationRaw : 30));\nconst priority = ['low','medium','high','critical'].includes(String(input.priority || '').toLowerCase()) ? String(input.priority).toLowerCase() : (/bloqueo|critical|urgente|produccion|producción/.test(text) ? 'high' : 'medium');\nconst correlationId = input.correlation_id || input.event_id || `meeting-${Date.now()}`;\nconst title = normalize(input.title) || (priority === 'high' ? 'Reunion de desbloqueo PM' : 'Reunion de coordinacion PM');\nconst objective = normalize(input.objective || input.reason || input.summary) || 'Alinear contexto, responsables, siguientes acciones y riesgos.';\nconst contextSummary = normalize(input.context || input.input_summary || input.event_type || '') || 'Solicitud generada desde el bot PM.';\nconst idempotencyKey = input.idempotency_key || `meeting:${correlationId}:${title.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').slice(0,48)}`;\nconst invitees = Array.from(selected.values());\nconst requestedFor = parsePreferred();\n\nreturn [{ json: {\n  entry_mode: entryMode,\n  correlation_id: correlationId,\n  source: input.source || 'bot',\n  requested_by: input.requested_by || input.actor || input.usuario || 'pm_bot',\n  title, objective, context_summary: contextSummary, priority,\n  requested_for: requestedFor,\n  duration_minutes: duration,\n  status: input.status || 'scheduled',\n  idempotency_key: idempotencyKey,\n  invitees,\n  timezone: 'America/Guayaquil',\n  scheduling_policy: {\n    working_days: 'Mon-Fri',\n    windows: ['09:00-12:00', '14:00-17:30'],\n    slot_minutes: 30,\n    conflict_policy: 'no_overlapping_invitees'\n  }\n} }];"
+      },
+      "id": "normalize-execute-meeting",
+      "name": "Normalize Execute Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS pmo_meetings (\n  meeting_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  idempotency_key TEXT UNIQUE,\n  correlation_id TEXT,\n  source TEXT,\n  title TEXT NOT NULL,\n  objective TEXT,\n  context_summary TEXT,\n  status TEXT NOT NULL DEFAULT 'scheduled',\n  priority TEXT,\n  requested_for TIMESTAMPTZ,\n  scheduled_for TIMESTAMPTZ,\n  duration_minutes INTEGER NOT NULL DEFAULT 30,\n  timezone TEXT NOT NULL DEFAULT 'America/Guayaquil',\n  scheduling_status TEXT,\n  scheduling_notes TEXT,\n  requested_by TEXT,\n  calendar_provider TEXT,\n  calendar_event_id TEXT,\n  calendar_url TEXT,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\n\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS idempotency_key TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS correlation_id TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS source TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS objective TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS context_summary TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS requested_for TIMESTAMPTZ;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS duration_minutes INTEGER NOT NULL DEFAULT 30;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/Guayaquil';\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_status TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_notes TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_provider TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_event_id TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_url TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS requested_for TIMESTAMPTZ;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/Guayaquil';\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_status TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_notes TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_provider TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_url TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();\nCREATE TABLE IF NOT EXISTS pmo_meeting_invitees (\n  invitee_id BIGSERIAL PRIMARY KEY,\n  meeting_id UUID REFERENCES pmo_meetings(meeting_id) ON DELETE CASCADE,\n  name TEXT NOT NULL,\n  role TEXT,\n  reason TEXT,\n  email TEXT,\n  discord_id TEXT,\n  is_client BOOLEAN NOT NULL DEFAULT FALSE,\n  attendance_status TEXT NOT NULL DEFAULT 'invited',\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  UNIQUE(meeting_id, name)\n);\n\nALTER TABLE pmo_meeting_invitees ADD COLUMN IF NOT EXISTS is_client BOOLEAN NOT NULL DEFAULT FALSE;\nALTER TABLE pmo_meeting_invitees ADD COLUMN IF NOT EXISTS attendance_status TEXT NOT NULL DEFAULT 'invited';\nALTER TABLE pmo_meeting_invitees ADD COLUMN IF NOT EXISTS is_client BOOLEAN NOT NULL DEFAULT FALSE;\nCREATE TABLE IF NOT EXISTS pmo_meeting_logs (\n  log_id BIGSERIAL PRIMARY KEY,\n  meeting_id UUID REFERENCES pmo_meetings(meeting_id) ON DELETE SET NULL,\n  correlation_id TEXT,\n  action TEXT NOT NULL,\n  actor TEXT,\n  details JSONB NOT NULL DEFAULT '{}'::jsonb,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\nCREATE TABLE IF NOT EXISTS pmo_meeting_reminders (\n  reminder_id BIGSERIAL PRIMARY KEY,\n  meeting_id UUID REFERENCES pmo_meetings(meeting_id) ON DELETE CASCADE,\n  reminder_type TEXT NOT NULL,\n  scheduled_at TIMESTAMPTZ NOT NULL,\n  status TEXT NOT NULL DEFAULT 'pending',\n  payload JSONB NOT NULL DEFAULT '{}'::jsonb,\n  queued_at TIMESTAMPTZ,\n  sent_at TIMESTAMPTZ,\n  last_error TEXT,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  UNIQUE(meeting_id, reminder_type)\n);\nCREATE TABLE IF NOT EXISTS pmo_calendar_members (\n  member_key TEXT PRIMARY KEY,\n  display_name TEXT NOT NULL,\n  role TEXT,\n  timezone TEXT NOT NULL DEFAULT 'America/Guayaquil',\n  is_client BOOLEAN NOT NULL DEFAULT FALSE,\n  active BOOLEAN NOT NULL DEFAULT TRUE,\n  working_hours JSONB NOT NULL DEFAULT '{\"days\":[1,2,3,4,5],\"windows\":[[\"09:00\",\"12:00\"],[\"14:00\",\"17:30\"]]}'::jsonb,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\nCREATE TABLE IF NOT EXISTS events_outbox (\n  outbox_id BIGSERIAL PRIMARY KEY,\n  event_id TEXT,\n  target TEXT NOT NULL DEFAULT 'discord',\n  action TEXT NOT NULL DEFAULT 'notify',\n  idempotency_key TEXT,\n  payload JSONB NOT NULL DEFAULT '{}'::jsonb,\n  status TEXT NOT NULL DEFAULT 'pending',\n  retry_count INTEGER NOT NULL DEFAULT 0,\n  scheduled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  sent_at TIMESTAMPTZ,\n  last_error TEXT,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\nCREATE UNIQUE INDEX IF NOT EXISTS events_outbox_idempotency_key_uq ON events_outbox (idempotency_key);\nCREATE INDEX IF NOT EXISTS idx_pmo_meetings_status_date ON pmo_meetings (status, scheduled_for);\nCREATE INDEX IF NOT EXISTS idx_pmo_invitees_name ON pmo_meeting_invitees (lower(name));\nCREATE INDEX IF NOT EXISTS idx_pmo_reminders_due ON pmo_meeting_reminders (status, scheduled_at);\nWITH member_seed AS (\n  INSERT INTO pmo_calendar_members (member_key, display_name, role, is_client)\n  SELECT lower(x.name), x.name, x.role, x.is_client\n  FROM jsonb_to_recordset($12::jsonb) AS x(name text, role text, reason text, email text, discord_id text, is_client boolean)\n  ON CONFLICT (member_key) DO UPDATE SET display_name = EXCLUDED.display_name, role = EXCLUDED.role, is_client = EXCLUDED.is_client, updated_at = NOW()\n), params AS (\n  SELECT\n    $1::text AS idempotency_key,\n    $2::text AS correlation_id,\n    $3::text AS source,\n    $4::text AS title,\n    $5::text AS objective,\n    $6::text AS context_summary,\n    $7::text AS priority,\n    $8::timestamptz AS requested_for,\n    GREATEST(15, LEAST(120, $9::int)) AS duration_minutes,\n    $10::text AS requested_by,\n    $11::text AS timezone,\n    $12::jsonb AS invitees,\n    $13::jsonb AS scheduling_policy\n), invitee_source AS (\n  SELECT * FROM jsonb_to_recordset((SELECT invitees FROM params)) AS x(name text, role text, reason text, email text, discord_id text, is_client boolean)\n), candidates AS (\n  SELECT gs AS slot_start, gs + ((SELECT duration_minutes FROM params) || ' minutes')::interval AS slot_end\n  FROM params p,\n  generate_series(GREATEST(p.requested_for, NOW() + INTERVAL '15 minutes'), NOW() + INTERVAL '21 days', INTERVAL '30 minutes') AS gs\n), valid_candidates AS (\n  SELECT c.*\n  FROM candidates c\n  WHERE EXTRACT(ISODOW FROM (c.slot_start AT TIME ZONE 'America/Guayaquil')) BETWEEN 1 AND 5\n    AND (\n      (((c.slot_start AT TIME ZONE 'America/Guayaquil')::time >= TIME '09:00') AND ((c.slot_end AT TIME ZONE 'America/Guayaquil')::time <= TIME '12:00'))\n      OR (((c.slot_start AT TIME ZONE 'America/Guayaquil')::time >= TIME '14:00') AND ((c.slot_end AT TIME ZONE 'America/Guayaquil')::time <= TIME '17:30'))\n    )\n), candidate_conflicts AS (\n  SELECT\n    v.slot_start,\n    v.slot_end,\n    COALESCE((\n      SELECT jsonb_agg(DISTINCT jsonb_build_object('meeting_id', m.meeting_id, 'title', m.title, 'scheduled_for', m.scheduled_for, 'invitee', i.name))\n      FROM pmo_meetings m\n      JOIN pmo_meeting_invitees i ON i.meeting_id = m.meeting_id\n      WHERE m.status IN ('proposed','scheduled','confirmed')\n        AND lower(i.name) IN (SELECT lower(name) FROM invitee_source)\n        AND m.scheduled_for IS NOT NULL\n        AND m.scheduled_for < v.slot_end\n        AND (m.scheduled_for + (m.duration_minutes || ' minutes')::interval) > v.slot_start\n    ), '[]'::jsonb) AS conflicts\n  FROM valid_candidates v\n), free_slot AS (\n  SELECT *, jsonb_array_length(conflicts) AS conflict_count\n  FROM candidate_conflicts\n  WHERE jsonb_array_length(conflicts) = 0\n  ORDER BY slot_start ASC\n  LIMIT 1\n), selected_slot AS (\n  SELECT slot_start, slot_end, conflict_count, conflicts FROM free_slot\n  UNION ALL\n  SELECT NULL::timestamptz, NULL::timestamptz, 0, '[]'::jsonb\n  WHERE NOT EXISTS (SELECT 1 FROM free_slot)\n), meeting AS (\n  INSERT INTO pmo_meetings (idempotency_key, correlation_id, source, title, objective, context_summary, status, priority, requested_for, scheduled_for, duration_minutes, timezone, scheduling_status, scheduling_notes, requested_by, calendar_provider, calendar_url)\n  SELECT\n    p.idempotency_key, p.correlation_id, p.source, p.title, p.objective, p.context_summary,\n    CASE WHEN s.slot_start IS NULL THEN 'needs_reschedule' ELSE 'scheduled' END,\n    p.priority, p.requested_for, s.slot_start, p.duration_minutes, p.timezone,\n    CASE\n      WHEN s.slot_start IS NULL THEN 'no_available_slot'\n      WHEN s.slot_start <> p.requested_for THEN 'auto_rescheduled'\n      ELSE 'scheduled_as_requested'\n    END,\n    CASE\n      WHEN s.slot_start IS NULL THEN 'No se encontro slot libre dentro de 21 dias.'\n      WHEN s.slot_start <> p.requested_for THEN 'Se ajusto automaticamente por horario prudente o conflicto de invitados.'\n      ELSE 'Horario solicitado disponible.'\n    END,\n    p.requested_by,\n    'pmo_internal',\n    '/webhook/pm-calendar?focus=' || p.idempotency_key\n  FROM params p CROSS JOIN selected_slot s\n  ON CONFLICT (idempotency_key) DO UPDATE SET\n    objective = EXCLUDED.objective,\n    context_summary = EXCLUDED.context_summary,\n    priority = EXCLUDED.priority,\n    requested_for = EXCLUDED.requested_for,\n    scheduled_for = EXCLUDED.scheduled_for,\n    duration_minutes = EXCLUDED.duration_minutes,\n    timezone = EXCLUDED.timezone,\n    scheduling_status = EXCLUDED.scheduling_status,\n    scheduling_notes = EXCLUDED.scheduling_notes,\n    status = EXCLUDED.status,\n    updated_at = NOW()\n  RETURNING *\n), inserted_invitees AS (\n  INSERT INTO pmo_meeting_invitees (meeting_id, name, role, reason, email, discord_id, is_client, attendance_status)\n  SELECT meeting.meeting_id, invitee_source.name, invitee_source.role, invitee_source.reason, invitee_source.email, invitee_source.discord_id, COALESCE(invitee_source.is_client, false), 'invited'\n  FROM meeting, invitee_source\n  ON CONFLICT (meeting_id, name) DO UPDATE SET reason = EXCLUDED.reason, role = EXCLUDED.role, is_client = EXCLUDED.is_client, attendance_status = 'invited'\n  RETURNING 1\n), reminder_seed AS (\n  INSERT INTO pmo_meeting_reminders (meeting_id, reminder_type, scheduled_at, payload)\n  SELECT meeting.meeting_id, r.reminder_type, r.scheduled_at, jsonb_build_object('meeting_id', meeting.meeting_id, 'title', meeting.title, 'scheduled_for', meeting.scheduled_for, 'reminder_type', r.reminder_type)\n  FROM meeting\n  CROSS JOIN LATERAL (VALUES\n    ('24h', meeting.scheduled_for - INTERVAL '24 hours'),\n    ('30m', meeting.scheduled_for - INTERVAL '30 minutes')\n  ) AS r(reminder_type, scheduled_at)\n  WHERE meeting.scheduled_for IS NOT NULL AND r.scheduled_at > NOW()\n  ON CONFLICT (meeting_id, reminder_type) DO UPDATE SET scheduled_at = EXCLUDED.scheduled_at, status = 'pending', payload = EXCLUDED.payload\n), log_row AS (\n  INSERT INTO pmo_meeting_logs (meeting_id, correlation_id, action, actor, details)\n  SELECT meeting_id, correlation_id, 'meeting_scheduled', requested_by, jsonb_build_object('requested_for', requested_for, 'scheduled_for', scheduled_for, 'duration_minutes', duration_minutes, 'scheduling_status', scheduling_status, 'invitees', (SELECT invitees FROM params), 'policy', (SELECT scheduling_policy FROM params))\n  FROM meeting\n)\nSELECT\n  meeting.meeting_id,\n  meeting.idempotency_key,\n  meeting.correlation_id,\n  meeting.title,\n  meeting.objective,\n  meeting.status,\n  meeting.priority,\n  meeting.requested_for,\n  meeting.scheduled_for,\n  meeting.duration_minutes,\n  meeting.timezone,\n  meeting.scheduling_status,\n  meeting.scheduling_notes,\n  meeting.requested_by,\n  meeting.calendar_url,\n  (SELECT COUNT(*) FROM pmo_meeting_invitees i WHERE i.meeting_id = meeting.meeting_id) AS invitee_count,\n  COALESCE((SELECT json_agg(i) FROM (SELECT name, role, reason, is_client FROM pmo_meeting_invitees WHERE meeting_id = meeting.meeting_id ORDER BY is_client DESC, name) i), '[]'::json) AS invitees\nFROM meeting;",
+        "options": {
+          "queryReplacement": "={{ [ $json.idempotency_key, $json.correlation_id, $json.source, $json.title, $json.objective, $json.context_summary, $json.priority, $json.requested_for, $json.duration_minutes, $json.requested_by, $json.timezone, JSON.stringify($json.invitees || []), JSON.stringify($json.scheduling_policy || {}) ] }}"
+        }
+      },
+      "id": "schedule-meeting-safely",
+      "name": "Schedule Meeting Safely",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        130
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const parseArr = (v) => Array.isArray(v) ? v : (typeof v === 'string' ? JSON.parse(v || '[]') : []);\nconst invitees = parseArr($json.invitees);\nconst fmt = (v) => v ? new Date(v).toLocaleString('es-EC', { timeZone: 'America/Guayaquil', dateStyle: 'medium', timeStyle: 'short' }) : 'sin horario asignado';\nconst adjusted = $json.scheduling_status === 'auto_rescheduled';\nconst noSlot = $json.scheduling_status === 'no_available_slot';\nconst statusLine = noSlot ? 'Necesita replanificacion manual' : (adjusted ? 'Agendada en el siguiente slot libre' : 'Agendada en el horario solicitado');\nconst lines = [\n  `**Reunion PM ${noSlot ? 'pendiente' : 'agendada'}:** ${$json.title}`,\n  `**Estado:** ${statusLine}`,\n  `**Objetivo:** ${$json.objective || '-'}`,\n  `**Prioridad:** ${$json.priority || 'medium'}`,\n  `**Solicitada:** ${fmt($json.requested_for)}`,\n  `**Agendada:** ${fmt($json.scheduled_for)}`,\n  `**Duracion:** ${$json.duration_minutes || 30} min`,\n  adjusted ? `**Ajuste:** ${$json.scheduling_notes}` : null,\n  '',\n  '**Invitados:**',\n  ...invitees.map((p) => `- ${p.name} (${p.role || 'Invitado'})${p.is_client ? ' [cliente]' : ''}: ${p.reason || 'contexto'}`),\n  '',\n  `Calendario PMO: /webhook/pm-calendar?token=TU_SECRETO&focus=${$json.idempotency_key}`,\n  `Correlation ID: \\`${$json.correlation_id}\\``\n].filter(Boolean);\nreturn [{ json: { ...$json, content: lines.join('\\n'), outbox_key: `${$json.idempotency_key}:scheduled-notice` } }];"
+      },
+      "id": "build-meeting-notification",
+      "name": "Build Meeting Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        130
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS events_outbox (outbox_id BIGSERIAL PRIMARY KEY, event_id TEXT, target TEXT NOT NULL DEFAULT 'discord', action TEXT NOT NULL DEFAULT 'notify', idempotency_key TEXT, payload JSONB NOT NULL DEFAULT '{}'::jsonb, status TEXT NOT NULL DEFAULT 'pending', retry_count INTEGER NOT NULL DEFAULT 0, scheduled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), sent_at TIMESTAMPTZ, last_error TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\nCREATE UNIQUE INDEX IF NOT EXISTS events_outbox_idempotency_key_uq ON events_outbox (idempotency_key);\nINSERT INTO events_outbox (event_id, target, action, idempotency_key, payload)\nVALUES ($1, 'discord', 'notify', $2, $3::jsonb)\nON CONFLICT (idempotency_key) DO NOTHING\nRETURNING outbox_id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.correlation_id, $json.outbox_key, JSON.stringify({ content: $json.content }) ] }}"
+        }
+      },
+      "id": "queue-meeting-notification",
+      "name": "Queue Meeting Notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1000,
+        130
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $('Build Meeting Notification').item.json.entry_mode }}",
+                  "operation": "equal",
+                  "value2": "webhook"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $('Build Meeting Notification').item.json.entry_mode }}",
+                  "operation": "equal",
+                  "value2": "execute"
+                }
+              ]
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-meeting-entry",
+      "name": "Switch Meeting Entry",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1240,
+        130
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, meeting_id: $('Build Meeting Notification').item.json.meeting_id, status: $('Build Meeting Notification').item.json.status, title: $('Build Meeting Notification').item.json.title, invitees: $('Build Meeting Notification').item.json.invitee_count, requested_for: $('Build Meeting Notification').item.json.requested_for, scheduled_for: $('Build Meeting Notification').item.json.scheduled_for, duration_minutes: $('Build Meeting Notification').item.json.duration_minutes, scheduling_status: $('Build Meeting Notification').item.json.scheduling_status, scheduling_notes: $('Build Meeting Notification').item.json.scheduling_notes, calendar_url: $('Build Meeting Notification').item.json.calendar_url }) }}",
+        "options": {}
+      },
+      "id": "respond-meeting-ok",
+      "name": "Respond Meeting OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $('Build Meeting Notification').item.json;\nreturn [{ json: { ok: true, meeting_id: m.meeting_id, status: m.status, title: m.title, invitees: m.invitee_count, requested_for: m.requested_for, scheduled_for: m.scheduled_for, duration_minutes: m.duration_minutes, scheduling_status: m.scheduling_status, scheduling_notes: m.scheduling_notes, calendar_url: m.calendar_url } }];"
+      },
+      "id": "return-meeting-result",
+      "name": "Return Meeting Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1480,
+        240
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Meeting Request": {
+      "main": [
+        [
+          {
+            "node": "Normalize Meeting Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Execute Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Meeting Request": {
+      "main": [
+        [
+          {
+            "node": "Schedule Meeting Safely",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Execute Request": {
+      "main": [
+        [
+          {
+            "node": "Schedule Meeting Safely",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Meeting Safely": {
+      "main": [
+        [
+          {
+            "node": "Build Meeting Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Meeting Notification": {
+      "main": [
+        [
+          {
+            "node": "Queue Meeting Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue Meeting Notification": {
+      "main": [
+        [
+          {
+            "node": "Switch Meeting Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Meeting Entry": {
+      "main": [
+        [
+          {
+            "node": "Respond Meeting OK",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Meeting Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "id": "pmoMeetingCoordinator",
+  "tags": []
+}

@@ -1,0 +1,189 @@
+{
+  "name": "Dashboard - PM Logs Hub",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "pm-logs",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-logs",
+      "name": "Webhook - Logs",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "pm-logs-hub"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "valid-token",
+              "leftValue": "={{ $('Webhook - Logs').first().json.query?.token || '' }}",
+              "rightValue": "={{ $env.PM_APPROVAL_SECRET }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "validate-logs-token",
+      "name": "Validate Logs Token",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS workflow_runs_audit (\n  run_id BIGSERIAL PRIMARY KEY,\n  workflow_id TEXT NOT NULL,\n  workflow_name TEXT,\n  status TEXT,\n  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  completed_at TIMESTAMPTZ,\n  correlation_id TEXT,\n  error_details JSONB,\n  metrics JSONB\n);\nCREATE TABLE IF NOT EXISTS pmo_meetings (\n  meeting_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  idempotency_key TEXT UNIQUE,\n  correlation_id TEXT,\n  source TEXT,\n  title TEXT NOT NULL,\n  objective TEXT,\n  context_summary TEXT,\n  status TEXT NOT NULL DEFAULT 'proposed',\n  priority TEXT,\n  scheduled_for TIMESTAMPTZ,\n  duration_minutes INTEGER NOT NULL DEFAULT 30,\n  requested_by TEXT,\n  calendar_provider TEXT,\n  calendar_event_id TEXT,\n  calendar_url TEXT,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\n\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS idempotency_key TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS correlation_id TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS source TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS objective TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS context_summary TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS requested_for TIMESTAMPTZ;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS duration_minutes INTEGER NOT NULL DEFAULT 30;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/Guayaquil';\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_status TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_notes TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_provider TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_event_id TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_url TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();\nCREATE TABLE IF NOT EXISTS pmo_meeting_logs (\n  log_id BIGSERIAL PRIMARY KEY,\n  meeting_id UUID REFERENCES pmo_meetings(meeting_id) ON DELETE SET NULL,\n  correlation_id TEXT,\n  action TEXT NOT NULL,\n  actor TEXT,\n  details JSONB NOT NULL DEFAULT '{}'::jsonb,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\nCREATE TABLE IF NOT EXISTS events_outbox (\n  outbox_id BIGSERIAL PRIMARY KEY,\n  event_id TEXT,\n  target TEXT NOT NULL DEFAULT 'discord',\n  action TEXT NOT NULL DEFAULT 'notify',\n  idempotency_key TEXT,\n  payload JSONB NOT NULL DEFAULT '{}'::jsonb,\n  status TEXT NOT NULL DEFAULT 'pending',\n  retry_count INTEGER NOT NULL DEFAULT 0,\n  scheduled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  sent_at TIMESTAMPTZ,\n  last_error TEXT,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\nCREATE TABLE IF NOT EXISTS events_inbox (\n  event_id TEXT PRIMARY KEY,\n  source TEXT,\n  event_type TEXT,\n  external_id TEXT,\n  occurred_at TIMESTAMPTZ DEFAULT NOW(),\n  received_at TIMESTAMPTZ DEFAULT NOW(),\n  correlation_id TEXT,\n  actor TEXT,\n  entity_type TEXT,\n  entity_id TEXT,\n  repo TEXT,\n  trello_card_id TEXT,\n  pull_request_number INTEGER,\n  commit_sha TEXT,\n  payload JSONB DEFAULT '{}'::jsonb,\n  normalized JSONB DEFAULT '{}'::jsonb,\n  processing_status TEXT DEFAULT 'pending',\n  retry_count INTEGER DEFAULT 0,\n  last_error TEXT\n);\nCREATE TABLE IF NOT EXISTS pmo_raid_items (raid_id UUID PRIMARY KEY DEFAULT gen_random_uuid(), correlation_id TEXT, item_type TEXT NOT NULL, title TEXT NOT NULL, description TEXT, severity TEXT NOT NULL DEFAULT 'medium', probability NUMERIC(4,3), impact TEXT, owner TEXT, status TEXT NOT NULL DEFAULT 'open', mitigation TEXT, due_date TIMESTAMPTZ, source TEXT, evidence JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\nCREATE TABLE IF NOT EXISTS pmo_action_items (action_id UUID PRIMARY KEY DEFAULT gen_random_uuid(), correlation_id TEXT, source TEXT, title TEXT NOT NULL, description TEXT, owner TEXT, priority TEXT NOT NULL DEFAULT 'medium', status TEXT NOT NULL DEFAULT 'open', due_date TIMESTAMPTZ, evidence JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), closed_at TIMESTAMPTZ);\nCREATE TABLE IF NOT EXISTS pmo_health_snapshots (snapshot_id BIGSERIAL PRIMARY KEY, correlation_id TEXT, health_score INTEGER NOT NULL, health_status TEXT NOT NULL, summary TEXT, metrics JSONB NOT NULL DEFAULT '{}'::jsonb, recommendations JSONB NOT NULL DEFAULT '[]'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\nSELECT\n  json_build_object(\n    'audit_total_24h', (SELECT COUNT(*) FROM workflow_runs_audit WHERE started_at > NOW() - INTERVAL '24 hours'),\n    'audit_errors_24h', (SELECT COUNT(*) FROM workflow_runs_audit WHERE status = 'error' AND started_at > NOW() - INTERVAL '24 hours'),\n    'outbox_dead', (SELECT COUNT(*) FROM events_outbox WHERE status = 'dead'),\n    'outbox_pending', (SELECT COUNT(*) FROM events_outbox WHERE status IN ('pending','sending')),\n    'inbox_failed', (SELECT COUNT(*) FROM events_inbox WHERE processing_status IN ('error','failed')),\n    'meetings_open', (SELECT COUNT(*) FROM pmo_meetings WHERE status IN ('proposed','scheduled'))\n  ) AS stats,\n  COALESCE((SELECT json_agg(t) FROM (SELECT run_id, workflow_id, workflow_name, status, started_at, completed_at, correlation_id, error_details, metrics FROM workflow_runs_audit ORDER BY started_at DESC LIMIT 80) t), '[]'::json) AS audit_logs,\n  COALESCE((SELECT json_agg(t) FROM (SELECT log_id, meeting_id, correlation_id, action, actor, details, created_at FROM pmo_meeting_logs ORDER BY created_at DESC LIMIT 80) t), '[]'::json) AS meeting_logs,\n  COALESCE((SELECT json_agg(t) FROM (SELECT meeting_id, title, status, priority, scheduled_for, requested_by, calendar_url, created_at FROM pmo_meetings ORDER BY COALESCE(scheduled_for, created_at) DESC LIMIT 30) t), '[]'::json) AS meetings,\n  COALESCE((SELECT json_agg(t) FROM (SELECT outbox_id, target, action, status, retry_count, scheduled_at, sent_at, last_error, idempotency_key FROM events_outbox WHERE status IN ('dead','failed','pending','sending') ORDER BY scheduled_at DESC LIMIT 50) t), '[]'::json) AS outbox_logs,\n  COALESCE((SELECT json_agg(t) FROM (SELECT event_id, source, event_type, processing_status, retry_count, last_error, received_at, correlation_id FROM events_inbox WHERE processing_status IN ('error','failed','pending','processing','ingested') ORDER BY received_at DESC LIMIT 50) t), '[]'::json) AS inbox_logs,\n  COALESCE((SELECT json_agg(t) FROM (SELECT snapshot_id, health_score, health_status, summary, recommendations, created_at FROM pmo_health_snapshots ORDER BY created_at DESC LIMIT 12) t), '[]'::json) AS health_snapshots,\n  COALESCE((SELECT json_agg(t) FROM (SELECT raid_id, item_type, title, severity, owner, status, due_date, created_at FROM pmo_raid_items WHERE status = 'open' ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, due_date ASC NULLS LAST LIMIT 30) t), '[]'::json) AS raid_items,\n  COALESCE((SELECT json_agg(t) FROM (SELECT action_id, title, owner, priority, status, due_date, created_at FROM pmo_action_items WHERE status = 'open' ORDER BY due_date ASC NULLS LAST, CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END LIMIT 30) t), '[]'::json) AS action_items;"
+      },
+      "id": "fetch-logs",
+      "name": "Fetch Logs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        460,
+        -80
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $json || {};\nconst parseArray = (value) => {\n  if (!value) return [];\n  if (Array.isArray(value)) return value;\n  if (typeof value === 'string') { try { const p = JSON.parse(value); return Array.isArray(p) ? p : []; } catch (_) { return []; } }\n  return [];\n};\nconst parseObj = (value) => {\n  if (!value) return {};\n  if (typeof value === 'object' && !Array.isArray(value)) return value;\n  if (typeof value === 'string') { try { const p = JSON.parse(value); return p && typeof p === 'object' && !Array.isArray(p) ? p : {}; } catch (_) { return {}; } }\n  return {};\n};\nconst stats = parseObj(payload.stats);\nconst auditLogs = parseArray(payload.audit_logs);\nconst meetingLogs = parseArray(payload.meeting_logs);\nconst meetings = parseArray(payload.meetings);\nconst outboxLogs = parseArray(payload.outbox_logs);\nconst inboxLogs = parseArray(payload.inbox_logs);\nconst healthSnapshots = parseArray(payload.health_snapshots);\nconst raidItems = parseArray(payload.raid_items);\nconst actionItems = parseArray(payload.action_items);\nconst esc = (v) => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');\nconst fmt = (v) => v ? new Date(v).toLocaleString('es-EC', { timeZone: 'America/Guayaquil', dateStyle: 'medium', timeStyle: 'short' }) : '-';\nconst n = (v) => Number(v || 0);\nconst badge = (status) => {\n  const s = String(status || 'unknown').toLowerCase();\n  const cls = ['error','failed','dead'].includes(s) ? 'bad' : ['pending','processing','sending','ingested','proposed'].includes(s) ? 'warn' : 'ok';\n  return `<span class='badge ${cls}'>${esc(status || 'unknown')}</span>`;\n};\nconst detail = (obj) => `<pre>${esc(JSON.stringify(parseObj(obj), null, 2)).slice(0, 1200)}</pre>`;\nconst rows = (items, mapper, empty) => items.length ? items.map(mapper).join('') : `<tr><td colspan='5' class='empty'>${esc(empty)}</td></tr>`;\nconst html = `<!doctype html><html lang='es'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>PetSafe PM Logs</title><style>\n:root{--bg:#0d1421;--panel:#141f31;--line:rgba(148,163,184,.18);--text:#eef4ff;--muted:#94a3b8;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--accent:#60a5fa}*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:linear-gradient(135deg,#0d1421,#111827 60%,#18243a);color:var(--text)}.shell{width:min(1220px,calc(100% - 28px));margin:24px auto 48px}.hero{border:1px solid var(--line);border-radius:24px;background:rgba(20,31,49,.86);padding:26px;box-shadow:0 24px 70px rgba(0,0,0,.35)}h1{margin:0 0 8px;font-size:clamp(2rem,4vw,3rem)}p{color:var(--muted);line-height:1.55}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:20px}.stat{border:1px solid var(--line);border-radius:18px;padding:16px;background:rgba(255,255,255,.035)}.stat span{display:block;color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.08em}.stat strong{font-size:1.8rem}.grid{display:grid;grid-template-columns:1fr;gap:18px;margin-top:20px}.panel{border:1px solid var(--line);border-radius:22px;background:rgba(20,31,49,.82);overflow:hidden}.panel-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line)}h2{margin:0;font-size:1rem}.toolbar input{background:#0b1220;border:1px solid var(--line);border-radius:12px;color:var(--text);padding:10px 12px;min-width:260px}table{width:100%;border-collapse:collapse;font-size:.86rem}th,td{padding:12px 14px;border-bottom:1px solid rgba(148,163,184,.1);vertical-align:top;text-align:left}th{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.07em}.badge{display:inline-flex;border-radius:999px;padding:5px 9px;font-size:.72rem;font-weight:800}.badge.ok{background:rgba(34,197,94,.14);color:#bbf7d0}.badge.warn{background:rgba(245,158,11,.14);color:#fde68a}.badge.bad{background:rgba(239,68,68,.14);color:#fecaca}code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}pre{white-space:pre-wrap;max-width:460px;max-height:180px;overflow:auto;background:#0b1220;border:1px solid var(--line);border-radius:12px;padding:10px;color:#cbd5e1}.empty{color:var(--muted);text-align:center}.hide{display:none}@media(max-width:760px){.stats{grid-template-columns:1fr}.toolbar input{min-width:0;width:100%}th:nth-child(4),td:nth-child(4){display:none}}</style></head><body><div class='shell'>\n<section class='hero'><h1>PetSafe PM Logs Hub</h1><p>Vista de auditoria para flujos n8n, reuniones PMO, outbox Discord e inbox de eventos. Sirve para revisar que hizo el bot, cuando lo hizo y donde fallo.</p><div class='stats'>\n<div class='stat'><span>Runs 24h</span><strong>${n(stats.audit_total_24h)}</strong><p>${n(stats.audit_errors_24h)} errores</p></div>\n<div class='stat'><span>Outbox</span><strong>${n(stats.outbox_pending)}</strong><p>${n(stats.outbox_dead)} muertos</p></div>\n<div class='stat'><span>Reuniones abiertas</span><strong>${n(stats.meetings_open)}</strong><p>${n(stats.inbox_failed)} eventos fallidos</p></div>\n</div></section>\n<section class='grid'>\n<div class='panel'><div class='panel-head'><h2>PMO health</h2></div><table><thead><tr><th>Estado</th><th>Score</th><th>Fecha</th><th>Resumen</th><th>Recomendaciones</th></tr></thead><tbody>${rows(healthSnapshots,(r)=>`<tr data-search='${esc(JSON.stringify(r).toLowerCase())}'><td>${badge(r.health_status)}</td><td><strong>${esc(r.health_score)}/100</strong></td><td>${esc(fmt(r.created_at))}</td><td>${esc(r.summary||'-')}</td><td>${detail(r.recommendations)}</td></tr>`,'Sin snapshots PMO.')}</tbody></table></div>\n<div class='panel'><div class='panel-head'><h2>RAID abierto</h2></div><table><thead><tr><th>Tipo</th><th>Titulo</th><th>Severidad</th><th>Owner</th><th>Due</th></tr></thead><tbody>${rows(raidItems,(r)=>`<tr data-search='${esc(JSON.stringify(r).toLowerCase())}'><td>${esc(r.item_type)}</td><td><strong>${esc(r.title)}</strong></td><td>${badge(r.severity)}</td><td>${esc(r.owner||'-')}</td><td>${esc(fmt(r.due_date))}</td></tr>`,'Sin RAID abierto.')}</tbody></table></div>\n<div class='panel'><div class='panel-head'><h2>Acciones PMO abiertas</h2></div><table><thead><tr><th>Prioridad</th><th>Accion</th><th>Owner</th><th>Estado</th><th>Due</th></tr></thead><tbody>${rows(actionItems,(r)=>`<tr data-search='${esc(JSON.stringify(r).toLowerCase())}'><td>${badge(r.priority)}</td><td><strong>${esc(r.title)}</strong></td><td>${esc(r.owner||'-')}</td><td>${esc(r.status)}</td><td>${esc(fmt(r.due_date))}</td></tr>`,'Sin acciones PMO abiertas.')}</tbody></table></div>\n<div class='panel'><div class='panel-head'><h2>Audit logs n8n</h2><div class='toolbar'><input placeholder='Filtrar...' oninput='filterRows(this.value)'></div></div><table><thead><tr><th>Estado</th><th>Workflow</th><th>Fecha</th><th>Correlation</th><th>Detalle</th></tr></thead><tbody>${rows(auditLogs,(r)=>`<tr data-search='${esc(JSON.stringify(r).toLowerCase())}'><td>${badge(r.status)}</td><td><strong>${esc(r.workflow_name||r.workflow_id)}</strong></td><td>${esc(fmt(r.started_at))}</td><td><code>${esc(r.correlation_id||'-')}</code></td><td>${detail(r.error_details || r.metrics)}</td></tr>`,'Sin auditoria registrada.')}</tbody></table></div>\n<div class='panel'><div class='panel-head'><h2>Reuniones PMO</h2></div><table><thead><tr><th>Estado</th><th>Titulo</th><th>Fecha</th><th>Solicitado por</th><th>URL</th></tr></thead><tbody>${rows(meetings,(r)=>`<tr data-search='${esc(JSON.stringify(r).toLowerCase())}'><td>${badge(r.status)}</td><td><strong>${esc(r.title)}</strong><br><small>${esc(r.priority||'')}</small></td><td>${esc(fmt(r.scheduled_for||r.created_at))}</td><td>${esc(r.requested_by||'-')}</td><td>${r.calendar_url?`<a href='${esc(r.calendar_url)}'>Abrir</a>`:'-'}</td></tr>`,'Sin reuniones registradas.')}</tbody></table></div>\n<div class='panel'><div class='panel-head'><h2>Meeting logs</h2></div><table><thead><tr><th>Accion</th><th>Actor</th><th>Fecha</th><th>Correlation</th><th>Detalle</th></tr></thead><tbody>${rows(meetingLogs,(r)=>`<tr data-search='${esc(JSON.stringify(r).toLowerCase())}'><td>${esc(r.action)}</td><td>${esc(r.actor||'-')}</td><td>${esc(fmt(r.created_at))}</td><td><code>${esc(r.correlation_id||'-')}</code></td><td>${detail(r.details)}</td></tr>`,'Sin logs de reuniones.')}</tbody></table></div>\n<div class='panel'><div class='panel-head'><h2>Outbox Discord</h2></div><table><thead><tr><th>Estado</th><th>Accion</th><th>Fecha</th><th>Retries</th><th>Error</th></tr></thead><tbody>${rows(outboxLogs,(r)=>`<tr data-search='${esc(JSON.stringify(r).toLowerCase())}'><td>${badge(r.status)}</td><td>${esc(r.target)} / ${esc(r.action)}</td><td>${esc(fmt(r.scheduled_at))}</td><td>${esc(r.retry_count)}</td><td>${esc(r.last_error||'-')}</td></tr>`,'Outbox limpio.')}</tbody></table></div>\n<div class='panel'><div class='panel-head'><h2>Inbox eventos</h2></div><table><thead><tr><th>Estado</th><th>Evento</th><th>Fecha</th><th>Retries</th><th>Error</th></tr></thead><tbody>${rows(inboxLogs,(r)=>`<tr data-search='${esc(JSON.stringify(r).toLowerCase())}'><td>${badge(r.processing_status)}</td><td>${esc(r.source)} / ${esc(r.event_type)}</td><td>${esc(fmt(r.received_at))}</td><td>${esc(r.retry_count)}</td><td>${esc(r.last_error||'-')}</td></tr>`,'Inbox sin pendientes relevantes.')}</tbody></table></div>\n</section></div><script>function filterRows(q){q=(q||'').toLowerCase();document.querySelectorAll('tr[data-search]').forEach((r)=>{r.classList.toggle('hide',q&&!r.dataset.search.includes(q));});}</script></body></html>`;\nreturn [{ json: { html } }];"
+      },
+      "id": "build-logs-html",
+      "name": "Build Logs HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-logs-html",
+      "name": "Respond Logs HTML",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        940,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"error\":\"Unauthorized\"}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "respond-logs-unauthorized",
+      "name": "Respond Logs Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        460,
+        120
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Logs": {
+      "main": [
+        [
+          {
+            "node": "Validate Logs Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Logs Token": {
+      "main": [
+        [
+          {
+            "node": "Fetch Logs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Logs Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Logs": {
+      "main": [
+        [
+          {
+            "node": "Build Logs HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Logs HTML": {
+      "main": [
+        [
+          {
+            "node": "Respond Logs HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "id": "pmLogsHubDashboard",
+  "tags": []
+}

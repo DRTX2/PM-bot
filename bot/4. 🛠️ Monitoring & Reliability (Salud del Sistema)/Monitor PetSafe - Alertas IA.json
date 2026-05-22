@@ -1,0 +1,314 @@
+{
+  "name": "Monitor PetSafe - Alertas IA",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "6c39577d-b39f-405b-86b4-2a920888122e",
+      "name": "On-Demand Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -10784,
+        4064
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $json.payload || $json || {};\nconst safeArray = (value) => Array.isArray(value) ? value : [];\nconst safeObject = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};\n\nfunction normalizeTask(t = {}) {\n  return {\n    ...t,\n    nombre: t.nombre || t.name || 'Tarea sin nombre',\n    lista: t.lista || 'Sin fase',\n    responsables: safeArray(t.responsables),\n    archivos: safeArray(t.archivos),\n    enlaces: safeArray(t.enlaces),\n    checklist_total: Number(t.checklist_total || 0),\n    checklist_done: Number(t.checklist_done || 0),\n    adjuntos_count: Number(t.adjuntos_count || 0),\n    dias_sin_actividad: t.dias_sin_actividad ?? '-'\n  };\n}\n\nfunction normalizePhase(f = {}) {\n  const tareas = safeArray(f.tareas).map(normalizeTask);\n  const completadas = Number(f.completadas ?? tareas.filter(t => t.completada).length);\n  const total = Number(f.total ?? tareas.length);\n  const vencidas = Number(f.vencidas ?? tareas.filter(t => t.vencida).length);\n  const pendientes = Number(f.pendientes ?? Math.max(total - completadas - vencidas, 0));\n  const pct = Number(f.pct ?? (total > 0 ? Math.round((completadas / total) * 100) : 0));\n  return {\n    ...f,\n    nombre: f.nombre || f.name || 'Fase sin nombre',\n    semaforo: f.semaforo || 'gris',\n    tareas,\n    completadas,\n    total,\n    vencidas,\n    pendientes,\n    pct\n  };\n}\n\nd.fases = Object.fromEntries(Object.entries(safeObject(d.fases)).map(([key, value]) => [key, normalizePhase(value)]));\nd.github = {\n  commits_back: 0,\n  commits_front: 0,\n  prs_abiertos_back: 0,\n  prs_abiertos_front: 0,\n  top_commits_back: [],\n  top_commits_front: [],\n  ci_back: null,\n  ci_front: null,\n  deploy_front_url: '',\n  ...safeObject(d.github)\n};\nd.github.top_commits_back = safeArray(d.github.top_commits_back);\nd.github.top_commits_front = safeArray(d.github.top_commits_front);\nd.kpis = {\n  dias_hasta_fin: '-',\n  proyeccion: 'sin datos',\n  velocidad_tareas_por_dia: 0,\n  completadas_7d: 0,\n  silencio_back_dias: '-',\n  silencio_front_dias: '-',\n  pct_commits_convencionales: 0,\n  bus_factor_14d: 0,\n  pr_open_time_dias: 0,\n  pr_merge_ratio_30d: 0,\n  ...safeObject(d.kpis)\n};\nd.snapshot_tareas = safeArray(d.snapshot_tareas).map(normalizeTask);\nd.ranking = safeArray(d.ranking);\nd.cards_stale = safeArray(d.cards_stale).map(normalizeTask);\nd.cards_sin_asignar = safeArray(d.cards_sin_asignar).map(normalizeTask);\nd.cards_sin_fecha = safeArray(d.cards_sin_fecha).map(normalizeTask);\nd.hitos_proximos = safeArray(d.hitos_proximos);\nd.problemas_detectados = safeArray(d.problemas_detectados);\nd.fecha = d.fecha || new Date().toISOString();\nd.progreso_pct = Number(d.progreso_pct || 0);\nd.total_completadas = Number(d.total_completadas || 0);\nd.total_tarjetas = Number(d.total_tarjetas || 0);\nd.tendencia_historial = d.tendencia_historial || 'sin historial suficiente';\nd.severidad_max = d.severidad_max || 'baja';\nd.cantidad_problemas = Number(d.cantidad_problemas || d.problemas_detectados.length || 0);\n\nfunction semEmoji(s) { return ({ verde: '🟢', amarillo: '🟡', rojo: '🔴', gris: '⚪' })[s] || '⚪'; }\n\nfunction renderFase(f) {\n  const lines = [semEmoji(f.semaforo) + ' ' + f.nombre + ' (' + f.completadas + '/' + f.total + ' = ' + f.pct + '%)'];\n  for (const t of safeArray(f.tareas)) {\n    const status = t.completada ? '[✓]' : (t.vencida ? '[✗ VENCIDA]' : '[⏳]');\n    const responsables = safeArray(t.responsables);\n    const resp = responsables.length > 0 ? responsables.join(', ') : 'SIN ASIGNAR';\n    const due = t.fecha_limite ? ' due=' + t.fecha_limite.slice(0, 10) : ' (sin fecha)';\n    const chk = t.checklist_total > 0 ? ' checklist=' + t.checklist_done + '/' + t.checklist_total : '';\n    const adj = t.adjuntos_count > 0 ? ' adj=' + t.adjuntos_count : '';\n    lines.push('  ' + status + ' ' + t.nombre + ' -> ' + resp + due + chk + adj);\n  }\n  return lines.join('\\n');\n}\n\nconst fasesStr = Object.values(d.fases).map(renderFase).join('\\n\\n') || 'Sin fases registradas.';\n\nconst commitsBackStr = d.github.top_commits_back.map(c => '  ' + c.sha + ' ' + c.autor + ': ' + c.mensaje + ' (' + (c.fecha || '').slice(0, 10) + ')').join('\\n') || '  (sin commits)';\nconst commitsFrontStr = d.github.top_commits_front.map(c => '  ' + c.sha + ' ' + c.autor + ': ' + c.mensaje + ' (' + (c.fecha || '').slice(0, 10) + ')').join('\\n') || '  (sin commits)';\n\nconst entregables = d.snapshot_tareas\n  .filter(t => (t.archivos.length > 0 || t.enlaces.length > 0) && t.nombre && t.nombre.trim() !== '.')\n  .sort((a, b) => new Date(b.dateLastActivity || 0) - new Date(a.dateLastActivity || 0))\n  .slice(0, 15)\n  .map(t => {\n    const files = t.archivos.map(a => a.name).join(', ');\n    const links = t.enlaces.map(l => (l.name || l.url)).join(', ');\n    const parts = [files, links].filter(Boolean).join(' | ');\n    return '  [' + t.lista + '] ' + t.nombre + ': ' + parts;\n  }).join('\\n') || '  (ninguno)';\n\nconst rankingStr = d.ranking.map(r => '  ' + r.initials + ' ' + r.trello_name + ': ' + r.tareas_done + '✓ / ' + r.tareas_pending + '⏳ / ' + r.tareas_overdue + '✗   commits14d=' + r.commits_14d).join('\\n') || '  (sin datos)';\n\nconst ciBack = d.github.ci_back ? d.github.ci_back.status + ' en ' + d.github.ci_back.branch + ' (' + (d.github.ci_back.date || '').slice(0, 10) + ')' : 'sin datos';\nconst ciFront = d.github.ci_front ? d.github.ci_front.status + ' en ' + d.github.ci_front.branch + ' (' + (d.github.ci_front.date || '').slice(0, 10) + ')' : 'sin datos';\n\nfunction sign(n) { return n >= 0 ? '+' + n : String(n); }\nconst diffStr = d.diff_previa ? 'progreso ' + sign(d.diff_previa.progreso) + '% | vencidas ' + sign(d.diff_previa.vencidas) + ' | commits14d ' + sign(d.diff_previa.commits_14d) : 'sin previa';\n\nconst staleStr = d.cards_stale.slice(0, 5).map(t => t.nombre + '(' + t.dias_sin_actividad + 'd, ' + (safeArray(t.responsables)[0] || 'sin asignar') + ')').join(', ') || 'ninguna';\nconst sinAsignarStr = d.cards_sin_asignar.slice(0, 5).map(t => t.nombre).join(', ') || 'ninguna';\nconst sinFechaStr = d.cards_sin_fecha.slice(0, 5).map(t => t.nombre).join(', ') || 'ninguna';\n\nconst prompt = 'Eres gestor PM del proyecto PetSafe (clínica veterinaria, NestJS backend + Angular frontend, fin programado 2026-06-10). Analiza estado real y da diagnóstico accionable en español, texto plano, SIN markdown, SIN asteriscos, SIN emojis.\\n\\n' +\n'Estructura OBLIGATORIA, cada sección máx 3 oraciones:\\n' +\n'RESUMEN: estado global (verde/amarillo/rojo) con motivo principal en una línea.\\n' +\n'POR FASE: comenta SOLO las fases con problemas o riesgo, menciona tareas específicas por nombre.\\n' +\n'CARGA EQUIPO: observación sobre distribución de trabajo entre FG, DM, DP, JA.\\n' +\n'RIESGOS: top 3 con severidad y causa (no inventes, usa los datos).\\n' +\n'ACCIONES: 3 acciones concretas asignadas por nombre real (ej: Josué revisar PR X, David Barragán desbloquear tarea Y).\\n' +\n'PROYECCION: llegamos al 10-jun-2026? sí/no/riesgo con justificación numérica.\\n\\n' +\n'=== CONTEXTO REAL ===\\n' +\n'Fecha: ' + d.fecha + '\\n' +\n'Progreso global: ' + d.progreso_pct + '% (' + d.total_completadas + '/' + d.total_tarjetas + ')\\n' +\n'Días hasta fin proyecto: ' + d.kpis.dias_hasta_fin + '\\n' +\n'Proyección calculada: ' + d.kpis.proyeccion + '\\n' +\n'Velocidad: ' + d.kpis.velocidad_tareas_por_dia + ' tareas/día (' + d.kpis.completadas_7d + ' completadas últimos 7d)\\n' +\n'Diff vs análisis previo: ' + diffStr + '\\n' +\n'Tendencia histórica: ' + d.tendencia_historial + '\\n\\n' +\n'=== TAREAS POR FASE (completo) ===\\n' +\nfasesStr + '\\n\\n' +\n'=== CARDS PROBLEMÁTICAS ===\\n' +\n'Stale (sin actividad >5d): ' + d.cards_stale.length + ' -> ' + staleStr + '\\n' +\n'Sin asignar: ' + d.cards_sin_asignar.length + ' -> ' + sinAsignarStr + '\\n' +\n'Sin fecha: ' + d.cards_sin_fecha.length + ' -> ' + sinFechaStr + '\\n\\n' +\n'=== GITHUB ===\\n' +\n'Commits 14d back=' + d.github.commits_back + ' front=' + d.github.commits_front + '\\n' +\n'Silencio back=' + d.kpis.silencio_back_dias + 'd front=' + d.kpis.silencio_front_dias + 'd\\n' +\n'% commits convencionales (feat/fix/etc): ' + d.kpis.pct_commits_convencionales + '%\\n' +\n'Bus factor 14d (autores distintos): ' + d.kpis.bus_factor_14d + '\\n' +\n'PRs abiertos: ' + (d.github.prs_abiertos_back + d.github.prs_abiertos_front) + ' (avg ' + d.kpis.pr_open_time_dias + 'd open)\\n' +\n'CI backend: ' + ciBack + '\\n' +\n'CI frontend: ' + ciFront + '\\n' +\n'Deploy front: ' + d.github.deploy_front_url + '\\n\\n' +\n'Top 5 commits backend:\\n' + commitsBackStr + '\\n\\n' +\n'Top 5 commits frontend:\\n' + commitsFrontStr + '\\n\\n' +\n'=== CARGA POR PERSONA ===\\n' +\nrankingStr + '\\n\\n' +\n'=== ENTREGABLES (archivos + enlaces) ===\\n' +\nentregables + '\\n\\n' +\n'=== HITOS PRÓXIMOS ===\\n' +\n(d.hitos_proximos.map(h => h.nombre + ' (' + h.dias_faltan + 'd, resp=' + h.responsable + ')').join('\\n') || '(ninguno)') + '\\n\\n' +\n'Problemas auto-detectados: ' + JSON.stringify(d.problemas_detectados) + '\\n' +\n'Severidad máxima: ' + d.severidad_max;\n\nreturn [{ json: { prompt, gemini_key: d.gemini_key, discord_url: d.discord_url || '', analysis: d } }];"
+      },
+      "id": "5724fd93-072a-448e-b316-21543251a34c",
+      "name": "Preparar Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -10544,
+        4064
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}"
+      },
+      "id": "aa5f388a-51a9-470b-8ca3-6283624ae7c2",
+      "name": "Gemini Análisis",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        -10288,
+        4064
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $node['Preparar Prompt'].json.analysis || $json.analysis || $json.payload || $json || {};\nconst safeArray = (value) => Array.isArray(value) ? value : [];\nconst safeObject = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};\nfunction normalizeTask(t = {}) {\n  return {\n    ...t,\n    nombre: t.nombre || t.name || 'Tarea sin nombre',\n    lista: t.lista || 'Sin fase',\n    responsables: safeArray(t.responsables),\n    archivos: safeArray(t.archivos),\n    enlaces: safeArray(t.enlaces),\n    dias_sin_actividad: t.dias_sin_actividad ?? '-'\n  };\n}\nfunction normalizePhase(f = {}) {\n  const tareas = safeArray(f.tareas).map(normalizeTask);\n  const completadas = Number(f.completadas ?? tareas.filter(t => t.completada).length);\n  const total = Number(f.total ?? tareas.length);\n  const vencidas = Number(f.vencidas ?? tareas.filter(t => t.vencida).length);\n  const pendientes = Number(f.pendientes ?? Math.max(total - completadas - vencidas, 0));\n  const pct = Number(f.pct ?? (total > 0 ? Math.round((completadas / total) * 100) : 0));\n  return { ...f, nombre: f.nombre || f.name || 'Fase sin nombre', semaforo: f.semaforo || 'gris', tareas, completadas, total, vencidas, pendientes, pct };\n}\nd.fases = Object.fromEntries(Object.entries(safeObject(d.fases)).map(([key, value]) => [key, normalizePhase(value)]));\nd.github = { commits_back: 0, commits_front: 0, prs_abiertos_back: 0, prs_abiertos_front: 0, top_commits_back: [], top_commits_front: [], ci_back: null, ci_front: null, deploy_front_url: '', ...safeObject(d.github) };\nd.github.top_commits_back = safeArray(d.github.top_commits_back);\nd.github.top_commits_front = safeArray(d.github.top_commits_front);\nd.kpis = { dias_hasta_fin: '-', proyeccion: 'sin datos', velocidad_tareas_por_dia: 0, completadas_7d: 0, silencio_back_dias: '-', silencio_front_dias: '-', pct_commits_convencionales: 0, bus_factor_14d: 0, pr_open_time_dias: 0, pr_merge_ratio_30d: 0, ...safeObject(d.kpis) };\nd.snapshot_tareas = safeArray(d.snapshot_tareas).map(normalizeTask);\nd.cards_stale = safeArray(d.cards_stale).map(normalizeTask);\nd.cards_sin_asignar = safeArray(d.cards_sin_asignar).map(normalizeTask);\nd.cards_sin_fecha = safeArray(d.cards_sin_fecha).map(normalizeTask);\nd.hitos_proximos = safeArray(d.hitos_proximos);\nd.problemas_detectados = safeArray(d.problemas_detectados);\nd.fecha = d.fecha || new Date().toISOString();\nd.progreso_pct = Number(d.progreso_pct || 0);\nd.total_completadas = Number(d.total_completadas || 0);\nd.total_tarjetas = Number(d.total_tarjetas || 0);\nd.severidad_max = d.severidad_max || 'baja';\nd.cantidad_problemas = Number(d.cantidad_problemas || d.problemas_detectados.length || 0);\nconst geminiResp = $node['Gemini Análisis'].json;\nconst iaText =\n  geminiResp?.text ||\n  geminiResp?.response?.generations?.[0]?.[0]?.text?.trim() ||\n  geminiResp?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||\n  '(sin respuesta IA)';\n\nconst colorMap = { alta: 15158332, media: 16761095, baja: 3066993 };\nconst color = colorMap[d.severidad_max] || 3066993;\nconst fechaLocal = new Date(d.fecha || Date.now()).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' });\n\nfunction semEmoji(s) { return ({ verde: '🟢', amarillo: '🟡', rojo: '🔴', gris: '⚪' })[s] || '⚪'; }\nfunction sign(n) { return n >= 0 ? '+' + n : String(n); }\nfunction clean(value) { return String(value ?? '').replace(/\\s+/g, ' ').trim(); }\nfunction trim(value, max = 1000) {\n  const text = String(value ?? '').trim();\n  return text.length > max ? text.slice(0, max - 1) + '…' : text;\n}\nfunction field(name, value, inline = false) {\n  return { name: trim(name, 256), value: trim(value || '-', 1024), inline };\n}\nfunction payload(title, description, fields, footer) {\n  return {\n    username: 'Monitor PetSafe',\n    embeds: [{\n      title: trim(title, 256),\n      description: trim(description, 3900),\n      color,\n      fields: fields.filter(f => f && f.value && f.value !== '-').slice(0, 8),\n      footer: { text: trim(footer || ('Monitor automatico · ' + String(d.severidad_max || 'baja').toUpperCase()), 2048) },\n      timestamp: d.fecha || new Date().toISOString()\n    }],\n    allowed_mentions: { parse: [] }\n  };\n}\nfunction dateShort(value) { return value ? String(value).slice(0, 10) : '-'; }\nfunction shortName(value) { return String(value || '?').split(' ').filter(Boolean).slice(0, 2).join(' ') || '?'; }\n\nfunction commitIntent(message) {\n  const msg = String(message || '').toLowerCase();\n  if (/merge pull request|merge branch|merge remote/.test(msg)) return '🔀 Integrado (Merge)';\n  if (/fix|hotfix|bug|conflict|resolve/.test(msg)) return '🐛 Corregido / revisar regresion';\n  if (/test|spec|coverage|queue/.test(msg)) return '🧪 Validacion tecnica';\n  if (/feat|add|implement|create/.test(msg)) return '✨ Funcionalidad realizada';\n  if (/refactor|cleanup|chore|build|ci/.test(msg)) return '🔧 Mantenimiento tecnico';\n  if (/docs/.test(msg)) return '📝 Documentacion';\n  if (/perf/.test(msg)) return '⚡ Optimizacion';\n  return '🔨 Cambio tecnico';\n}\nfunction commitRisk(message) {\n  const msg = String(message || '').toLowerCase();\n  if (/conflict|hotfix|rollback|revert|failed|error/.test(msg)) return '🔴 pendiente de revisar';\n  if (/test|coverage|fix/.test(msg)) return '🟡 verificar resultado';\n  if (/merge pull request|merge branch|merge remote/.test(msg)) return '🟢 ya integrado';\n  return '⚪ seguimiento normal';\n}\nfunction renderCommit(c) {\n  const fullMsg = clean(c.mensaje || c.commit?.message || '');\n  const msgLine = fullMsg.split('\\n')[0];\n  let modulo = '';\n  const moduleMatch = msgLine.match(/^[a-z]+\\(([^)]+)\\):/i);\n  if (moduleMatch && moduleMatch[1]) modulo = ' `[' + moduleMatch[1] + ']`';\n  let prInfo = '';\n  const prMatch = msgLine.match(/merge pull request #(\\d+)/i) || msgLine.match(/\\(#(\\d+)\\)/);\n  if (prMatch && prMatch[1]) prInfo = ' **(PR #' + prMatch[1] + ')**';\n  return '`' + (c.sha || '').slice(0, 7) + '` **' + shortName(c.autor) + '**' + modulo + prInfo + ' · ' + commitIntent(msgLine) + '\\n  └─ ' + trim(msgLine, 110) + ' · ' + dateShort(c.fecha) + ' · _' + commitRisk(msgLine) + '_';\n}\nfunction renderCommits(list) {\n  if (!list || list.length === 0) return '(sin commits recientes)';\n  const autores = {};\n  list.forEach(c => { const autor = shortName(c.autor); autores[autor] = (autores[autor] || 0) + 1; });\n  const ranking = Object.entries(autores).sort((a, b) => b[1] - a[1]).map(([autor, count]) => autor + ' (' + count + ')').join(', ');\n  const lines = list.slice(0, 5).map(renderCommit);\n  return '**Top Activos**: ' + ranking + '\\n\\n' + lines.join('\\n');\n}\n\nconst resumen1 = semEmoji(d.severidad_max === 'alta' ? 'rojo' : d.severidad_max === 'media' ? 'amarillo' : 'verde') + ' **' + d.progreso_pct + '%** progreso · ' + d.total_completadas + '/' + d.total_tarjetas + ' tareas · **' + d.kpis.dias_hasta_fin + 'd** hasta fin';\nconst resumen2 = '📈 Proyección: **' + d.kpis.proyeccion + '** · Velocidad ' + d.kpis.velocidad_tareas_por_dia + '/día · ' + d.kpis.completadas_7d + ' completadas últimos 7d';\nconst resumen3 = d.diff_previa ? '🔁 vs previa: ' + sign(d.diff_previa.progreso) + '% progreso, ' + sign(d.diff_previa.vencidas) + ' vencidas, ' + sign(d.diff_previa.commits_14d) + ' commits' : '🔁 primera ejecución';\nconst headerDescription = [resumen1, resumen2, resumen3].join('\\n');\n\nconst kpiTxt = '⚡ Velocidad: ' + d.kpis.velocidad_tareas_por_dia + '/día · Bus factor: ' + d.kpis.bus_factor_14d + ' · Conv: ' + d.kpis.pct_commits_convencionales + '%\\n' +\n  '🔇 Silencio back: ' + d.kpis.silencio_back_dias + 'd · front: ' + d.kpis.silencio_front_dias + 'd\\n' +\n  '🔀 PRs abiertos: ' + (d.github.prs_abiertos_back + d.github.prs_abiertos_front) + ' · avg open ' + d.kpis.pr_open_time_dias + 'd · merge ratio ' + d.kpis.pr_merge_ratio_30d + '%';\n\nconst problemasTxt = (d.problemas_detectados || []).length\n  ? d.problemas_detectados.map(p => '• ' + p.tipo + ' · severidad ' + p.severidad + (p.count ? ' · ' + p.count : '')).join('\\n')\n  : 'Sin problemas automáticos críticos.';\n\nconst faseBlocks = Object.values(d.fases || {}).map(f => {\n  const head = semEmoji(f.semaforo) + ' **' + f.nombre + '** ' + f.pct + '% (✓' + f.completadas + ' ⏳' + f.pendientes + ' ✗' + f.vencidas + ')';\n  const problemTasks = (f.tareas || [])\n    .filter(t => t.nombre && t.nombre.trim() !== '.' && (!t.completada || t.vencida || t.stale || t.sin_asignar))\n    .slice(0, 6)\n    .map(t => {\n      const ic = t.completada ? '✓' : (t.vencida ? '🔴' : '⏳');\n      const r = t.responsables?.[0] ? ' · ' + shortName(t.responsables[0]) : ' · sin asignar';\n      const due = t.fecha_limite ? ' · ' + dateShort(t.fecha_limite) : '';\n      return ic + ' ' + trim(t.nombre, 56) + r + due;\n    });\n  return head + (problemTasks.length ? '\\n' + problemTasks.join('\\n') : '\\nSin pendientes relevantes en esta fase.');\n});\n\nconst problematicLines = [];\nif ((d.cards_stale || []).length > 0) problematicLines.push('🕸️ **Stale**: ' + d.cards_stale.slice(0, 5).map(t => trim(t.nombre, 42) + '(' + t.dias_sin_actividad + 'd)').join(', '));\nif ((d.cards_sin_asignar || []).length > 0) problematicLines.push('❓ **Sin asignar**: ' + d.cards_sin_asignar.slice(0, 5).map(t => trim(t.nombre, 42)).join(', '));\nif ((d.cards_sin_fecha || []).length > 0) problematicLines.push('📅 **Sin fecha**: ' + d.cards_sin_fecha.slice(0, 5).map(t => trim(t.nombre, 42)).join(', '));\n\nconst entregables = (d.snapshot_tareas || [])\n  .filter(t => ((t.archivos || []).length > 0 || (t.enlaces || []).length > 0) && t.nombre && t.nombre.trim() !== '.')\n  .sort((a, b) => new Date(b.dateLastActivity || 0) - new Date(a.dateLastActivity || 0))\n  .slice(0, 6);\nconst entregablesTxt = entregables.length ? entregables.map(t => {\n  const files = (t.archivos || []).slice(0, 2).map(a => '[📄 ' + trim(a.name, 45) + '](' + a.url + ')').join(' ');\n  const links = (t.enlaces || []).slice(0, 2).map(l => '[🔗 ' + trim(l.name || 'link', 45) + '](' + l.url + ')').join(' ');\n  return '**' + trim(t.nombre, 48) + '**: ' + [files, links].filter(Boolean).join(' ');\n}).join('\\n') : 'Sin entregables recientes con adjuntos/enlaces.';\n\nconst ciStatusEmoji = s => s === 'success' ? '✅' : s === 'failure' ? '❌' : s === 'in_progress' ? '🟡' : '⚪';\nconst ciBackTxt = d.github.ci_back ? ciStatusEmoji(d.github.ci_back.status) + ' ' + d.github.ci_back.status + ' · `' + d.github.ci_back.branch + '` · [run](' + d.github.ci_back.url + ')' : '(sin datos)';\nconst ciFrontTxt = d.github.ci_front ? ciStatusEmoji(d.github.ci_front.status) + ' ' + d.github.ci_front.status + ' · `' + d.github.ci_front.branch + '` · [run](' + d.github.ci_front.url + ')' : '(sin datos)';\n\nconst hitTxt = (d.hitos_proximos || []).length\n  ? d.hitos_proximos.slice(0, 5).map(h => '📅 **' + h.nombre + '** en ' + h.dias_faltan + 'd (' + h.responsable + ')').join('\\n')\n  : 'Sin hitos próximos registrados.';\n\nfunction chunkText(text, size = 950) {\n  const lines = String(text || '').split('\\n');\n  const chunks = [];\n  let current = '';\n  for (const line of lines) {\n    if ((current + '\\n' + line).length > size && current) {\n      chunks.push(current);\n      current = line;\n    } else {\n      current = current ? current + '\\n' + line : line;\n    }\n  }\n  if (current) chunks.push(current);\n  return chunks.length ? chunks : ['(sin contenido)'];\n}\n\nconst messages = [];\nmessages.push(payload(\n  '📊 Estado proyecto PetSafe — ' + fechaLocal + ' · Resumen',\n  headerDescription,\n  [field('Resumen de riesgo', problemasTxt), field('KPIs PMO', kpiTxt)],\n  'Monitor automatico · ' + String(d.severidad_max || 'baja').toUpperCase() + ' · ' + d.cantidad_problemas + ' problemas'\n));\n\nconst faseChunks = chunkText(faseBlocks.join('\\n\\n'), 950);\nfaseChunks.slice(0, 3).forEach((chunk, idx) => {\n  messages.push(payload(\n    '📋 Tareas por fase' + (faseChunks.length > 1 ? ' · bloque ' + (idx + 1) : ''),\n    'Fases con pendientes, vencidas o señales de seguimiento.',\n    [field('Fases', chunk), problematicLines.length ? field('Cards problemáticas', problematicLines.join('\\n')) : null],\n    'Se priorizan tareas no completadas, stale o sin asignar.'\n  ));\n});\n\nmessages.push(payload(\n  '🧾 Actividad técnica interpretada',\n  'Los commits se resumen con intención PM: qué parece realizado y qué queda para verificar.',\n  [\n    field('Backend', renderCommits(d.github.top_commits_back)),\n    field('Frontend', renderCommits(d.github.top_commits_front))\n  ],\n  'Fuente: últimos commits recolectados por el monitor.'\n));\n\nmessages.push(payload(\n  '🚦 Entregables, CI e hitos',\n  'Estado de evidencia entregable y señales de integración.',\n  [\n    field('Entregables recientes', entregablesTxt),\n    field('CI / Deploy', 'Backend: ' + ciBackTxt + '\\nFrontend: ' + ciFrontTxt + '\\n🌐 Deploy front: ' + d.github.deploy_front_url),\n    field('Hitos próximos', hitTxt)\n  ],\n  'Revisar CI fallido o ausencia de datos antes de cerrar entregables.'\n));\n\nchunkText(iaText, 950).slice(0, 4).forEach((chunk, idx, arr) => {\n  messages.push(payload(\n    '🤖 Diagnóstico IA' + (arr.length > 1 ? ' · bloque ' + (idx + 1) : ''),\n    'Análisis narrativo de Gemini sobre riesgos, carga y acciones.',\n    [field('Diagnóstico', chunk)],\n    'Diagnóstico IA guardado también en analisis_proyecto.recomendaciones_ia.'\n  ));\n});\n\nreturn [{\n  json: {\n    discord_payload: messages[0],\n    discord_messages: messages,\n    ia_text: iaText,\n    discord_url: $node['Preparar Prompt'].json.discord_url || '',\n    monitor_summary: headerDescription,\n    message_count: messages.length\n  }\n}];"
+      },
+      "id": "c87ee577-bd1b-4656-b4f6-f0b64f3a3f03",
+      "name": "Build Discord Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        820,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE analisis_proyecto\nSET recomendaciones_ia = '{{ ($json.ia_text || \"\").replace(/'/g, \"''\") }}'\nWHERE id = (SELECT MAX(id) FROM analisis_proyecto);\n",
+        "options": {}
+      },
+      "id": "b0b3f884-52e5-4037-99fe-901d39c80f45",
+      "name": "Guardar Recomendación IA",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -9728,
+        4272
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.discord_url || $env.DISCORD_WEBHOOK_URL || '' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.discord_payload) }}",
+        "options": {}
+      },
+      "id": "947f74a3-2a1e-4dc6-ba64-ae17fe94a99f",
+      "name": "Discord Alerta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1260,
+        0
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-flash-latest",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "de82206d-8b53-4166-99df-1daf00394263",
+      "name": "Google Gemini Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -10288,
+        4304
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "O6F3cHruroRP0y6x",
+          "name": "Gemini - Jos"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "mon:last_report",
+        "value": "={{ JSON.stringify($json.discord_payload) }}",
+        "keyType": "string",
+        "expire": true,
+        "ttl": 172800
+      },
+      "id": "cdc05f2b-61f8-48cf-8aa7-7688f459a5b4",
+      "name": "Redis Store Last Report",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        220
+      ],
+      "credentials": {
+        "redis": {
+          "id": "BoHQ6nfTk4dgPgVq",
+          "name": "Redis account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ai_decisions (correlation_id, agent_role, decision_type, input_summary, context_used, evidence, decision, recommendation, confidence, risk_level, requires_human_approval, status) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12);",
+        "options": {
+          "queryReplacement": "={{ [ $json.correlation_id || null, 'PM Monitor', 'diagnostico_semanal', ('Severidad: ' + ($node['Preparar Prompt'].json.analysis?.severidad_max || 'baja') + ' | Problemas: ' + ($node['Preparar Prompt'].json.analysis?.cantidad_problemas || 0)).slice(0, 500), JSON.stringify($node['Preparar Prompt'].json.analysis || {}), JSON.stringify({ kpis: $node['Preparar Prompt'].json.analysis?.kpis || {} }), JSON.stringify({ diagnostico: $json.ia_text || '' }), null, null, ($node['Preparar Prompt'].json.analysis?.severidad_max || null), false, 'logged' ] }}"
+        }
+      },
+      "id": "2d0c1002-1ad3-4a7f-8c50-69a8c8a57f12",
+      "name": "Decision Ledger Monitor",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -9712,
+        4048
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_runs_audit (workflow_id, workflow_name, status, completed_at, correlation_id, metrics) VALUES ($1, $2, 'success', NOW(), $3, $4::jsonb);",
+        "options": {
+          "queryReplacement": "={{ [ $workflow.id || 'unknown', $workflow.name, $json.correlation_id || null, JSON.stringify({ source: 'monitor_alertas', event_id: $json.event_id || null }) ] }}"
+        }
+      },
+      "id": "08f50226-e17b-43c0-a089-8fa3d7681642",
+      "name": "Audit Success",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -9248,
+        3824
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const messages = Array.isArray($json.discord_messages) ? $json.discord_messages : [$json.discord_payload].filter(Boolean);\nreturn messages.map((payload, index) => ({\n  json: {\n    discord_payload: payload,\n    discord_url: $json.discord_url || '',\n    ia_text: $json.ia_text,\n    monitor_summary: $json.monitor_summary,\n    message_index: index + 1,\n    message_count: messages.length\n  }\n}));"
+      },
+      "id": "split-discord-monitor-messages",
+      "name": "Split Discord Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Preparar Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini Análisis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Análisis": {
+      "main": [
+        [
+          {
+            "node": "Build Discord Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Discord Payload": {
+      "main": [
+        [
+          {
+            "node": "Split Discord Messages",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Guardar Recomendación IA",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Decision Ledger Monitor",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Redis Store Last Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Gemini Análisis",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discord Alerta": {
+      "main": [
+        []
+      ]
+    },
+    "On-Demand Trigger": {
+      "main": [
+        [
+          {
+            "node": "Preparar Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis Store Last Report": {
+      "main": [
+        [
+          {
+            "node": "Audit Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Discord Messages": {
+      "main": [
+        [
+          {
+            "node": "Discord Alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "5c8b7a91-4b8e-403e-929c-4b9183662299",
+  "meta": {
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "cFmFpJsFVpSJYJln",
+  "tags": []
+}

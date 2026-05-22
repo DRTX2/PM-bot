@@ -1,0 +1,408 @@
+{
+  "name": "Discord Eventos GitHub PetSafe",
+  "nodes": [
+    {
+      "parameters": {
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "STRATIUM-UTA"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "PetSafe-Back",
+          "mode": "name"
+        },
+        "events": [
+          "*"
+        ],
+        "options": {}
+      },
+      "id": "c2f229a7-6d29-4422-bbc9-8a72f39a892b",
+      "name": "GitHub Event Webhook Backend",
+      "type": "n8n-nodes-base.githubTrigger",
+      "typeVersion": 1,
+      "position": [
+        -752,
+        144
+      ],
+      "webhookId": "2eea23e2-c0cc-4d57-a46b-f7f4d30eece7",
+      "credentials": {
+        "githubApi": {
+          "id": "Ef6o1UdEiDu28Ibq",
+          "name": "backend-account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "owner": {
+          "__rl": true,
+          "value": "JosueGarciaAbata",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "PetSafe-Front",
+          "mode": "name"
+        },
+        "events": [
+          "*"
+        ],
+        "options": {}
+      },
+      "id": "8bed2976-3a99-4495-bafa-930382b1aa96",
+      "name": "GitHub Event Webhook Frontend",
+      "type": "n8n-nodes-base.githubTrigger",
+      "typeVersion": 1,
+      "position": [
+        -752,
+        400
+      ],
+      "webhookId": "e480b610-6d9b-42dc-827f-8d8c2c753f66",
+      "credentials": {
+        "githubApi": {
+          "id": "dkFcPmeSEHWQKN9i",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const headers = $json.headers || {};\nconst body = $json.body || {};\n\nconst getHeader = (name) => {\n  const key = Object.keys(headers).find((k) => k.toLowerCase() === name.toLowerCase());\n  return key ? headers[key] : '';\n};\n\nconst event = String(getHeader('x-github-event') || '').toLowerCase();\nconst deliveryId = String(getHeader('x-github-delivery') || '').trim();\nconst action = body.action || '';\nconst repo = body.repository?.full_name || 'repo/desconocido';\nconst repoName = body.repository?.name || '';\nconst actor = body.sender?.login || body.pusher?.name || 'desconocido';\nconst backendRepo = 'PetSafe-Back';\nconst frontendRepo = 'PetSafe-Front';\n\nlet repoScope = 'github';\nif (repoName && repoName === backendRepo) repoScope = 'backend';\nelse if (repoName && repoName === frontendRepo) repoScope = 'frontend';\n\nlet ignored = false;\nlet tipo = 'github_evento';\nlet titulo = 'Evento GitHub';\nlet descripcion = 'Evento ' + (event || 'desconocido') + ' en ' + repo + '.';\nlet url = body.repository?.html_url || null;\nlet branch = null;\nlet prNumber = null;\nlet entityType = 'repository';\nlet entityId = repo;\nlet commitSha = body.after || body.head_commit?.id || body.pull_request?.head?.sha || null;\nlet occurredAt = body.pull_request?.updated_at || body.pull_request?.created_at || body.head_commit?.timestamp || new Date().toISOString();\nlet externalId = deliveryId || commitSha || repo + ':' + event + ':' + action;\n\nif (event === 'pull_request') {\n  const pr = body.pull_request || {};\n  prNumber = body.number || pr.number || null;\n  const prTitle = pr.title || 'PR sin titulo';\n  url = pr.html_url || url;\n  entityType = 'pull_request';\n  entityId = String(prNumber || pr.id || repo + ':pr');\n  commitSha = pr.head?.sha || commitSha;\n  occurredAt = pr.updated_at || pr.merged_at || pr.closed_at || pr.created_at || occurredAt;\n  externalId = deliveryId || String(pr.id || prNumber || commitSha || repo + ':pr');\n\n  if (action === 'opened' || action === 'reopened') {\n    tipo = 'github_pr_opened';\n    titulo = 'PR abierto';\n    descripcion = actor + ' abrio PR #' + prNumber + ' en ' + repo + ': ' + prTitle + '.';\n  } else if (action === 'ready_for_review') {\n    tipo = 'github_pr_ready';\n    titulo = 'PR listo para revision';\n    descripcion = actor + ' marco PR #' + prNumber + ' en ' + repo + ' listo para revision.';\n  } else if (action === 'synchronize') {\n    tipo = 'github_pr_updated';\n    titulo = 'PR actualizado';\n    descripcion = actor + ' actualizo PR #' + prNumber + ' en ' + repo + ': ' + prTitle + '.';\n  } else if (action === 'closed' && pr.merged) {\n    tipo = 'github_pr_merged';\n    titulo = 'PR mergeado';\n    descripcion = actor + ' mergeo PR #' + prNumber + ' en ' + repo + ': ' + prTitle + '.';\n  } else if (action === 'closed') {\n    tipo = 'github_pr_closed';\n    titulo = 'PR cerrado';\n    descripcion = actor + ' cerro PR #' + prNumber + ' en ' + repo + ': ' + prTitle + '.';\n  } else {\n    ignored = true;\n    titulo = 'Evento GitHub ignorado';\n    descripcion = 'Evento pull_request/' + action + ' no se procesa en este workflow.';\n  }\n} else if (event === 'pull_request_review') {\n  const pr = body.pull_request || {};\n  const review = body.review || {};\n  prNumber = pr.number || body.number || null;\n  const prTitle = pr.title || 'PR sin titulo';\n  const reviewState = String(review.state || '').toLowerCase();\n  url = review.html_url || pr.html_url || url;\n  entityType = 'pull_request_review';\n  entityId = String(review.id || prNumber || repo + ':review');\n  commitSha = review.commit_id || pr.head?.sha || commitSha;\n  occurredAt = review.submitted_at || pr.updated_at || occurredAt;\n  externalId = deliveryId || String(review.id || pr.id || prNumber || commitSha || repo + ':review');\n\n  if (reviewState === 'approved') {\n    tipo = 'github_pr_review_approved';\n    titulo = 'PR aprobado en review';\n    descripcion = actor + ' aprobo PR #' + prNumber + ' en ' + repo + ': ' + prTitle + '.';\n  } else if (reviewState === 'changes_requested') {\n    tipo = 'github_pr_review_changes_requested';\n    titulo = 'Cambios solicitados en PR';\n    descripcion = actor + ' pidio cambios en PR #' + prNumber + ' en ' + repo + ': ' + prTitle + '.';\n  } else {\n    ignored = true;\n    tipo = 'github_pr_review_ignored';\n    titulo = 'Review de PR ignorada';\n    descripcion = 'Review ' + (reviewState || 'sin estado') + ' del PR #' + prNumber + ' no requiere accion del hub.';\n  }\n} else if (event === 'push') {\n  const ref = body.ref || '';\n  branch = ref.replace('refs/heads/', '') || ref;\n  const commits = Array.isArray(body.commits) ? body.commits : [];\n  const commitCount = commits.length;\n  url = body.compare || url;\n  entityType = 'branch';\n  entityId = branch || repo;\n  occurredAt = body.head_commit?.timestamp || body.repository?.updated_at || occurredAt;\n  externalId = deliveryId || String(body.after || ref || repo + ':push');\n\n  if (branch === 'main' || branch === 'master') {\n    ignored = true;\n    tipo = 'github_push_main_ignored';\n    titulo = 'Push principal ignorado';\n    descripcion = actor + ' hizo push a ' + branch + ' en ' + repo + ' (' + commitCount + ' commits). Lo gestiona Construir Contexto Robusto.';\n  } else {\n    tipo = 'github_push_branch';\n    titulo = 'Push en rama de trabajo';\n    descripcion = actor + ' hizo push a ' + branch + ' en ' + repo + ' (' + commitCount + ' commits).';\n  }\n} else {\n  ignored = true;\n  titulo = 'Evento GitHub ignorado';\n  descripcion = 'Evento ' + (event || 'desconocido') + ' no se procesa en este workflow.';\n}\n\nconst eventId = deliveryId\n  ? 'gh:' + deliveryId\n  : 'gh:' + [repoScope, tipo, externalId, action || 'na'].filter(Boolean).join(':').replace(/[^a-zA-Z0-9:_-]/g, '_');\nconst correlationId = 'evt_' + eventId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 90);\n\nconst detalle = {\n  event,\n  action,\n  repo,\n  repo_name: repoName || null,\n  repo_scope: repoScope,\n  actor,\n  branch,\n  pr_number: prNumber,\n  commit_sha: commitSha,\n  url,\n  event_id: eventId,\n  correlation_id: correlationId,\n  occurred_at: occurredAt,\n  received_at: new Date().toISOString(),\n  review_state: body.review?.state || null\n};\n\nconst discord_content = '[PetSafe/GitHub/' + repoScope + '] ' + titulo + '\\n' + descripcion + (url ? '\\n' + url : '');\nconst normalized = {\n  source: 'github',\n  event_type: tipo,\n  event,\n  action,\n  repo,\n  repo_scope: repoScope,\n  actor,\n  entity_type: entityType,\n  entity_id: entityId,\n  pull_request_number: prNumber,\n  commit_sha: commitSha,\n  branch,\n  occurred_at: occurredAt,\n  url,\n  review_state: body.review?.state || null,\n  ignored\n};\n\nreturn [{\n  json: {\n    source: 'github',\n    ignored,\n    tipo,\n    titulo,\n    descripcion,\n    detalle,\n    detalle_json: JSON.stringify(detalle || {}),\n    normalized_json: JSON.stringify(normalized || {}),\n    raw_payload_json: JSON.stringify({ headers, body }),\n    discord_content,\n    event_id: eventId,\n    external_id: String(externalId || eventId),\n    occurred_at: occurredAt,\n    correlation_id: correlationId,\n    actor,\n    entity_type: entityType,\n    entity_id: entityId,\n    repo,\n    trello_card_id: null,\n    pull_request_number: prNumber,\n    commit_sha: commitSha\n  }\n}];"
+      },
+      "id": "b3465606-385c-4bfb-bfcb-e3bdf6ab6502",
+      "name": "Normalizar Evento GitHub1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -512,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "if-github-not-ignored",
+              "leftValue": "={{ $json.ignored }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "41a0a588-6b97-44a4-83e9-da418baa55f0",
+      "name": "IF Evento GitHub Relevante1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -288,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "id": "6a64c937-080d-4422-a90d-d35ece7f3106",
+      "name": "Discord Evento GitHub1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        896,
+        -272
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO eventos_detectados (tipo, descripcion, detalle, notificado) VALUES ($1, $2, $3::jsonb, TRUE);",
+        "options": {
+          "queryReplacement": "={{ [ $json.tipo, $json.descripcion, $json.detalle_json ] }}"
+        }
+      },
+      "id": "e5061b5f-fad4-4165-b296-aa2fa8d17676",
+      "name": "PG Insert Evento GitHub1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        896,
+        80
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok (github procesado)",
+        "options": {}
+      },
+      "id": "aa311a3c-eb5a-4c36-a424-0cfe610351ec",
+      "name": "Resp GitHub Procesado1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        896,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok (github ignorado)",
+        "options": {}
+      },
+      "id": "8f1e0951-b54c-4d2f-a7ca-55205a5799b6",
+      "name": "Resp GitHub Ignorado1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ins AS (\n  INSERT INTO events_inbox (\n    event_id, source, event_type, external_id, occurred_at, correlation_id,\n    actor, entity_type, entity_id, repo, trello_card_id, pull_request_number, commit_sha,\n    payload, normalized, processing_status\n  ) VALUES (\n    $1, $2, $3, $4, $5::timestamptz, $6,\n    $7, $8, $9, $10, $11, $12, $13,\n    $14::jsonb, $15::jsonb, 'ingested'\n  )\n  ON CONFLICT (event_id) DO NOTHING\n  RETURNING event_id, correlation_id\n)\nSELECT\n  EXISTS(SELECT 1 FROM ins) AS inserted,\n  COALESCE((SELECT event_id FROM ins LIMIT 1), $1) AS event_id,\n  COALESCE((SELECT correlation_id FROM ins LIMIT 1), $6) AS correlation_id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.event_id, $json.source, $json.tipo, $json.external_id, $json.occurred_at, $json.correlation_id, $json.actor || null, $json.entity_type || null, $json.entity_id || null, $json.repo || null, $json.trello_card_id || null, $json.pull_request_number || null, $json.commit_sha || null, $json.raw_payload_json || '{}', $json.normalized_json || '{}' ] }}"
+        }
+      },
+      "id": "e64542aa-1ee0-4c52-b986-7f2cde8b4ed9",
+      "name": "PG Insert Inbox GitHub1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        80
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "if-github-inbox-inserted",
+              "leftValue": "={{ $json.inserted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3e2a9a22-1ea2-4f2b-8911-794ddda60237",
+      "name": "IF Inbox GitHub Nuevo1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        224,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok (github duplicado)",
+        "options": {}
+      },
+      "id": "5dd0819e-bb96-4afb-b38e-41232aad029e",
+      "name": "Resp GitHub Duplicado1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        928,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_runs_audit (workflow_id, workflow_name, status, completed_at, correlation_id, metrics) VALUES ($1, $2, 'success', NOW(), $3, $4::jsonb);",
+        "options": {
+          "queryReplacement": "={{ [ $workflow.id || 'unknown', $workflow.name, $json.correlation_id || null, JSON.stringify({ event_id: $json.event_id || null, source: $json.source || null, event_type: $json.tipo || $json.event_type || null }) ] }}"
+        }
+      },
+      "id": "291761cb-ac4f-4226-b26d-aee03cc4859b",
+      "name": "Audit Success",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        928,
+        624
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "GitHub Event Webhook Backend": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Evento GitHub1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub Event Webhook Frontend": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Evento GitHub1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Evento GitHub1": {
+      "main": [
+        [
+          {
+            "node": "IF Evento GitHub Relevante1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Evento GitHub Relevante1": {
+      "main": [
+        [
+          {
+            "node": "PG Insert Inbox GitHub1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resp GitHub Ignorado1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Audit Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PG Insert Inbox GitHub1": {
+      "main": [
+        [
+          {
+            "node": "IF Inbox GitHub Nuevo1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Inbox GitHub Nuevo1": {
+      "main": [
+        [
+          {
+            "node": "PG Insert Evento GitHub1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Resp GitHub Procesado1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Audit Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resp GitHub Duplicado1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Audit Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "0179b30a-7741-490c-9cce-01852b3ffc07",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "LKhZAQYHgktyV0jO",
+  "tags": []
+}

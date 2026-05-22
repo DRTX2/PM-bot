@@ -10,9 +10,11 @@ Este documento resume qué hace hoy el sistema de `bot/` y cómo probarlo en n8n
 - Interpreta comandos Discord:
   - `!ayuda`
   - `!kpis`
+<!-- no esta tomando bien los datos -->
   - `!reporte [dias]`
   - `!riesgos`
   - `!hitos`
+  <!-- estas 2 sig no jalan ni verga -->
   - `!revisar backend`
   - `!revisar frontend`
   - `!estado`
@@ -23,6 +25,8 @@ Este documento resume qué hace hoy el sistema de `bot/` y cómo probarlo en n8n
   - `!progreso`
 - Para consultas generales arma contexto con Trello, GitHub, Postgres y responde con Gemini.
 - Guarda preguntas y respuestas en la tabla `recomendaciones`.
+
+
 
 ### `Monitor PetSafe.json`
 - Ejecuta monitoreo programado del proyecto.
@@ -116,6 +120,7 @@ Verifica:
 - `Guardar Recomendación IA` actualiza `analisis_proyecto.recomendaciones_ia`.
 - `Discord Alerta` devuelve 2xx.
 
+<!-- en primer lugar no se si este workflowexiste -->
 ## D. Probar webhooks GitHub/Trello
 
 ### GitHub

@@ -1,0 +1,362 @@
+\PassOptionsToPackage{spanish,es-tabla}{babel}
+\documentclass{encabezado}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage[table]{xcolor}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{cite}
+\usepackage{hyperref}
+\usepackage{tikz}
+\usepackage{listings}
+\usepackage[font=footnotesize,labelfont=bf]{caption}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit}
+\hypersetup{hidelinks, colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
+
+\titlespacing*{\section}{0pt}{14pt plus 4pt minus 2pt}{8pt plus 2pt minus 1pt}
+\titlespacing*{\subsection}{0pt}{10pt plus 3pt minus 2pt}{6pt plus 1pt minus 1pt}
+\titlespacing*{\subsubsection}{0pt}{8pt plus 2pt minus 1pt}{4pt plus 1pt minus 1pt}
+
+\setlength{\parindent}{1.5em}
+\setlength{\parskip}{3pt}
+\setlength{\headheight}{159pt}
+
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+
+\generarEncabezado
+{CAL-BOT-INF-001}
+{1.0}
+{CALIDAD Y GESTIÓN DE PROYECTOS}
+{19/05/2026}
+{Informe de Desarrollo -- Bot Project Manager AI PetSafe}
+{19/05/2026}
+
+\begin{document}
+
+\titleformat{\section}{\normalfont\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalfont\normalsize\bfseries}{\thesubsubsection}{1em}{}
+\renewcommand{\thesection}{\Roman{section}}
+\renewcommand{\thesubsection}{\arabic{section}.\arabic{subsection}}
+\renewcommand{\thesubsubsection}{\arabic{section}.\arabic{subsection}.\arabic{subsubsection}}
+
+\section{TÍTULO}
+
+Desarrollo, Arquitectura e Implementación del \textbf{Bot Project Manager AI PetSafe}: Orquestación Inteligente Event-Driven, Integración de Ecosistemas de Desarrollo y Modelado de Decisiones Asistido por Inteligencia Artificial Generativa.
+
+\section{INTRODUCCIÓN}
+
+La gestión de proyectos de ingeniería de software modernos requiere una supervisión constante sobre repositorios de código, tableros de metodologías ágiles y plataformas de comunicación. En el contexto del proyecto PetSafe, una plataforma digital integral orientada a la gestión clínica veterinaria, el equipo de desarrollo detectó una fricción operativa significativa: la información técnica y administrativa se encontraba fragmentada entre GitHub (código fuente), Trello (gestión ágil) y Discord (comunicación de equipo). Esta separación creaba silos de información, ralentizaba la toma de decisiones y exigía un gran esfuerzo manual para la consolidación de métricas de calidad y avance.
+
+Para mitigar este problema, el presente informe detalla el diseño y construcción de una solución tecnológica avanzada: un Bot Project Manager impulsado por Inteligencia Artificial (IA). En lugar de crear un simple webhook de notificaciones, se diseñó un ecosistema de orquestación inteligente basado en la plataforma \textbf{n8n}. Este sistema reacciona en tiempo real a los eventos del ciclo de vida del software, normaliza los datos, los enruta mediante un patrón \textit{Event-Driven} y emplea \textbf{Google Gemini 2.5 Pro} para el procesamiento analítico.
+
+El resultado es un Project Manager Virtual autónomo capaz de realizar inspección técnica de \textit{Pull Requests}, detectar cuellos de botella mediante análisis de \textit{Aging WIP} (Work In Progress), consolidar reportes ejecutivos en PDF y gestionar un calendario PMO interno. Además, el sistema incorpora un riguroso patrón \textit{Human-in-the-Loop}, garantizando que toda decisión crítica sugerida por la IA (como bloqueos de despliegues o escalamientos) deba ser revisada y aprobada por un administrador humano mediante un dashboard seguro antes de su ejecución.
+
+\section{OBJETIVOS}
+
+\subsection{Objetivo General}
+Diseñar, implementar y desplegar una arquitectura de orquestación inteligente y event-driven basada en n8n e Inteligencia Artificial Generativa que unifique la telemetría del proyecto PetSafe, automatice la inspección de código, optimice la gestión de riesgos y centralice la gobernanza del proyecto a través de canales de comunicación bidireccional.
+
+\subsection{Objetivos Específicos}
+\begin{enumerate}
+    \item \textbf{Ingeniería de Flujos:} Desarrollar un sistema modular con más de 25 \textit{workflows} en n8n, segmentados en capas de Inteligencia, Infraestructura (Core), Comunicación, Monitoreo y Reportería (PMO).
+    \item \textbf{Integración y Desacoplamiento:} Conectar las APIs REST de GitHub, Trello, Discord y Gemini, implementando \textit{Dead Letter Queues} (DLQ) e idempotencia para garantizar tolerancia a fallos.
+    \item \textbf{Modelo de Datos Relacional y Vectorial:} Implementar una capa de persistencia en PostgreSQL con soporte para \texttt{pgvector}, estructurando eventos canónicos, auditorías de ejecución y almacenamiento auditable de decisiones de IA.
+    \item \textbf{Agentes Cognitivos:} Configurar y programar agentes IA especializados, dotándolos de un \textit{System Prompt} contextualizado para inspecciones de código, gestión de prioridades y control de \textit{releases}.
+    \item \textbf{Reporte Ejecutivo y Análisis de Deuda Técnica:} Automatizar la compilación de \textit{commits}, métricas de progreso y hallazgos en un informe PDF renderizado semanalmente mediante \textit{Gotenberg}.
+    \item \textbf{Gobernanza y Seguridad:} Establecer protocolos de autorización (Dashboard protegido mediante tokens) y segregar el entorno mediante despliegues contenerizados en Docker con variables de entorno encriptadas.
+\end{enumerate}
+
+\section{ALCANCE Y LÍMITES DEL PROYECTO}
+
+El sistema cubre íntegramente la capa de recolección de eventos desde Trello y GitHub, procesamiento de dichos datos, análisis de IA, persistencia y exposición de resultados. 
+
+\textbf{El alcance implementado incluye:}
+\begin{itemize}
+    \item Una interfaz conversacional en Discord que soporta comandos predefinidos (ej. \texttt{!kpis}, \texttt{!reporte}) y consultas complejas en lenguaje natural.
+    \item Orquestación de seis sub-agentes expertos: \textit{PM Orchestrator, Code Review Scout, Context Guardian, Risk Analyst, Release Guard y Sync Bidireccional}.
+    \item Pipeline de generación de documentos ejecutivos de alta fidelidad.
+    \item Dashboard interactivo y seguro para el flujo \textit{Human-in-the-Loop}.
+    \item Monitoreo continuo que evalúa el estado del sistema n8n e informa de excepciones en el pipeline.
+\end{itemize}
+
+\textbf{Límites (fuera del alcance):}
+\begin{itemize}
+    \item Integración con herramientas de gestión de calendario empresarial externas a PetSafe (G-Suite, Office 365).
+    \item Despliegue de un \textit{bot client} nativo en \texttt{Discord.js} con \textit{Slash Commands} (el sistema utiliza una capa puente \textit{bot-bridge} y \textit{webhooks}).
+    \item Certificaciones de cumplimiento normativo (ISO 27001 o SOC 2) formalizadas sobre la infraestructura de este bot, aplicándose únicamente las mejores prácticas de endurecimiento disponibles.
+\end{itemize}
+
+\section{MARCO CONCEPTUAL Y DEFINICIONES TÉCNICAS}
+
+Para una correcta interpretación de la arquitectura, se establecen las siguientes definiciones tecnológicas y metodológicas:
+
+\begin{longtable}{P{4.5cm} P{10.5cm}}
+\toprule
+\textbf{Término} & \textbf{Definición} \\
+\midrule
+\endfirsthead
+\midrule
+\textbf{Término} & \textbf{Definición} \\
+\midrule
+\endhead
+\textbf{n8n} & Plataforma de automatización de flujos de trabajo basada en el paradigma de programación visual por nodos y \textit{fair-code}. \\
+\addlinespace
+\textbf{Inteligencia Artificial Generativa} & Rama de la IA enfocada en la creación de texto o código (ej. Google Gemini 2.5 Pro) basado en la interpretación de grandes corpus de datos (LLMs). \\
+\addlinespace
+\textbf{Event-driven Architecture (EDA)} & Patrón de arquitectura de software que promueve la producción, detección, consumo y reacción a eventos (cambios de estado). \\
+\addlinespace
+\textbf{Dead Letter Queue (DLQ)} & Patrón de diseño de mensajería utilizado para almacenar mensajes que el sistema no pudo procesar correctamente, previniendo la pérdida de datos y permitiendo reintentos. \\
+\addlinespace
+\textbf{Human-in-the-Loop (HITL)} & Modelo de inteligencia artificial que requiere interacción humana en puntos de decisión críticos para supervisar, ajustar o aprobar acciones de alto impacto. \\
+\addlinespace
+\textbf{Gotenberg} & API \textit{Docker-powered} que proporciona una capa de abstracción para la conversión de documentos HTML/Markdown a PDF mediante motores \textit{headless} (Chromium). \\
+\addlinespace
+\textbf{pgvector} & Extensión nativa de PostgreSQL que soporta la búsqueda y almacenamiento eficiente de vectores (embeddings), crucial para futuras capacidades de similitud semántica. \\
+\addlinespace
+\textbf{Correlation ID} & Metadato asignado a cada evento al momento de su ingesta que viaja a través de todos los microservicios y flujos, permitiendo una trazabilidad transversal en auditorías. \\
+\bottomrule
+\end{longtable}
+
+\section{ESTRUCTURA DE RESPONSABILIDADES}
+
+La construcción y operación de la arquitectura ha requerido roles específicos dentro del equipo PetSafe para el éxito del proyecto:
+
+\begin{center}
+\footnotesize
+\renewcommand{\arraystretch}{1.5}
+\begin{tabularx}{\textwidth}{P{3.5cm} Y Y}
+\toprule
+\textbf{Rol / Responsable} & \textbf{Responsabilidad en Ingeniería} & \textbf{Interacción con la Arquitectura Bot} \\
+\midrule
+\textbf{Gestor del Proyecto} \newline (Bonilla Joel) &
+Definición de métricas (KPIs), revisión de flujos lógicos, coordinación y control de calidad. &
+Administrador principal del \textit{Approval Hub}. Evalúa las recomendaciones del \textit{Risk Analyst} y audita los reportes PDF. \\
+\hline
+\textbf{Desarrollador Full Stack} \newline (Barragán David) &
+Desarrollo backend/frontend del sistema principal y diseño arquitectónico global de n8n. &
+Diseño del esquema de base de datos, creación de agentes IA (Prompt Engineering), despliegue Docker y configuración de webhooks. \\
+\hline
+\textbf{Desarrollador Frontend} \newline (García Josué) &
+Consumo de APIs y estructuración de interfaces gráficas. &
+Sus *Pull Requests* y *Commits* son analizados sintácticamente por el \textit{Code Review Scout}. \\
+\hline
+\textbf{Desarrollador Backend} \newline (Manjarres David) &
+Construcción de servicios, ORMs y esquemas de persistencia central de la app PetSafe. &
+Sus métricas de CI/CD, coberturas y fusiones de código son orquestadas y reflejadas en los *snapshots* del monitor del bot. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{DESARROLLO, ARQUITECTURA E IMPLEMENTACIÓN}
+
+\subsection{Diseño de la Arquitectura Lógica}
+
+La complejidad del proyecto exigió trascender el concepto de "automatización secuencial" y adoptar un paradigma \textbf{Micro-Modular Orientado a Eventos}. El sistema fue dividido en cinco pilares lógicos interconectados:
+
+\begin{enumerate}
+    \item \textbf{Capa de Comunicación (Edge Layer):} Encargada de recibir y enviar *payloads*. Está conformada por el puente Node.js (\texttt{bot-bridge}), webhooks dedicados para Discord, y *Triggers* nativos para GitHub y Trello. Funciona como punto de entrada y salida asíncrono.
+    \item \textbf{Capa Core (Router \& Logger):} El "corazón" del flujo. Todo evento entrante se normaliza y se deposita en una tabla relacional \texttt{events\_inbox} garantizando la idempotencia frente a la red (evitando duplicidades de webhooks). Un enrutador maestro (\texttt{PM Orchestrator}) extrae de esta cola y clasifica la intención.
+    \item \textbf{Capa de Inteligencia Artificial (Cognitive Agents):} Contiene los \textit{workflows} armados con la tecnología LangChain y Gemini 2.5 Pro. Cada sub-agente tiene un rol restringido y un *prompt* contextual que evita "alucinaciones" (ej., el agente de código solo revisa diffs, no responde sobre presupuestos).
+    \item \textbf{Capa de Reportería (PMO \& Reporting):} Consolida grandes volúmenes de datos transaccionales de PostgreSQL, Trello y GitHub. Genera un modelo en JSON que luego es transformado mediante una plantilla HTML e inyectado a Gotenberg para emitir el Documento Ejecutivo PDF final.
+    \item \textbf{Capa de Fiabilidad (Monitoring \& DLQ):} Un conjunto de flujos que vigila pasivamente el estado operativo. Detecta excepciones \textit{runtime} de n8n, ejecuta la recolección de mensajes fallidos (Dead Letter) y reporta anomalías de la propia infraestructura a los administradores.
+\end{enumerate}
+
+\subsection{Modelo de Persistencia y Base de Datos Operacional}
+
+Se desplegó un motor \textbf{PostgreSQL 17} con la extensión \texttt{pgvector}. El esquema de datos fue cuidadosamente estructurado en \texttt{init.sql} para satisfacer auditorías y trazabilidad:
+
+\begin{longtable}{P{4cm} P{11cm}}
+\toprule
+\textbf{Relación / Tabla} & \textbf{Descripción Técnica y Funcionalidad} \\
+\midrule
+\endfirsthead
+\midrule
+\textbf{Relación / Tabla} & \textbf{Descripción Técnica y Funcionalidad} \\
+\midrule
+\endhead
+\texttt{events\_inbox} & Actúa como búfer de ingesta. Guarda el *payload* crudo de GitHub/Trello junto con un \texttt{event\_id} único, permitiendo procesamientos asíncronos y garantizando idempotencia. \\
+\addlinespace
+\texttt{events\_outbox} & Patrón \textit{Outbox} transaccional. Las acciones que los agentes desean ejecutar en sistemas externos (ej. enviar mensaje a Discord) se encolan aquí para gestionar políticas de reintento. \\
+\addlinespace
+\texttt{ai\_decisions} & Bitácora crítica que audita los veredictos de la IA generativa. Registra el contexto evaluado (\texttt{input\_summary}), la decisión recomendada, el nivel de confianza (\texttt{confidence}), la severidad del riesgo y un flag \texttt{requires\_human\_approval}. \\
+\addlinespace
+\texttt{workflow\_runs\_audit} & Telemetría del motor n8n. Almacena marcas de tiempo, duraciones y trazas (\textit{correlation id}) para el cálculo de eficiencia y detección de cuellos de botella del propio bot. \\
+\addlinespace
+\texttt{analisis\_proyecto} & Tabla de series de tiempo. Ingesta las "fotografías" (snapshots) periódicas de avance (KPIs, número de PRs, tareas vencidas) para alimentar gráficos y reportes estadísticos semanales. \\
+\bottomrule
+\end{longtable}
+
+\subsection{Integración de Inteligencia Artificial (Gemini \& LangChain)}
+
+El núcleo cognitivo reside en \textbf{Google Gemini 2.5 Pro}. La integración se logró evitando interacciones de una sola vía y estableciendo un mecanismo de "Agentes con Herramientas" (\textit{Tools/Functions}) mediante nodos nativos de LangChain en n8n. 
+
+\textbf{Prompt Engineering Avanzado:} Se estructuraron *system prompts* robustos. Por ejemplo, el agente \texttt{Code Review Scout} recibe no solo el diff del commit, sino reglas de convención específicas del proyecto PetSafe (ej. "Priorizar validación de tokens JWT en backend, exigir tests para controladores").
+Además, en la generación del Reporte Semanal, se emplea Gemini en modo de "Salida JSON Estructurada", obligando al LLM a devolver un esquema rígido que luego es inyectado sin rupturas a las plantillas HTML para su renderizado, solucionando problemas de inestabilidad de formatos.
+
+\subsection{Implementación de la Gobernanza: Human-in-the-Loop}
+
+Dado que un agente IA podría tomar decisiones erróneas basadas en datos parciales (ej. cancelar un despliegue crítico erróneamente), se desarrolló un \textbf{Dashboard de Aprobaciones PMO}.
+\begin{enumerate}
+    \item La IA evalúa una condición de alto riesgo y graba el resultado en \texttt{ai\_decisions} con el estado \texttt{pending\_approval}.
+    \item El bot notifica en Discord a los desarrolladores Senior: "Alerta: Despliegue bloqueado por alto riesgo de regresión. Pendiente de aprobación manual".
+    \item El administrador accede al \textit{Approval Hub} (una interfaz HTML servida dinámicamente mediante el nodo webhooks de n8n y autenticada vía \texttt{PM\_APPROVAL\_SECRET}).
+    \item Tras analizar la sugerencia, el humano pulsa "Aprobar" o "Rechazar", evento que reanuda el pipeline bloqueado de n8n.
+\end{enumerate}
+
+\subsection{Ciberseguridad y Manejo de Entornos}
+
+El despliegue priorizó la segregación y el encapsulamiento:
+\begin{itemize}
+    \item \textbf{Desacoplamiento de Secretos:} Ninguna clave API, contraseña o webhook se codificó en los nodos de n8n. Se implementó un flujo \texttt{System - Config Resolver} que inyecta los valores desde el entorno de Docker (\texttt{.env}).
+    \item \textbf{Redes Aisladas:} Mediante \texttt{docker-compose.yml}, los contenedores de PostgreSQL, Redis y Gotenberg se ubicaron en una red interna que carece de puertos expuestos al host público, mitigando el riesgo de ataques externos a la base de datos.
+    \item \textbf{Cifrado en Reposo:} Se estableció la variable \texttt{N8N\_ENCRYPTION\_KEY} para asegurar que todos los tokens Oauth o credenciales persistidas dentro de la base SQLite/Postgres de n8n estén cifradas criptográficamente.
+    \item \textbf{Prevención de Inyecciones:} Se refactorizaron los nodos SQL para asegurar que toda interpolación utilice paso por parámetros de la base de datos subyacente (\texttt{queryReplacement}), anulando posibles ataques de inyección SQL originados en *payloads* maliciosos de GitHub.
+\end{itemize}
+
+\section{ESTRATEGIA DE VALIDACIÓN Y PRUEBAS}
+
+Para garantizar un entorno productivo tolerante a fallos, se ejecutó una agresiva estrategia de validación integral (E2E), documentada en la Matriz de Pruebas. Se priorizó validar tanto los "caminos felices" como la robustez ante desastres:
+
+\begin{longtable}{P{1.5cm} P{4cm} P{4.5cm} P{4cm}}
+\toprule
+\textbf{ID} & \textbf{Componente / Acción} & \textbf{Descripción Técnica de la Prueba} & \textbf{Resultado Esperado y Evaluado} \\
+\midrule
+\endfirsthead
+\midrule
+\textbf{ID} & \textbf{Componente / Acción} & \textbf{Descripción Técnica de la Prueba} & \textbf{Resultado Esperado y Evaluado} \\
+\midrule
+\endhead
+\textbf{CP-01} & Ingestión de Webhooks & Inyección de un *push event* simulado a la ruta REST. & El \textit{payload} se graba en \texttt{events\_inbox} con estado 200 OK. \textbf{(\checkmark)} \\
+\addlinespace
+\textbf{CP-02} & Orquestación de Agentes & Generación de un falso *Pull Request*. & El enrutador invoca al \textit{Scout}, emite la decisión técnica y la despacha al Outbox. \textbf{(\checkmark)} \\
+\addlinespace
+\textbf{CP-03} & Pipeline de Reportería & Ejecución del trigger \texttt{!reporte 15} desde Discord. & Consolidación de datos, renderizado con Gotenberg y entrega de PDF en menos de 15 segundos. \textbf{(\checkmark)} \\
+\addlinespace
+\textbf{CP-04} & Dead Letter Queue (DLQ) & Modificación temporal maliciosa del Webhook de Discord. & Tras 5 fallos iterativos, el outbox etiqueta la tupla como \texttt{dead} y dispara un correo de alerta de fiabilidad. \textbf{(\checkmark)} \\
+\addlinespace
+\textbf{CP-05} & Idempotencia de Datos & Envío paralelo del mismo \texttt{event\_id} de Trello 3 veces. & La restricción \texttt{UNIQUE} de PostgreSQL permite un solo registro; el motor ignora los duplicados limpiamente. \textbf{(\checkmark)} \\
+\addlinespace
+\textbf{CP-06} & Human-in-the-Loop & Interceptar un despliegue inyectando un riesgo falso. & El pipeline pausa, espera el POST desde el \textit{Approval Hub} e inyecta la marca de auditoría del usuario. \textbf{(\checkmark)} \\
+\bottomrule
+\end{longtable}
+
+\section{GUÍA OPERATIVA Y MANTENIMIENTO}
+
+\subsection{Consumo de Interfaces para Usuarios Finales}
+
+El punto de contacto humano principal es el servidor de Discord. El sistema soporta consultas naturalizadas (\textit{"¿Gemini, qué tan atrasados estamos hoy?"}) que disparan el motor LLM, y comandos estrictos para tareas deterministas:
+
+\begin{itemize}
+    \item \texttt{!estado} / \texttt{!progreso} / \texttt{!kpis}: Solicitud instantánea de series de tiempo y completitud.
+    \item \texttt{!ci} / \texttt{!commits}: Recuperación inmediata de los artefactos de la API de GitHub.
+    \item \texttt{!fase sync} / \texttt{!fase listar}: Conciliación forzada de columnas desde la API de Trello al motor Postgres local.
+    \item \texttt{!raid}: Recuperación de la matriz de Riesgos, Suposiciones, Incidencias y Dependencias.
+    \item \texttt{!reunion [tema]}: Invocación de un sub-agente de coordinación para emparejar calendarios del equipo y emitir convocatorias sin dependencia de Google Calendar.
+\end{itemize}
+
+\subsection{Evolutividad y Mantenimiento de Flujos}
+
+El enfoque modular permite escalar el sistema sin impacto transversal:
+\begin{enumerate}
+    \item \textbf{Adición de Agentes:} Requiere crear un nuevo workflow independiente, conectarlo como sub-nodo (\textit{Execute Workflow Node}) en el \texttt{PM Orchestrator} y definir su condicional en el enrutador JSON.
+    \item \textbf{Mantenimiento de Prompts:} Modificar la lógica cognitiva no requiere programación (despliegues de código base), bastando con ajustar los nodos de Prompt en el lienzo de n8n, lo cual aplica de forma instantánea.
+    \item \textbf{Monitoreo de Salud:} El administrador de infraestructura debe inspeccionar esporádicamente la tabla \texttt{workflow\_runs\_audit} o teclear \texttt{!logs} en Discord para evaluar latencias, \textit{timeouts} y salud del caché en Redis.
+\end{enumerate}
+
+\section{CONCLUSIONES FINALES}
+
+\begin{itemize}
+    \item \textbf{Eficiencia Administrativa Cuantificable:} La automatización integral erradicó la consolidación manual de información, reduciendo a cero el tiempo empleado semanalmente por el gestor de proyecto en recolectar métricas y redactar informes de estado (los cuales ahora genera la IA en formato PDF al instante).
+    \item \textbf{Robustez del Modelo Orientado a Eventos:} La adopción de las colas \texttt{inbox/outbox} y la \textit{Dead Letter Queue} ha garantizado que ninguna transacción, por pequeña que sea, se pierda por intermitencias de las APIs de Discord, Trello o GitHub, logrando alta disponibilidad.
+    \item \textbf{Confianza Asistida por HITL:} Incorporar Inteligencia Artificial de frontera (Gemini 2.5 Pro) conlleva riesgos por "alucinación". La implementación del marco \textit{Human-in-the-Loop} eliminó el peligro sistémico, delegando el rol de la IA a consejero o auditor pasivo, y dejando el poder coercitivo en el usuario humano autenticado.
+    \item \textbf{Madurez de Infraestructura Continua:} La contenedorización mediante Docker, sumada a la estricta parametrización SQL, encriptación de n8n y variables \texttt{.env}, dota al Bot de estándares comparables a un entorno Enterprise listo para la Nube, demostrando habilidades avanzadas de arquitectura de software.
+\end{itemize}
+
+\section{LÍNEAS FUTURAS Y RECOMENDACIONES TÉCNICAS}
+
+Con base en la estabilidad actual, se proponen las siguientes rutas de evolución:
+\begin{enumerate}
+    \item \textbf{Cálculo de Métricas DORA Nativas:} Ampliar los analizadores de GitHub para procesar analíticamente el \textit{Lead Time for Changes}, \textit{Deployment Frequency}, \textit{MTTR} y \textit{Change Failure Rate}, incrustando dichas métricas de nivel devops en el Reporte Semanal.
+    \item \textbf{RAG Semántico con pgvector:} Aprovechar la extensión \texttt{pgvector} ya instalada para crear embeddings de la documentación técnica antigua (ADRs, requisitos), permitiendo al bot responder con \textit{Retrieval-Augmented Generation} (RAG) citando la documentación original del proyecto PetSafe.
+    \item \textbf{Vault Corporativo:} Migrar la resolución de secretos (\texttt{.env}) hacia un inyector como HashiCorp Vault, robusteciendo aún más la seguridad criptográfica del sistema.
+    \item \textbf{Migración Parcial a SDK Discord.js:} Para mejorar la interactividad (UX), evolucionar el simple web-hook de respuesta por un servicio persistente \textit{WebSockets} utilizando \textit{Slash Commands} nativos y menús selectores enriquecidos en la interfaz de Discord.
+\end{enumerate}
+
+\section{REFERENCIAS TECNOLÓGICAS}
+
+\begin{thebibliography}{10}
+
+\bibitem{n8n_docs}
+n8n Community, \textit{n8n Documentation: Node based Workflow Automation}, 2026. [Online]. Available: \url{https://docs.n8n.io/}
+
+\bibitem{google_gemini}
+Google DeepMind, \textit{Gemini API \& Prompt Engineering Guide}, 2026. [Online]. Available: \url{https://ai.google.dev/docs}
+
+\bibitem{github_api}
+GitHub Inc., \textit{GitHub REST API Reference: Commits, Pulls \& Actions}, 2026. [Online]. Available: \url{https://docs.github.com/en/rest}
+
+\bibitem{trello_dev}
+Atlassian, \textit{Trello REST API Developer Guide}, 2026. [Online]. Available: \url{https://developer.atlassian.com/cloud/trello/rest/}
+
+\bibitem{docker_compose}
+Docker Inc., \textit{Compose Specification \& Container Orchestration}, 2026. [Online]. Available: \url{https://docs.docker.com/compose/}
+
+\bibitem{gotenberg}
+Gotenberg The Coding Machine, \textit{A Docker-powered stateless API for PDF files}, 2026. [Online]. Available: \url{https://gotenberg.dev/}
+
+\bibitem{pgvector}
+pgvector, \textit{Open-source vector similarity search for Postgres}, 2026. [Online]. Available: \url{https://github.com/pgvector/pgvector}
+
+\end{thebibliography}
+
+\section{FIRMAS DE RESPONSABILIDAD PROFESIONAL}
+
+\begin{center}
+\footnotesize
+\renewcommand{\arraystretch}{2.5}
+\begin{tabularx}{\textwidth}{P{4.1cm} Y P{3.1cm}}
+\toprule
+\textbf{Ingeniero / Responsable} & \textbf{Responsabilidad Arquitectónica} & \textbf{Firma y Aprobación} \\
+\midrule
+Bonilla Guerrero Fernando Joel & Dirección del proyecto, definición metodológica y aseguramiento de calidad del reporte &
+\includegraphics[width=2.8cm,height=1.25cm,keepaspectratio]{picture/firmas/joel_bonilla.png} \\
+\hline
+Barragán Pozo David Josué & Diseño arquitectónico, despliegue E2E, Prompt Engineering y validación de infraestructura &
+\includegraphics[width=2.8cm,height=1.25cm,keepaspectratio]{picture/firmas/david_barragan.png} \\
+\hline
+García Abata Josué Joel & Diseño de flujos UI/UX y revisión en entornos de pre-producción &
+\includegraphics[width=2.8cm,height=1.25cm,keepaspectratio]{picture/firmas/josue_garcia.png} \\
+\hline
+Manjarres Quinteros David Oswaldo & Revisión de persistencia y cumplimiento de directrices backend &
+\includegraphics[width=2.8cm,height=1.25cm,keepaspectratio]{picture/firmas/david_manjarres.png} \\
+\bottomrule
+\end{tabularx}
+\captionof{table}{Autorizaciones de emisión del presente reporte.}
+\vspace{0.1cm}
+\end{center}
+
+\section{CONTROL Y TRAZABILIDAD DE CAMBIOS}
+
+\begin{center}
+\footnotesize
+\renewcommand{\arraystretch}{1.6}
+\begin{tabularx}{\textwidth}{P{1.8cm} Y P{3.2cm} P{2.5cm}}
+\toprule
+\textbf{Revisión} & \textbf{Motivo y Descripción de la Modificación} & \textbf{Responsable} & \textbf{Fecha} \\
+\midrule
+1.0 & Emisión de la versión inicial extendida y detallada del Informe de Ingeniería de Software. Cubre exhaustivamente la arquitectura Event-Driven, integración con Gemini, protocolos de seguridad y validaciones operativas del Bot PM AI. & Equipo Ingeniería PetSafe & 19/05/2026 \\
+\bottomrule
+\end{tabularx}
+\captionof{table}{Registro histórico de versiones documentales.}
+\end{center}
+
+\end{document}

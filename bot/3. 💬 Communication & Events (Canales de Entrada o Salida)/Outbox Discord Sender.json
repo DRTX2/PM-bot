@@ -1,0 +1,284 @@
+{
+  "name": "Outbox Discord Sender",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "schedule-outbox",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT outbox_id, event_id, target, action, payload, retry_count\nFROM events_outbox\nWHERE status = 'pending'\n  AND target = 'discord'\n  AND scheduled_at <= NOW()\nORDER BY scheduled_at ASC\nLIMIT 20\nFOR UPDATE SKIP LOCKED;",
+        "options": {}
+      },
+      "id": "fetch-pending-outbox",
+      "name": "Fetch Pending Outbox",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        200,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "has-items",
+              "leftValue": "={{ $json.outbox_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-has-items",
+      "name": "IF Has Items",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json;\nlet payload = row.payload || {};\nif (typeof payload === 'string') {\n  try { payload = JSON.parse(payload); } catch(e) { payload = { content: payload }; }\n}\n\nconst content = payload.content || payload.text || payload.message || `[PetSafe Event] outbox_id=${row.outbox_id}`;\n\n// Mark as processing first\nreturn [{ json: {\n  outbox_id: row.outbox_id,\n  event_id: row.event_id,\n  content: String(content).slice(0, 2000),\n  retry_count: row.retry_count || 0\n}}];"
+      },
+      "id": "build-discord-payload",
+      "name": "Build Discord Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.payload?.channel_id ? 'https://discord.com/api/v10/channels/' + $json.payload.channel_id + '/messages' : $env.DISCORD_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.payload?.channel_id ? { content: String($json.payload.content || $json.payload.text || '').slice(0, 2000), embeds: $json.payload.embeds, components: $json.payload.components } : ($json.payload || { content: $json.content || 'outbox event' }) }}",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $json.payload?.channel_id ? 'Bot ' + $env.DISCORD_BOT_TOKEN : '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "id": "send-discord-webhook",
+      "name": "Send Discord Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        -100
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "check-error",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-discord-error",
+      "name": "IF Discord Error",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1000,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ \"UPDATE events_outbox SET status = 'sent', sent_at = NOW() WHERE outbox_id = \" + $('Build Discord Payload').item.json.outbox_id + \";\" }}",
+        "options": {}
+      },
+      "id": "mark-sent",
+      "name": "Mark Sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1200,
+        -200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ \"UPDATE events_outbox SET status = CASE WHEN retry_count >= 3 THEN 'failed' ELSE 'pending' END, retry_count = retry_count + 1, last_error = '\" + String($json.error || 'Discord webhook error').replace(/'/g, \"''\") + \"', scheduled_at = NOW() + INTERVAL '5 minutes' WHERE outbox_id = \" + $('Build Discord Payload').item.json.outbox_id + \";\" }}",
+        "options": {}
+      },
+      "id": "mark-retry",
+      "name": "Mark Retry",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1200,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pending Outbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pending Outbox": {
+      "main": [
+        [
+          {
+            "node": "IF Has Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Has Items": {
+      "main": [
+        [
+          {
+            "node": "Build Discord Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Discord Payload": {
+      "main": [
+        [
+          {
+            "node": "Send Discord Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Discord Webhook": {
+      "main": [
+        [
+          {
+            "node": "IF Discord Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Discord Error": {
+      "main": [
+        [
+          {
+            "node": "Mark Retry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "tags": []
+}

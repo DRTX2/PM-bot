@@ -1,0 +1,116 @@
+{
+  "id": "wf-pm-discord-entrada",
+  "name": "WF_PM_Discord_Entrada",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pm-discord-entrada",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "pm-discord-webhook",
+      "name": "PM Discord Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nreturn [{\n  json: {\n    content: body.content || body.message || '',\n    message: body.content || body.message || '',\n    user: body.user || body.username || 'desconocido',\n    user_id: body.user_id || body.userId || '',\n    channel_id: body.channel_id || body.channelId || '',\n    channel_name: body.channel_name || body.channelName || '',\n    message_id: body.message_id || body.messageId || '',\n    is_dm: Boolean(body.is_dm || body.isDm),\n    source: 'discord_fast_pm',\n    received_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "normalize-pm-payload",
+      "name": "Normalize PM Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wf-pm-router-intenciones",
+          "mode": "id",
+          "cachedResultName": "WF_PM_Router_Intenciones"
+        },
+        "options": {}
+      },
+      "id": "execute-pm-router",
+      "name": "Execute PM Router",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"respuesta\": $json.respuesta || $json.response || \"Accion PM procesada.\", \"canal_destino\": $json.canal_destino, \"canal_id\": $json.canal_id, \"storage\": $json.storage } }}",
+        "options": {}
+      },
+      "id": "respond-fast-pm",
+      "name": "Respond Fast PM",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        760,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "PM Discord Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize PM Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize PM Payload": {
+      "main": [
+        [
+          {
+            "node": "Execute PM Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute PM Router": {
+      "main": [
+        [
+          {
+            "node": "Respond Fast PM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "wf-pm-error-handler"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  }
+}

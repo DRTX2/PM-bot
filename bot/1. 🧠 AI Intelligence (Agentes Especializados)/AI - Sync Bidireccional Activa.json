@@ -1,0 +1,429 @@
+{
+  "name": "AI - Sync Bidireccional Activa",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const payload = $json;\nconst action = payload.action;\nconst pr = payload.pull_request || {};\nconst repo = payload.repository || {};\n\nconst merged = pr.merged === true;\nconst branch = (pr.head || {}).ref || '';\nconst actor = (pr.merged_by || pr.user || {}).login || 'unknown';\nconst prNumber = pr.number || null;\nconst prTitle = pr.title || '';\nconst prBody = pr.body || '';\nconst repoName = repo.name || '';\nconst repoFullName = repo.full_name || repoName;\nconst prUrl = pr.html_url || '';\nconst sha = (pr.merge_commit_sha || '').slice(0, 7);\n\n// Fuentes donde puede venir la referencia a Trello\nconst searchableText = [\n  branch,\n  prTitle,\n  prBody,\n  prUrl\n].filter(Boolean).join(' ');\n\n// Soporta:\n// 1. trello-CARDID\n// 2. trello_CARDID\n// 3. trello/CARDID\n// 4. URLs tipo https://trello.com/c/CARDID/slug\nconst trelloPatterns = [\n  /trello[-_\\/]([a-zA-Z0-9]+)/i,\n  /trello\\.com\\/c\\/([a-zA-Z0-9]+)/i\n];\n\nlet trelloCardId = null;\nfor (const pattern of trelloPatterns) {\n  const match = searchableText.match(pattern);\n  if (match && match[1]) {\n    trelloCardId = match[1];\n    break;\n  }\n}\n\nconst correlationId = `sync-pr-${repoName || 'repo'}-${prNumber || 'unknown'}-${Date.now()}`;\n\nif (action !== 'closed' || !merged) {\n  return [{\n    json: {\n      skip: true,\n      reason: `PR action=${action}, merged=${merged}`,\n      action,\n      merged,\n      repo: repoName,\n      repo_full_name: repoFullName,\n      pr_number: prNumber,\n      pr_title: prTitle,\n      branch,\n      actor,\n      pr_url: prUrl,\n      sha,\n      trello_card_id: trelloCardId,\n      correlation_id: correlationId\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    skip: false,\n    action,\n    merged,\n    pr_number: prNumber,\n    pr_title: prTitle,\n    branch,\n    actor,\n    trello_card_id: trelloCardId,\n    repo: repoName,\n    repo_full_name: repoFullName,\n    pr_url: prUrl,\n    sha,\n    correlation_id: correlationId,\n    sync_source: 'github_pull_request',\n    sync_status: trelloCardId ? 'ready_with_trello_card' : 'ready_without_trello_card'\n  }\n}];"
+      },
+      "id": "6106a12f-9307-4a81-823b-3397069f91bb",
+      "name": "Verify Merged & Extract Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6576,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "not-skip",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8329450d-3bd8-4a19-8987-a968df8c8d18",
+      "name": "Should Sync?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -6368,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "has-card",
+              "leftValue": "={{ $json.trello_card_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "342da810-6b1a-48f6-b0b7-54700cefdc69",
+      "name": "Has Trello Card ID?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -6080,
+        1584
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "id": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.trello_card_id }}"
+        },
+        "updateFields": {
+          "closed": true
+        }
+      },
+      "id": "93b29322-8a70-4b51-b31b-4fe60a67a527",
+      "name": "Archive Trello Card",
+      "type": "n8n-nodes-base.trello",
+      "typeVersion": 1,
+      "position": [
+        -5856,
+        1472
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "cardComment",
+        "cardId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Verify Merged & Extract Context').item.json.trello_card_id }}"
+        },
+        "text": "=🔀 PR mergeado en {{ $('Verify Merged & Extract Context').item.json.repo_full_name }}\n\n📌 PR #{{ $('Verify Merged & Extract Context').item.json.pr_number }}: {{ $('Verify Merged & Extract Context').item.json.pr_title }}\n🌿 Branch: {{ $('Verify Merged & Extract Context').item.json.branch }}\n👤 Autor/Mergeado por: {{ $('Verify Merged & Extract Context').item.json.actor }}\n🔗 Commit: {{ $('Verify Merged & Extract Context').item.json.sha }}\n🌐 PR: {{ $('Verify Merged & Extract Context').item.json.pr_url }}\n🧾 Correlation ID: {{ $('Verify Merged & Extract Context').item.json.correlation_id }}\n\n✅ Tarjeta archivada automáticamente por sync bidireccional."
+      },
+      "id": "fc361b4e-c596-4ea7-bf74-9446214710e6",
+      "name": "Comment on Trello Card",
+      "type": "n8n-nodes-base.trello",
+      "typeVersion": 1,
+      "position": [
+        -5632,
+        1472
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Verify Merged & Extract Context').item.json;\n\nreturn [{\n  json: {\n    ...ctx,\n    trello_action: 'archived_and_commented',\n    sync_status: 'trello_done'\n  }\n}];"
+      },
+      "id": "5ca5bb4d-1cf0-426e-a9dc-9d3b1fb255a5",
+      "name": "Mark Trello Done",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5408,
+        1472
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nconst hasTrello = !!ctx.trello_card_id;\nconst trelloDone = ctx.sync_status === 'trello_done';\n\nconst trelloLine = hasTrello\n  ? (trelloDone\n      ? `✅ Tarjeta Trello \\`${ctx.trello_card_id}\\` archivada y comentada.`\n      : `ℹ️ Tarjeta Trello detectada: \\`${ctx.trello_card_id}\\`.`)\n  : `⚠️ No se encontró referencia a Trello en el branch, título, descripción o URL del PR.`;\n\nconst content = [\n  `🔀 **PR Mergeado** en \\`${ctx.repo_full_name || ctx.repo}\\``,\n  `📌 **PR #${ctx.pr_number}:** ${ctx.pr_title}`,\n  `🌿 Branch: \\`${ctx.branch}\\``,\n  `👤 Autor/Mergeado por: **${ctx.actor}**`,\n  ctx.sha ? `🔗 Commit: \\`${ctx.sha}\\`` : null,\n  ctx.pr_url ? `🌐 PR: ${ctx.pr_url}` : null,\n  trelloLine,\n  `🧾 Correlation ID: \\`${ctx.correlation_id}\\``,\n  ``,\n  `🧑‍💻 **Testers:** Por favor verifiquen la build correspondiente.`\n].filter(Boolean).join('\\n');\n\nreturn [{\n  json: {\n    ...ctx,\n    content,\n    discord_ready: true\n  }\n}];"
+      },
+      "id": "663f86da-c3d5-423b-878f-888989955e5f",
+      "name": "Build Discord Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5184,
+        1584
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS events_outbox (\n  outbox_id bigserial PRIMARY KEY,\n  event_id text,\n  target text NOT NULL DEFAULT 'discord',\n  action text NOT NULL DEFAULT 'notify',\n  idempotency_key text,\n  payload jsonb NOT NULL DEFAULT '{}'::jsonb,\n  status text NOT NULL DEFAULT 'pending',\n  retry_count integer NOT NULL DEFAULT 0,\n  scheduled_at timestamptz NOT NULL DEFAULT NOW(),\n  sent_at timestamptz,\n  last_error text,\n  created_at timestamptz NOT NULL DEFAULT NOW()\n);\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS idempotency_key text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT NOW();\nCREATE UNIQUE INDEX IF NOT EXISTS events_outbox_idempotency_key_uq ON events_outbox (idempotency_key);\nINSERT INTO events_outbox (event_id, target, action, idempotency_key, payload)\nVALUES ($1, 'discord', 'notify', $2, $3::jsonb)\nON CONFLICT (idempotency_key) DO NOTHING\nRETURNING outbox_id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.correlation_id, 'sync:' + $json.correlation_id, JSON.stringify({ content: $json.content }) ] }}"
+        }
+      },
+      "id": "0a46635a-b30b-4e60-a851-1324e99f3aac",
+      "name": "Queue Discord Outbox",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -4960,
+        1584
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Build Discord Notification').item.json || {};\n\nreturn [{\n  json: {\n    correlation_id: ctx.correlation_id,\n    agent_role: 'Sync Bidireccional',\n    decision_type: 'github_trello_sync',\n    input_summary: `PR #${ctx.pr_number || '-'} merged in ${ctx.repo_full_name || ctx.repo || 'unknown repo'}`,\n    context_used: {\n      sync_source: ctx.sync_source || 'github_pull_request',\n      repo: ctx.repo,\n      repo_full_name: ctx.repo_full_name,\n      pr_number: ctx.pr_number,\n      pr_title: ctx.pr_title,\n      branch: ctx.branch,\n      actor: ctx.actor,\n      sha: ctx.sha,\n      pr_url: ctx.pr_url,\n      trello_card_id: ctx.trello_card_id || null\n    },\n    evidence: {\n      trello_action: ctx.trello_action || 'not_available',\n      discord_queued: true\n    },\n    decision: {\n      sync_status: ctx.sync_status || 'discord_queued',\n      trello_action: ctx.trello_action || 'not_available',\n      discord_notified: true\n    },\n    recommendation: ctx.trello_card_id\n      ? 'Validar build y QA posterior al merge; Trello fue actualizado automáticamente.'\n      : 'Validar build y crear vínculo Trello si este PR pertenece a una tarea del tablero.',\n    confidence: 0.9,\n    risk_level: ctx.trello_card_id ? 'low' : 'medium',\n    requires_human_approval: false\n  }\n}];"
+      },
+      "id": "f802b483-564f-4b9e-9d85-a833b0a363cd",
+      "name": "Prepare Log Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4736,
+        1584
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wcNFn0XHidnGmrHg",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/wcNFn0XHidnGmrHg",
+          "cachedResultName": "System - AI Decision Logger"
+        },
+        "mode": "json",
+        "options": {}
+      },
+      "id": "3e891889-19c3-4850-adb8-8188703a5b99",
+      "name": "Log Sync Action",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        -4512,
+        1584
+      ]
+    },
+    {
+      "parameters": {
+        "owner": {
+          "__rl": true,
+          "value": "={{ $env.GITHUB_OWNER_BACKEND }}",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "={{ $env.GITHUB_REPO_BACKEND }}",
+          "mode": "name"
+        },
+        "events": [
+          "pull_request"
+        ],
+        "options": {}
+      },
+      "id": "e9ce1e60-44b2-47a9-9c88-46aab27b5c7f",
+      "name": "GitHub PR(Back) Trigger",
+      "type": "n8n-nodes-base.githubTrigger",
+      "typeVersion": 1,
+      "position": [
+        -6832,
+        1488
+      ],
+      "webhookId": "sync-bidireccional-github-back",
+      "credentials": {
+        "githubApi": {
+          "id": "Ef6o1UdEiDu28Ibq",
+          "name": "backend-account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "owner": {
+          "__rl": true,
+          "value": "={{ $env.GITHUB_OWNER_FRONTEND || $env.GITHUB_OWNER || $env.GITHUB_OWNER_BACKEND }}",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "={{ $env.GITHUB_REPO_FRONTEND }}",
+          "mode": "name"
+        },
+        "events": [
+          "pull_request"
+        ],
+        "options": {}
+      },
+      "id": "feb000c0-289b-49b3-953f-a02d5ab6703f",
+      "name": "GitHub PR(Front) Trigger1",
+      "type": "n8n-nodes-base.githubTrigger",
+      "typeVersion": 1,
+      "position": [
+        -6832,
+        1728
+      ],
+      "webhookId": "sync-bidireccional-github-front",
+      "credentials": {
+        "githubApi": {
+          "id": "dkFcPmeSEHWQKN9i",
+          "name": "GitHub account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Verify Merged & Extract Context": {
+      "main": [
+        [
+          {
+            "node": "Should Sync?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Sync?": {
+      "main": [
+        [
+          {
+            "node": "Has Trello Card ID?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Trello Card ID?": {
+      "main": [
+        [
+          {
+            "node": "Archive Trello Card",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Discord Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Archive Trello Card": {
+      "main": [
+        [
+          {
+            "node": "Comment on Trello Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comment on Trello Card": {
+      "main": [
+        [
+          {
+            "node": "Mark Trello Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Trello Done": {
+      "main": [
+        [
+          {
+            "node": "Build Discord Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Discord Notification": {
+      "main": [
+        [
+          {
+            "node": "Queue Discord Outbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Log Payload": {
+      "main": [
+        [
+          {
+            "node": "Log Sync Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub PR(Back) Trigger": {
+      "main": [
+        [
+          {
+            "node": "Verify Merged & Extract Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub PR(Front) Trigger1": {
+      "main": [
+        [
+          {
+            "node": "Verify Merged & Extract Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue Discord Outbox": {
+      "main": [
+        [
+          {
+            "node": "Prepare Log Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "de0dfac1-2895-40e3-999a-a141af4222ec",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "rRp6TRqUszFfcOZR",
+  "tags": []
+}

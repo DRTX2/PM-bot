@@ -1,0 +1,341 @@
+{
+  "name": "Dashboard - PM Approval Hub",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "pm-approvals",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-dashboard",
+      "name": "Webhook - Dashboard",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "pm-approval-hub"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS ai_decisions (\n  decision_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  correlation_id TEXT,\n  agent_role TEXT,\n  decision_type TEXT,\n  input_summary TEXT,\n  context_used JSONB,\n  evidence JSONB,\n  decision JSONB,\n  recommendation TEXT,\n  confidence DOUBLE PRECISION,\n  risk_level TEXT,\n  requires_human_approval BOOLEAN,\n  status TEXT,\n  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()\n);\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS correlation_id TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS context_used JSONB;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS evidence JSONB;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS decision JSONB;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS approved_by TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS action_taken TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS pm_impact TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS pm_next_action TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS pm_owner TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS pm_deadline TIMESTAMP WITH TIME ZONE;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS pm_risk_reason TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS approval_note TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS rejected_reason TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS approval_metadata JSONB;\n\nCREATE TABLE IF NOT EXISTS events_inbox (\n  event_id TEXT PRIMARY KEY,\n  source TEXT,\n  event_type TEXT,\n  external_id TEXT,\n  occurred_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),\n  received_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),\n  correlation_id TEXT,\n  actor TEXT,\n  entity_type TEXT,\n  entity_id TEXT,\n  repo TEXT,\n  trello_card_id TEXT,\n  pull_request_number INTEGER,\n  commit_sha TEXT,\n  payload JSONB DEFAULT '{}'::jsonb,\n  normalized JSONB DEFAULT '{}'::jsonb,\n  processing_status TEXT DEFAULT 'pending',\n  retry_count INTEGER DEFAULT 0,\n  last_error TEXT\n);\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS source TEXT;\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS event_type TEXT;\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS received_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS correlation_id TEXT;\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS actor TEXT;\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS repo TEXT;\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS trello_card_id TEXT;\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS pull_request_number INTEGER;\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS commit_sha TEXT;\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS payload JSONB DEFAULT '{}'::jsonb;\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS normalized JSONB DEFAULT '{}'::jsonb;\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS processing_status TEXT DEFAULT 'pending';\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0;\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS last_error TEXT;\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS external_id TEXT;\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS entity_type TEXT;\nALTER TABLE events_inbox ADD COLUMN IF NOT EXISTS entity_id TEXT;\nCREATE INDEX IF NOT EXISTS idx_events_inbox_status ON events_inbox (processing_status, received_at);\nCREATE INDEX IF NOT EXISTS idx_events_inbox_correlation ON events_inbox (correlation_id);\nCREATE INDEX IF NOT EXISTS idx_events_inbox_pr ON events_inbox (repo, pull_request_number);\nCREATE INDEX IF NOT EXISTS idx_events_inbox_source_type ON events_inbox (source, event_type, occurred_at DESC);\n\nCREATE TABLE IF NOT EXISTS pm_tareas (\n  id bigserial PRIMARY KEY,\n  titulo text NOT NULL,\n  descripcion text,\n  responsable text,\n  prioridad text NOT NULL DEFAULT 'media',\n  estado text NOT NULL DEFAULT 'pendiente',\n  fecha_limite date,\n  entregable text,\n  sprint text,\n  canal_origen text,\n  creado_por text NOT NULL DEFAULT 'approval_hub',\n  fecha_creacion timestamptz NOT NULL DEFAULT NOW(),\n  fecha_actualizacion timestamptz NOT NULL DEFAULT NOW()\n);\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS titulo text;\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS descripcion text;\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS responsable text;\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS prioridad text NOT NULL DEFAULT 'media';\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS estado text NOT NULL DEFAULT 'pendiente';\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS fecha_limite date;\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS canal_origen text;\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS creado_por text NOT NULL DEFAULT 'approval_hub';\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS fecha_creacion timestamptz NOT NULL DEFAULT NOW();\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS fecha_actualizacion timestamptz NOT NULL DEFAULT NOW();\n\nCREATE TABLE IF NOT EXISTS events_outbox (\n  outbox_id BIGSERIAL PRIMARY KEY,\n  event_id TEXT,\n  target TEXT NOT NULL DEFAULT 'discord',\n  action TEXT NOT NULL DEFAULT 'notify',\n  idempotency_key TEXT,\n  payload JSONB NOT NULL DEFAULT '{}'::jsonb,\n  status TEXT NOT NULL DEFAULT 'pending',\n  retry_count INTEGER NOT NULL DEFAULT 0,\n  scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),\n  sent_at TIMESTAMP WITH TIME ZONE,\n  last_error TEXT,\n  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()\n);\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS idempotency_key TEXT;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS event_id TEXT;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS target TEXT NOT NULL DEFAULT 'discord';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS action TEXT NOT NULL DEFAULT 'notify';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS retry_count INTEGER NOT NULL DEFAULT 0;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS sent_at TIMESTAMP WITH TIME ZONE;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS last_error TEXT;\nCREATE INDEX IF NOT EXISTS idx_events_outbox_status ON events_outbox (status, scheduled_at);\nCREATE UNIQUE INDEX IF NOT EXISTS events_outbox_idempotency_key_uq ON events_outbox (idempotency_key);\n\nCREATE TABLE IF NOT EXISTS estado_tareas (\n  id BIGSERIAL PRIMARY KEY,\n  analisis_id BIGINT,\n  fecha TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),\n  card_id TEXT NOT NULL DEFAULT 'unknown',\n  card_nombre TEXT,\n  lista_nombre TEXT,\n  miembro_id TEXT,\n  miembro_nombre TEXT,\n  fecha_vencimiento TIMESTAMP WITH TIME ZONE,\n  completada BOOLEAN NOT NULL DEFAULT FALSE,\n  tiene_adjuntos BOOLEAN NOT NULL DEFAULT FALSE,\n  adjuntos_count INTEGER NOT NULL DEFAULT 0\n);\nALTER TABLE estado_tareas ADD COLUMN IF NOT EXISTS analisis_id BIGINT;\nALTER TABLE estado_tareas ADD COLUMN IF NOT EXISTS fecha TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();\nALTER TABLE estado_tareas ADD COLUMN IF NOT EXISTS card_nombre TEXT;\nALTER TABLE estado_tareas ADD COLUMN IF NOT EXISTS lista_nombre TEXT;\nALTER TABLE estado_tareas ADD COLUMN IF NOT EXISTS miembro_id TEXT;\nALTER TABLE estado_tareas ADD COLUMN IF NOT EXISTS miembro_nombre TEXT;\nALTER TABLE estado_tareas ADD COLUMN IF NOT EXISTS fecha_vencimiento TIMESTAMP WITH TIME ZONE;\nALTER TABLE estado_tareas ADD COLUMN IF NOT EXISTS completada BOOLEAN NOT NULL DEFAULT FALSE;\nALTER TABLE estado_tareas ADD COLUMN IF NOT EXISTS tiene_adjuntos BOOLEAN NOT NULL DEFAULT FALSE;\nALTER TABLE estado_tareas ADD COLUMN IF NOT EXISTS adjuntos_count INTEGER NOT NULL DEFAULT 0;\nCREATE TABLE IF NOT EXISTS project_phases (\n  phase_id BIGSERIAL PRIMARY KEY,\n  list_id TEXT UNIQUE NOT NULL,\n  name TEXT NOT NULL,\n  position INTEGER NOT NULL DEFAULT 0,\n  start_date DATE,\n  end_date DATE,\n  status TEXT NOT NULL DEFAULT 'active',\n  responsible TEXT,\n  description TEXT,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\nALTER TABLE project_phases ADD COLUMN IF NOT EXISTS name TEXT;\nALTER TABLE project_phases ADD COLUMN IF NOT EXISTS position INTEGER NOT NULL DEFAULT 0;\nALTER TABLE project_phases ADD COLUMN IF NOT EXISTS start_date DATE;\nALTER TABLE project_phases ADD COLUMN IF NOT EXISTS end_date DATE;\nALTER TABLE project_phases ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';\nALTER TABLE project_phases ADD COLUMN IF NOT EXISTS responsible TEXT;\nALTER TABLE project_phases ADD COLUMN IF NOT EXISTS description TEXT;\nALTER TABLE project_phases ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();\nALTER TABLE project_phases ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();\nCREATE TABLE IF NOT EXISTS card_attachments (\n  attachment_id TEXT PRIMARY KEY,\n  card_id TEXT NOT NULL,\n  card_name TEXT,\n  list_id TEXT,\n  filename TEXT NOT NULL,\n  url TEXT NOT NULL,\n  mime_type TEXT,\n  file_size_bytes BIGINT,\n  added_by TEXT,\n  added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  summary_extracted TEXT,\n  summary_extracted_at TIMESTAMPTZ,\n  tokens_used INTEGER\n);\nALTER TABLE card_attachments ADD COLUMN IF NOT EXISTS card_id TEXT;\nALTER TABLE card_attachments ADD COLUMN IF NOT EXISTS card_name TEXT;\nALTER TABLE card_attachments ADD COLUMN IF NOT EXISTS list_id TEXT;\nALTER TABLE card_attachments ADD COLUMN IF NOT EXISTS filename TEXT;\nALTER TABLE card_attachments ADD COLUMN IF NOT EXISTS url TEXT;\nALTER TABLE card_attachments ADD COLUMN IF NOT EXISTS mime_type TEXT;\nALTER TABLE card_attachments ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT;\nALTER TABLE card_attachments ADD COLUMN IF NOT EXISTS added_by TEXT;\nALTER TABLE card_attachments ADD COLUMN IF NOT EXISTS added_at TIMESTAMPTZ NOT NULL DEFAULT NOW();\nALTER TABLE card_attachments ADD COLUMN IF NOT EXISTS summary_extracted TEXT;\nALTER TABLE card_attachments ADD COLUMN IF NOT EXISTS summary_extracted_at TIMESTAMPTZ;\nALTER TABLE card_attachments ADD COLUMN IF NOT EXISTS tokens_used INTEGER;\nCREATE TABLE IF NOT EXISTS reportes_generados (\n  id BIGSERIAL PRIMARY KEY,\n  fecha TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),\n  tipo TEXT NOT NULL,\n  rango_dias INTEGER NOT NULL,\n  enviado_discord BOOLEAN NOT NULL DEFAULT FALSE,\n  enviado_email BOOLEAN NOT NULL DEFAULT FALSE,\n  destinatarios TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],\n  resumen TEXT\n);\nALTER TABLE reportes_generados ADD COLUMN IF NOT EXISTS fecha TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();\nALTER TABLE reportes_generados ADD COLUMN IF NOT EXISTS tipo TEXT;\nALTER TABLE reportes_generados ADD COLUMN IF NOT EXISTS rango_dias INTEGER;\nALTER TABLE reportes_generados ADD COLUMN IF NOT EXISTS enviado_discord BOOLEAN NOT NULL DEFAULT FALSE;\nALTER TABLE reportes_generados ADD COLUMN IF NOT EXISTS enviado_email BOOLEAN NOT NULL DEFAULT FALSE;\nALTER TABLE reportes_generados ADD COLUMN IF NOT EXISTS destinatarios TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];\nALTER TABLE reportes_generados ADD COLUMN IF NOT EXISTS resumen TEXT;\nCREATE TABLE IF NOT EXISTS workflow_runs_audit (\n  run_id BIGSERIAL PRIMARY KEY,\n  workflow_id TEXT NOT NULL,\n  workflow_name TEXT,\n  status TEXT,\n  started_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),\n  completed_at TIMESTAMP WITH TIME ZONE,\n  correlation_id TEXT,\n  error_details JSONB,\n  metrics JSONB\n);\n\nALTER TABLE workflow_runs_audit ADD COLUMN IF NOT EXISTS workflow_id TEXT;\nALTER TABLE workflow_runs_audit ADD COLUMN IF NOT EXISTS workflow_name TEXT;\nALTER TABLE workflow_runs_audit ADD COLUMN IF NOT EXISTS status TEXT;\nALTER TABLE workflow_runs_audit ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();\nALTER TABLE workflow_runs_audit ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE;\nALTER TABLE workflow_runs_audit ADD COLUMN IF NOT EXISTS correlation_id TEXT;\nALTER TABLE workflow_runs_audit ADD COLUMN IF NOT EXISTS error_details JSONB;\nALTER TABLE workflow_runs_audit ADD COLUMN IF NOT EXISTS metrics JSONB;\n\nWITH pending AS (\n  SELECT\n    d.*,\n    COALESCE(\n      d.context_used->>'repo_full_name', d.context_used->>'repo',\n      d.evidence->>'repo_full_name', d.evidence->>'repo',\n      d.decision->>'repo_full_name', d.decision->>'repo'\n    ) AS decision_repo,\n    COALESCE(\n      d.context_used->>'pull_request_number', d.context_used->>'pr_number',\n      d.evidence->>'pull_request_number', d.evidence->>'pr_number',\n      d.decision->>'pull_request_number', d.decision->>'pr_number'\n    ) AS decision_pr_number\n  FROM ai_decisions d\n  WHERE d.status = 'pending_approval'\n), resolved_by_github AS (\n  SELECT p.decision_id, gh.event_type, gh.occurred_at\n  FROM pending p\n  JOIN LATERAL (\n    SELECT e.event_type, e.occurred_at, e.received_at\n    FROM events_inbox e\n    WHERE e.source = 'github'\n      AND (\n        e.correlation_id = p.correlation_id\n        OR (\n          p.decision_repo IS NOT NULL\n          AND p.decision_pr_number ~ '^[0-9]+$'\n          AND e.repo = p.decision_repo\n          AND e.pull_request_number = p.decision_pr_number::integer\n        )\n      )\n      AND (\n        e.event_type IN ('github_pr_merged', 'github_pr_closed')\n        OR (\n          e.event_type ILIKE '%review%'\n          AND lower(COALESCE(e.normalized->>'review_state', e.payload#>>'{body,review,state}', '')) = 'approved'\n        )\n      )\n    ORDER BY e.occurred_at DESC NULLS LAST, e.received_at DESC NULLS LAST\n    LIMIT 1\n  ) gh ON TRUE\n)\nUPDATE ai_decisions d\nSET\n  status = CASE WHEN r.event_type = 'github_pr_closed' THEN 'externally_closed' ELSE 'externally_approved' END,\n  approved_by = COALESCE(d.approved_by, 'github'),\n  approved_at = COALESCE(d.approved_at, r.occurred_at, NOW()),\n  action_taken = COALESCE(d.action_taken, 'github:' || r.event_type)\nFROM resolved_by_github r\nWHERE d.decision_id = r.decision_id;\n\nWITH stats AS (\n  SELECT json_build_object(\n    'approvals_pending', (SELECT COUNT(*) FROM ai_decisions WHERE status = 'pending_approval'),\n    'approvals_high', (SELECT COUNT(*) FROM ai_decisions WHERE status = 'pending_approval' AND risk_level IN ('high', 'critical')),\n    'approvals_stale', (SELECT COUNT(*) FROM ai_decisions WHERE status = 'pending_approval' AND created_at < NOW() - INTERVAL '24 hours'),\n    'approvals_critical', (SELECT COUNT(*) FROM ai_decisions WHERE status = 'pending_approval' AND risk_level = 'critical'),\n    'pm_tasks_from_approvals', (SELECT COUNT(*) FROM pm_tareas WHERE creado_por = 'approval_hub'),\n    'outbox_pending', (SELECT COUNT(*) FROM events_outbox WHERE status IN ('pending', 'sending')),\n    'outbox_dead', (SELECT COUNT(*) FROM events_outbox WHERE status = 'dead'),\n    'inbox_backlog', (SELECT COUNT(*) FROM events_inbox WHERE processing_status IN ('ingested', 'pending', 'processing')),\n    'events_24h', (SELECT COUNT(*) FROM events_inbox WHERE received_at > NOW() - INTERVAL '24 hours'),\n    'github_events_24h', (SELECT COUNT(*) FROM events_inbox WHERE source = 'github' AND received_at > NOW() - INTERVAL '24 hours'),\n    'trello_events_24h', (SELECT COUNT(*) FROM events_inbox WHERE source = 'trello' AND received_at > NOW() - INTERVAL '24 hours'),\n    'tasks_open', (SELECT COUNT(*) FROM estado_tareas WHERE completada = false),\n    'tasks_overdue', (SELECT COUNT(*) FROM estado_tareas WHERE completada = false AND fecha_vencimiento < NOW()),\n    'tasks_due_48h', (SELECT COUNT(*) FROM estado_tareas WHERE completada = false AND fecha_vencimiento BETWEEN NOW() AND NOW() + INTERVAL '48 hours'),\n    'phases_active', (SELECT COUNT(*) FROM project_phases WHERE status = 'active'),\n    'docs_pending_summary', (SELECT COUNT(*) FROM card_attachments WHERE summary_extracted IS NULL),\n    'reports_7d', (SELECT COUNT(*) FROM reportes_generados WHERE fecha > NOW() - INTERVAL '7 days'),\n    'ai_decisions_7d', (SELECT COUNT(*) FROM ai_decisions WHERE created_at > NOW() - INTERVAL '7 days'),\n    'audit_errors_24h', (SELECT COUNT(*) FROM workflow_runs_audit WHERE status = 'error' AND started_at > NOW() - INTERVAL '24 hours'),\n    'last_event_at', (SELECT MAX(received_at) FROM events_inbox),\n    'last_report_at', (SELECT MAX(fecha) FROM reportes_generados)\n  ) AS stats\n), approval_rows AS (\n  SELECT COALESCE(json_agg(t), '[]'::json) AS approvals\n  FROM (\n    SELECT\n      d.decision_id, d.correlation_id, d.agent_role, d.decision_type, d.input_summary,\n      d.recommendation, d.risk_level, d.confidence, d.created_at, d.status,\n      d.context_used, d.evidence, d.decision, d.pm_impact, d.pm_next_action,\n      d.pm_owner, d.pm_deadline, d.pm_risk_reason, d.approval_note, d.rejected_reason, d.approval_metadata,\n      ROUND((EXTRACT(EPOCH FROM (NOW() - d.created_at))/3600)::numeric, 1) AS age_hours,\n      gh.repo AS github_repo, gh.pull_request_number AS github_pr_number,\n      gh.commit_sha AS github_commit_sha, gh.event_type AS github_event_type,\n      gh.occurred_at AS github_event_at, gh.actor AS github_actor, gh.pr_url AS github_pr_url\n    FROM ai_decisions d\n    LEFT JOIN LATERAL (\n      SELECT\n        e.repo, e.pull_request_number, e.commit_sha, e.event_type, e.occurred_at, e.received_at, e.actor,\n        COALESCE(\n          e.normalized->>'url',\n          e.payload#>>'{body,pull_request,html_url}',\n          CASE WHEN e.repo IS NOT NULL AND e.pull_request_number IS NOT NULL THEN 'https://github.com/' || e.repo || '/pull/' || e.pull_request_number END\n        ) AS pr_url\n      FROM events_inbox e\n      WHERE e.source = 'github'\n        AND (\n          e.correlation_id = d.correlation_id\n          OR (\n            e.repo = COALESCE(d.context_used->>'repo_full_name', d.context_used->>'repo', d.evidence->>'repo_full_name', d.evidence->>'repo', d.decision->>'repo_full_name', d.decision->>'repo')\n            AND e.pull_request_number::text = COALESCE(d.context_used->>'pull_request_number', d.context_used->>'pr_number', d.evidence->>'pull_request_number', d.evidence->>'pr_number', d.decision->>'pull_request_number', d.decision->>'pr_number')\n          )\n        )\n      ORDER BY e.occurred_at DESC NULLS LAST, e.received_at DESC NULLS LAST\n      LIMIT 1\n    ) gh ON TRUE\n    WHERE d.status = 'pending_approval'\n    ORDER BY\n      CASE d.risk_level WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,\n      d.created_at ASC\n    LIMIT 50\n  ) t\n), recent_events AS (\n  SELECT COALESCE(json_agg(t), '[]'::json) AS recent_events\n  FROM (\n    SELECT event_id, source, event_type, actor, repo, trello_card_id, pull_request_number, commit_sha,\n           occurred_at, received_at, processing_status,\n           COALESCE(normalized->>'url', normalized->>'card_url', payload#>>'{body,pull_request,html_url}') AS url\n    FROM events_inbox\n    ORDER BY received_at DESC\n    LIMIT 18\n  ) t\n), recent_decisions AS (\n  SELECT COALESCE(json_agg(t), '[]'::json) AS recent_decisions\n  FROM (\n    SELECT decision_id, agent_role, decision_type, input_summary, recommendation, risk_level, status,\n           created_at, approved_at, approved_by, action_taken\n    FROM ai_decisions\n    WHERE status <> 'pending_approval'\n    ORDER BY COALESCE(approved_at, created_at) DESC\n    LIMIT 12\n  ) t\n), reliability AS (\n  SELECT\n    COALESCE((SELECT json_agg(t) FROM (SELECT outbox_id, event_id, target, action, retry_count, scheduled_at, last_error FROM events_outbox WHERE status = 'dead' ORDER BY scheduled_at DESC LIMIT 6) t), '[]'::json) AS dead_outbox,\n    COALESCE((SELECT json_agg(t) FROM (SELECT event_id, source, event_type, retry_count, last_error, received_at FROM events_inbox WHERE processing_status IN ('error', 'failed') ORDER BY received_at DESC LIMIT 6) t), '[]'::json) AS failed_events\n), work_items AS (\n  SELECT\n    COALESCE((SELECT json_agg(t) FROM (SELECT card_id, card_nombre, lista_nombre, miembro_nombre, fecha_vencimiento FROM estado_tareas WHERE completada = false AND fecha_vencimiento < NOW() ORDER BY fecha_vencimiento ASC LIMIT 8) t), '[]'::json) AS overdue_tasks,\n    COALESCE((SELECT json_agg(t) FROM (SELECT attachment_id, card_id, card_name, filename, added_at, url FROM card_attachments WHERE summary_extracted IS NULL ORDER BY added_at DESC LIMIT 8) t), '[]'::json) AS docs_pending,\n    COALESCE((SELECT json_agg(t) FROM (SELECT phase_id, name, status, responsible, start_date, end_date FROM project_phases WHERE status = 'active' ORDER BY end_date ASC NULLS LAST LIMIT 8) t), '[]'::json) AS active_phases\n)\nSELECT\n  approval_rows.approvals,\n  stats.stats,\n  recent_events.recent_events,\n  recent_decisions.recent_decisions,\n  reliability.dead_outbox,\n  reliability.failed_events,\n  work_items.overdue_tasks,\n  work_items.docs_pending,\n  work_items.active_phases\nFROM approval_rows, stats, recent_events, recent_decisions, reliability, work_items;"
+      },
+      "id": "fetch-pending",
+      "name": "Fetch Pending Approvals",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        200,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $json || {};\nconst parseArray = (value) => {\n  if (!value) return [];\n  if (Array.isArray(value)) return value;\n  if (typeof value === 'string') { try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch (_) { return []; } }\n  return [];\n};\nconst parseObj = (value) => {\n  if (!value) return {};\n  if (typeof value === 'object' && !Array.isArray(value)) return value;\n  if (typeof value === 'string') { try { const parsed = JSON.parse(value); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch (_) { return {}; } }\n  return {};\n};\n\nconst rows = parseArray(payload.approvals);\nconst stats = parseObj(payload.stats);\nconst recentEvents = parseArray(payload.recent_events);\nconst recentDecisions = parseArray(payload.recent_decisions);\nconst deadOutbox = parseArray(payload.dead_outbox);\nconst failedEvents = parseArray(payload.failed_events);\nconst overdueTasks = parseArray(payload.overdue_tasks);\nconst docsPending = parseArray(payload.docs_pending);\nconst activePhases = parseArray(payload.active_phases);\nconst approvalToken = String($('Webhook - Dashboard').first().json.query?.token || '');\n\nconst riskColor = { low: '#1f9d55', medium: '#c2872f', high: '#c85f3d', critical: '#b42318' };\nconst riskLabel = { low: 'Bajo', medium: 'Medio', high: 'Alto', critical: 'Critico' };\nconst eventLabel = {\n  github_pr_opened: 'PR abierto', github_pr_ready: 'PR listo', github_pr_updated: 'PR actualizado',\n  github_pr_merged: 'PR mergeado', github_pr_closed: 'PR cerrado', github_pr_review_approved: 'PR aprobado',\n  trello_card_move: 'Trello movimiento', trello_comment: 'Trello comentario', trello_card_created: 'Trello creada', trello_due_changed: 'Fecha Trello'\n};\n\nconst esc = (value) => String(value ?? '')\n  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')\n  .replace(/\\\"/g, '&quot;').replace(/'/g, '&#39;');\nconst first = (...values) => values.find((value) => value !== undefined && value !== null && String(value).trim() !== '');\nconst normalizePr = (value) => { const raw = first(value); if (!raw) return ''; const m = String(raw).match(/\\d+/); return m ? m[0] : ''; };\nconst shortSha = (value) => first(value) ? String(value).slice(0, 8) : '';\nconst formatDate = (value) => value ? new Date(value).toLocaleString('es-EC', { timeZone: 'America/Guayaquil', dateStyle: 'medium', timeStyle: 'short' }) : '-';\nconst formatDateShort = (value) => value ? new Date(value).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil', month: 'short', day: 'numeric' }) : '-';\nconst n = (value) => Number(value || 0);\n\nconst unwrapEventDetails = (obj) => {\n  const details = obj?.event_details ?? obj?.eventDetails ?? obj?.details;\n  return typeof details === 'string' ? parseObj(details) : parseObj(details);\n};\nconst enrich = (r) => {\n  const context = parseObj(r.context_used);\n  const evidence = parseObj(r.evidence);\n  const decision = parseObj(r.decision);\n  const eventDetails = unwrapEventDetails(context);\n  const decisionRaw = parseObj(decision.raw);\n  const repo = first(r.github_repo, context.repo_full_name, context.repo, evidence.repo_full_name, evidence.repo, decision.repo_full_name, decision.repo, eventDetails.repo_full_name, eventDetails.repo, decisionRaw.repo_full_name, decisionRaw.repo);\n  const prNumber = normalizePr(first(r.github_pr_number, context.pull_request_number, context.pr_number, evidence.pull_request_number, evidence.pr_number, decision.pull_request_number, decision.pr_number, eventDetails.pull_request_number, eventDetails.pr_number, decisionRaw.pull_request_number, decisionRaw.pr_number));\n  const commit = shortSha(first(r.github_commit_sha, context.commit_sha, context.sha, evidence.commit_sha, evidence.sha, decision.commit_sha, decision.sha, eventDetails.commit_sha, eventDetails.sha, decisionRaw.commit_sha, decisionRaw.sha));\n  const prUrl = first(r.github_pr_url, context.pr_url, context.pull_request_url, evidence.pr_url, evidence.pull_request_url, decision.pr_url, decision.pull_request_url, eventDetails.pr_url, eventDetails.url, decisionRaw.pr_url, decisionRaw.url, repo && prNumber ? `https://github.com/${repo}/pull/${prNumber}` : '');\n  return { repo, prNumber, commit, prUrl, githubEvent: r.github_event_type, githubEventAt: r.github_event_at, githubActor: r.github_actor };\n};\n\nconst severity = (() => {\n  if (n(stats.outbox_dead) || n(stats.audit_errors_24h) || n(stats.approvals_high)) return 'Atencion alta';\n  if (n(stats.approvals_pending) || n(stats.inbox_backlog) || n(stats.tasks_overdue)) return 'Seguimiento activo';\n  return 'Operacion estable';\n})();\n\nconst playbook = {\n  critical: 'Resolver hoy con owner explícito. Si se aprueba, crear tarea de seguimiento y notificar en reportes PM.',\n  high: 'Decidir antes de 24h. Validar bloqueo, owner y siguiente acción.',\n  medium: 'Puede ir a cola, pero debe quedar trazabilidad y responsable.',\n  low: 'Aprobar solo si no abre riesgo nuevo.'\n};\n\nconst actionItems = [\n  n(stats.outbox_dead) ? { level: 'critical', title: 'Revisar DLQ de Discord', text: `${n(stats.outbox_dead)} mensajes muertos. Ejecuta DLQ Replay despues de revisar errores.` } : null,\n  n(stats.approvals_stale) ? { level: 'high', title: 'Aprobaciones envejecidas', text: `${n(stats.approvals_stale)} decisiones llevan mas de 24h esperando. Prioriza bloqueos.` } : null,\n  n(stats.approvals_high) ? { level: 'high', title: 'Riesgo alto pendiente', text: `${n(stats.approvals_high)} aprobaciones high/critical requieren decision humana.` } : null,\n  n(stats.tasks_overdue) ? { level: 'medium', title: 'Tareas vencidas', text: `${n(stats.tasks_overdue)} tareas vencidas. Rebalancea owner y fecha.` } : null,\n  n(stats.docs_pending_summary) ? { level: 'medium', title: 'PDFs sin resumen', text: `${n(stats.docs_pending_summary)} adjuntos faltan de resumen. Usa doc_summary para extraer decisiones.` } : null,\n  n(stats.reports_7d) === 0 ? { level: 'medium', title: 'Reporte semanal ausente', text: 'No hay reporte generado en 7 dias. Lanza el reporte PDF para alinear stakeholders.' } : null,\n  n(stats.inbox_backlog) > 25 ? { level: 'medium', title: 'Backlog de eventos', text: `${n(stats.inbox_backlog)} eventos esperan router. Revisa Router - Project Events.` } : null,\n].filter(Boolean);\n\nconst statCard = (label, value, copy, tone = '') => `<section class='stat ${tone}'><span class='stat-label'>${esc(label)}</span><span class='stat-value'>${esc(value)}</span><p>${esc(copy)}</p></section>`;\nconst empty = (text) => `<div class='empty-inline'>${esc(text)}</div>`;\n\nconst cards = rows.map((r) => {\n  const gh = enrich(r);\n  const color = riskColor[r.risk_level] || '#6b7280';\n  const label = riskLabel[r.risk_level] || r.risk_level || 'Pendiente';\n  const decisionType = String(r.decision_type || 'general').replace(/_/g, ' ');\n  const confidence = Math.max(0, Math.min(100, Math.round((Number(r.confidence) || 0) * 100)));\n  const githubStatus = gh.githubEvent ? (eventLabel[gh.githubEvent] || gh.githubEvent) : (gh.prUrl ? 'PR vinculado' : 'Sin PR vinculado');\n  const suggestedTask = r.pm_next_action || r.recommendation || r.input_summary || 'Seguimiento de aprobacion PM';\n  const playbookText = playbook[r.risk_level] || playbook.medium;\n  const githubFreshness = gh.githubEventAt ? `Actualizado ${formatDate(gh.githubEventAt)}` : 'Sin evento GitHub reciente';\n  const isStale = Number(r.age_hours || 0) >= 24;\n  const metaItems = [\n    gh.repo ? `<span>Repo <strong>${esc(gh.repo)}</strong></span>` : '',\n    gh.prNumber ? `<span>PR <strong>#${esc(gh.prNumber)}</strong></span>` : '',\n    gh.commit ? `<span>Commit <code>${esc(gh.commit)}</code></span>` : '',\n    gh.githubActor ? `<span>Actor <strong>${esc(gh.githubActor)}</strong></span>` : ''\n  ].filter(Boolean).join('');\n  return `\n    <article class='approval-card' data-risk='${esc(r.risk_level || 'low')}' data-search='${esc([r.agent_role, r.decision_type, r.input_summary, r.recommendation, gh.repo, gh.prNumber].filter(Boolean).join(' ').toLowerCase())}' data-id='${esc(r.decision_id)}' style='--risk:${color}'>\n      <div class='card-top'><span class='agent-badge'>${esc(r.agent_role || 'Agente IA')}</span><span class='risk-badge'>${esc(label)}</span></div>\n      <div class='card-type'>${esc(decisionType)} ${isStale ? '<strong class=\"sla\">SLA 24h</strong>' : ''}</div>\n      <h2>${esc(r.input_summary || 'Decision pendiente de revision')}</h2>\n      <p class='recommendation'>${esc(r.recommendation || 'Sin recomendacion adicional.')}</p>\n      <div class='decision-playbook'><span>Playbook PM</span><strong>${esc(playbookText)}</strong></div>\n      <div class='pm-grid'>\n        <div><span>Impacto</span><strong>${esc(r.pm_impact || 'Por definir')}</strong></div>\n        <div><span>Proxima accion</span><strong>${esc(r.pm_next_action || 'Decidir aprobar/rechazar')}</strong></div>\n        <div><span>Owner</span><strong>${esc(r.pm_owner || gh.githubActor || 'Tech Lead')}</strong></div>\n        <div><span>Deadline</span><strong>${esc(r.pm_deadline ? formatDate(r.pm_deadline) : (isStale ? 'Vencido' : 'Hoy'))}</strong></div>\n      </div>\n      <div class='github-panel'>\n        <div class='github-head'><span>${esc(githubStatus)}</span><small>${esc(githubFreshness)}</small></div>\n        ${metaItems ? `<div class='github-meta'>${metaItems}</div>` : `<div class='github-meta muted'>No hay repo/PR asociado. El hub no inventa commits si GitHub no los entrego.</div>`}\n        ${gh.prUrl ? `<a class='gh-link' href='${esc(gh.prUrl)}' target='_blank' rel='noopener noreferrer'>Abrir PR en GitHub</a>` : ''}\n      </div>\n      <div class='card-footer'><div><span>${esc(formatDate(r.created_at))}</span><span>${esc(r.age_hours || 0)}h en cola | Confianza ${confidence}%</span></div><code>${esc(String(r.decision_id || '').slice(0, 8))}</code></div>\n      <div class='card-actions'>\n        <button class='btn approve' ${approvalToken ? '' : 'disabled'} onclick='decide(\"${esc(r.decision_id)}\", \"approved\", ${JSON.stringify(esc(suggestedTask))})'>Aprobar</button>\n        <button class='btn follow' ${approvalToken ? '' : 'disabled'} onclick='decide(\"${esc(r.decision_id)}\", \"approved\", ${JSON.stringify(esc(suggestedTask))}, true)'>Aprobar + tarea</button>\n        <button class='btn reject' ${approvalToken ? '' : 'disabled'} onclick='decide(\"${esc(r.decision_id)}\", \"rejected\", ${JSON.stringify(esc(suggestedTask))})'>Rechazar</button>\n      </div>\n    </article>`;\n}).join('');\n\nconst actionsHtml = actionItems.length ? actionItems.map((a) => `<article class='action ${a.level}'><span>${esc(a.level)}</span><strong>${esc(a.title)}</strong><p>${esc(a.text)}</p></article>`).join('') : empty('Sin acciones urgentes. Mantener monitoreo.');\nconst eventsHtml = recentEvents.length ? recentEvents.map((e) => `<li><span>${esc(e.source || 'event')}</span><strong>${esc(eventLabel[e.event_type] || e.event_type || 'evento')}</strong><small>${esc(formatDate(e.received_at))}</small>${e.url ? `<a href='${esc(e.url)}' target='_blank' rel='noopener noreferrer'>Abrir</a>` : ''}</li>`).join('') : empty('No hay eventos recientes.');\nconst decisionsHtml = recentDecisions.length ? recentDecisions.map((d) => `<li><span>${esc(d.status)}</span><strong>${esc(d.agent_role || 'IA')} · ${esc(d.decision_type || 'decision')}</strong><small>${esc(formatDate(d.approved_at || d.created_at))}</small></li>`).join('') : empty('Sin historial reciente.');\nconst deadHtml = deadOutbox.length ? deadOutbox.map((d) => `<li><strong>#${esc(d.outbox_id)}</strong><span>${esc(d.action || 'notify')} · ${esc(d.target || 'discord')}</span><small>${esc(String(d.last_error || '').slice(0, 90))}</small></li>`).join('') : empty('Sin mensajes muertos.');\nconst tasksHtml = overdueTasks.length ? overdueTasks.map((t) => `<li><strong>${esc(t.card_nombre || t.card_id)}</strong><span>${esc(t.miembro_nombre || 'Sin owner')} · ${esc(t.lista_nombre || 'Sin fase')}</span><small>${esc(formatDate(t.fecha_vencimiento))}</small></li>`).join('') : empty('Sin tareas vencidas registradas.');\nconst docsHtml = docsPending.length ? docsPending.map((d) => `<li><strong>${esc(d.filename)}</strong><span>${esc(d.card_name || d.card_id)}</span>${d.url ? `<a href='${esc(d.url)}' target='_blank' rel='noopener noreferrer'>PDF</a>` : ''}</li>`).join('') : empty('Sin PDFs pendientes de resumen.');\nconst phasesHtml = activePhases.length ? activePhases.map((p) => `<li><strong>${esc(p.name)}</strong><span>${esc(p.responsible || 'Sin responsable')}</span><small>${esc(formatDateShort(p.end_date))}</small></li>`).join('') : empty('Sin fases activas sincronizadas.');\n\nconst html = `<!DOCTYPE html>\n<html lang='es'>\n<head>\n  <meta charset='UTF-8'>\n  <meta name='viewport' content='width=device-width, initial-scale=1'>\n  <title>PetSafe PM Command Center</title>\n  <link href='https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap' rel='stylesheet'>\n  <style>\n    :root { --bg:#0c121d; --panel:#121b2a; --panel2:#172235; --line:rgba(148,163,184,.16); --line2:rgba(148,163,184,.3); --text:#edf3ff; --muted:#9aabc4; --soft:#66758d; --accent:#f97316; --good:#1f9d55; --bad:#b42318; --warn:#c2872f; --shadow:0 30px 80px rgba(2,6,23,.45); }\n    *{box-sizing:border-box;margin:0;padding:0} html,body{min-height:100%} body{font-family:Manrope,sans-serif;color:var(--text);background:linear-gradient(180deg,rgba(249,115,22,.08),transparent 30%),linear-gradient(135deg,#090e17,#101826 48%,#162235);overflow-x:hidden} body:before{content:'';position:fixed;inset:0;background:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:32px 32px;mask-image:linear-gradient(180deg,rgba(0,0,0,.5),transparent 92%);pointer-events:none}.shell{position:relative;z-index:1;width:min(1240px,calc(100% - 32px));margin:24px auto 40px}.masthead{border:1px solid var(--line);border-radius:28px;background:linear-gradient(135deg,rgba(28,50,78,.96),rgba(16,24,38,.92) 62%);box-shadow:var(--shadow);overflow:hidden}.masthead-top{display:flex;justify-content:space-between;gap:24px;padding:30px;border-bottom:1px solid var(--line)}.eyebrow{display:inline-flex;gap:8px;align-items:center;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.06);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:#d8e6ff;margin-bottom:14px}.eyebrow:before{content:'';width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 6px rgba(249,115,22,.12)}h1{font-size:clamp(2.1rem,4vw,3.5rem);line-height:.96;letter-spacing:0;margin-bottom:12px}.lead{color:var(--muted);line-height:1.65;max-width:720px}.status-cluster{display:grid;gap:12px;min-width:min(320px,100%)}.health-pill{justify-self:end;border:1px solid rgba(255,255,255,.08);border-radius:22px;background:rgba(7,12,20,.44);padding:16px 18px}.health-pill strong{display:block;font-size:1.45rem}.health-pill span{color:var(--muted);font-size:.84rem}.token{justify-self:end;color:var(--muted);font-size:.84rem}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;padding:22px 30px 30px}.stat{border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.035);padding:16px;min-height:116px}.stat.alert{border-color:rgba(180,35,24,.35)}.stat.warn{border-color:rgba(194,135,47,.35)}.stat-label{display:block;color:var(--soft);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;margin-bottom:14px}.stat-value{display:block;font-size:1.65rem;font-weight:800;margin-bottom:8px}.stat p,.stat-copy{color:var(--muted);font-size:.84rem;line-height:1.45}.notice{margin:18px 0;border:1px solid rgba(249,115,22,.25);border-radius:16px;background:rgba(249,115,22,.08);color:#ffd5b4;padding:14px 16px}.layout{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(320px,.75fr);gap:20px;margin-top:22px}.panel{border:1px solid var(--line);border-radius:24px;background:linear-gradient(180deg,rgba(18,27,42,.96),rgba(14,20,33,.98));box-shadow:0 22px 50px rgba(2,6,23,.3);overflow:hidden}.panel-head{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:18px 20px;border-bottom:1px solid var(--line)}.panel-head h2{font-size:1rem}.toolbar{display:flex;gap:10px;flex-wrap:wrap}.toolbar input,.toolbar select{border:1px solid var(--line);background:rgba(7,12,20,.42);color:var(--text);border-radius:12px;padding:10px 12px;font:inherit;font-size:.85rem}.approval-list{display:grid;gap:16px;padding:18px}.approval-card{position:relative;border:1px solid var(--line);border-radius:22px;background:rgba(255,255,255,.025);padding:18px;display:grid;gap:13px;overflow:hidden}.approval-card:before{content:'';position:absolute;inset:0 auto 0 0;width:4px;background:var(--risk,var(--accent))}.card-top{display:flex;justify-content:space-between;gap:12px;align-items:center}.agent-badge,.risk-badge{display:inline-flex;border-radius:999px;padding:7px 12px;font-size:.76rem;font-weight:800}.agent-badge{background:rgba(148,163,184,.12);color:#d9e7ff}.risk-badge{background:color-mix(in srgb,var(--risk,var(--accent)) 20%,rgba(255,255,255,.04));border:1px solid rgba(255,255,255,.08)}.card-type{color:#8fa0b9;text-transform:uppercase;letter-spacing:.08em;font-size:.72rem}.sla{margin-left:8px;color:#fecaca;background:rgba(180,35,24,.18);border-radius:999px;padding:3px 8px;font-size:.68rem}.approval-card h2{font-size:1.13rem;line-height:1.32}.recommendation{color:var(--muted);font-size:.92rem;line-height:1.6}.pm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.pm-grid div{border:1px solid rgba(148,163,184,.12);border-radius:14px;background:rgba(8,13,22,.28);padding:10px}.pm-grid span{display:block;color:var(--soft);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}.pm-grid strong{font-size:.86rem;color:#e6eefb}.github-panel{border:1px solid rgba(148,163,184,.14);border-radius:16px;background:rgba(8,13,22,.34);padding:13px;display:grid;gap:10px}.github-head{display:flex;justify-content:space-between;gap:12px}.github-head span{font-weight:800}.github-head small{color:var(--soft);text-align:right}.github-meta{display:flex;flex-wrap:wrap;gap:8px;color:var(--muted);font-size:.78rem}.github-meta span{padding:6px 8px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06)}code{font-family:'IBM Plex Mono',monospace}.gh-link,.list a{justify-self:start;color:#dbeafe;text-decoration:none;font-size:.82rem;font-weight:800;border:1px solid rgba(147,197,253,.26);background:rgba(37,99,235,.18);border-radius:12px;padding:8px 10px}.card-footer{display:flex;justify-content:space-between;gap:12px;border-top:1px solid rgba(148,163,184,.12);padding-top:10px;color:var(--soft);font-size:.78rem}.card-footer div{display:grid;gap:3px}.card-footer code{color:#d9e7ff;padding:6px 8px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}.decision-playbook{border:1px solid rgba(249,115,22,.18);border-radius:16px;background:rgba(249,115,22,.07);padding:12px;display:grid;gap:5px}.decision-playbook span{color:#fed7aa;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em}.decision-playbook strong{font-size:.88rem;line-height:1.45;color:#ffedd5}.card-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}.btn{border:0;border-radius:14px;padding:12px 14px;font:inherit;font-weight:800;cursor:pointer}.btn:disabled{opacity:.45;cursor:not-allowed}.approve{background:linear-gradient(180deg,#22c55e,#178a44);color:white}.follow{background:linear-gradient(180deg,#2563eb,#1d4ed8);color:white}.reject{background:linear-gradient(180deg,#4a1f1f,#2f1313);color:#ffd6d6;border:1px solid rgba(255,255,255,.08)}.side{display:grid;gap:20px;align-content:start}.action-list,.list{display:grid;gap:10px;padding:16px}.action{border:1px solid var(--line);border-radius:16px;padding:13px;background:rgba(255,255,255,.03)}.action span{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--soft)}.action strong{display:block;margin:5px 0}.action p{color:var(--muted);font-size:.84rem;line-height:1.45}.action.critical{border-color:rgba(180,35,24,.45)}.action.high{border-color:rgba(200,95,61,.45)}.action.medium{border-color:rgba(194,135,47,.45)}.list{list-style:none}.list li{border:1px solid rgba(148,163,184,.12);border-radius:14px;padding:12px;background:rgba(255,255,255,.025);display:grid;gap:5px}.list li span,.list li small{color:var(--muted);font-size:.78rem}.list li > span:first-child{color:#93c5fd;text-transform:uppercase;letter-spacing:.06em;font-size:.68rem}.empty-inline{color:var(--muted);padding:16px;font-size:.9rem}.toast{position:fixed;right:22px;bottom:22px;z-index:30;display:none;max-width:360px;padding:14px 16px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(15,23,36,.94);box-shadow:0 16px 40px rgba(2,6,23,.42)}@media(max-width:980px){.layout{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.masthead-top{flex-direction:column}.health-pill,.token{justify-self:start}}@media(max-width:640px){.shell{width:min(100% - 18px,1240px);margin-top:12px}.stats,.pm-grid{grid-template-columns:1fr}.card-actions{grid-template-columns:1fr}.toolbar{width:100%}.toolbar input,.toolbar select{width:100%}.github-head,.card-footer{flex-direction:column}.masthead-top,.stats{padding:20px}}\n  </style>\n</head>\n<body>\n  <div class='shell'>\n    <section class='masthead'>\n      <div class='masthead-top'>\n        <div><span class='eyebrow'>PM Command Center</span><h1>PetSafe PM Hub</h1><p class='lead'>Aprobaciones, riesgo, eventos, confiabilidad y acciones sugeridas en una sola vista para mantener el proyecto avanzando sin perder contexto.</p></div>\n        <div class='status-cluster'><div class='health-pill'><strong>${esc(severity)}</strong><span>${esc(n(stats.events_24h))} eventos en 24h · ${esc(n(stats.ai_decisions_7d))} decisiones IA en 7d</span></div><div class='token'>${approvalToken ? 'Token activo para aprobar' : 'Solo lectura: agrega ?token=TU_SECRETO'}</div></div>\n      </div>\n      <div class='stats'>\n        ${statCard('Aprobaciones', n(stats.approvals_pending), `${n(stats.approvals_high)} high/critical · ${n(stats.approvals_stale)} stale`, n(stats.approvals_high) ? 'alert' : '')}\n        ${statCard('Outbox', n(stats.outbox_pending), `${n(stats.outbox_dead)} dead · retries protegidos`, n(stats.outbox_dead) ? 'alert' : '')}\n        ${statCard('Eventos', n(stats.events_24h), `${n(stats.github_events_24h)} GitHub · ${n(stats.trello_events_24h)} Trello · backlog ${n(stats.inbox_backlog)}`, n(stats.inbox_backlog) > 25 ? 'warn' : '')}\n        ${statCard('Entrega', `${n(stats.tasks_overdue)}/${n(stats.tasks_open)}`, `${n(stats.tasks_due_48h)} vencen en 48h · ${n(stats.phases_active)} fases activas`, n(stats.tasks_overdue) ? 'warn' : '')}\n      </div>\n    </section>\n    ${approvalToken ? '' : `<div class='notice'>Modo seguro: el secreto ya no se incrusta en el HTML. Abre esta URL con <strong>?token=TU_SECRETO</strong> para habilitar decisiones.</div>`}\n    <main class='layout'>\n      <section class='panel'>\n        <div class='panel-head'><h2>Aprobaciones priorizadas</h2><div class='toolbar'><input id='search' placeholder='Buscar agente, repo, PR...' oninput='filterCards()'><select id='risk' onchange='filterCards()'><option value=''>Todos los riesgos</option><option value='critical'>Critico</option><option value='high'>Alto</option><option value='medium'>Medio</option><option value='low'>Bajo</option></select></div></div>\n        <div class='approval-list' id='approvalList'>${rows.length ? cards : empty('No hay decisiones pendientes. El hub tambien reconcilia PRs aprobados/mergeados desde GitHub.')}</div>\n      </section>\n      <aside class='side'>\n        <section class='panel'><div class='panel-head'><h2>Acciones PM sugeridas</h2></div><div class='action-list'>${actionsHtml}</div></section>\n        <section class='panel'><div class='panel-head'><h2>Reliability</h2></div><ul class='list'>${deadHtml}</ul></section>\n      </aside>\n    </main>\n    <main class='layout'>\n      <section class='panel'><div class='panel-head'><h2>Timeline del proyecto</h2></div><ul class='list'>${eventsHtml}</ul></section>\n      <aside class='side'>\n        <section class='panel'><div class='panel-head'><h2>Decisiones resueltas</h2></div><ul class='list'>${decisionsHtml}</ul></section>\n      </aside>\n    </main>\n    <main class='layout'>\n      <section class='panel'><div class='panel-head'><h2>Trabajo en riesgo</h2></div><ul class='list'>${tasksHtml}</ul></section>\n      <aside class='side'>\n        <section class='panel'><div class='panel-head'><h2>PDFs por procesar</h2></div><ul class='list'>${docsHtml}</ul></section>\n        <section class='panel'><div class='panel-head'><h2>Fases activas</h2></div><ul class='list'>${phasesHtml}</ul></section>\n      </aside>\n    </main>\n  </div>\n  <div class='toast' id='toast'></div>\n  <script>\n    const approvalToken = ${JSON.stringify(approvalToken)} || new URLSearchParams(window.location.search).get('token') || '';\n    function filterCards(){\n      const q = (document.getElementById('search')?.value || '').toLowerCase();\n      const risk = document.getElementById('risk')?.value || '';\n      document.querySelectorAll('.approval-card').forEach((card) => {\n        const hit = (!q || card.dataset.search.includes(q)) && (!risk || card.dataset.risk === risk);\n        card.style.display = hit ? 'grid' : 'none';\n      });\n    }\n    async function decide(id, action, suggestedTask, createTask = false) {\n      if (!approvalToken) return showToast('Falta token de aprobacion en la URL.');\n      const note = window.prompt(action === 'approved' ? 'Nota de aprobacion o condicion de seguimiento:' : 'Motivo del rechazo:', '');\n      if (note === null) return;\n      let taskTitle = suggestedTask || '';\n      if (createTask) {\n        const customTitle = window.prompt('Titulo de la tarea de seguimiento:', taskTitle);\n        if (customTitle === null) return;\n        taskTitle = customTitle || taskTitle;\n      }\n      const card = document.querySelector('[data-id=\"' + id + '\"]');\n      const buttons = card ? card.querySelectorAll('button') : [];\n      buttons.forEach((btn) => { btn.disabled = true; btn.style.opacity = '0.7'; });\n      if (card) card.style.opacity = '0.72';\n      try {\n        const res = await fetch('/webhook/pm-approve', {\n          method: 'POST',\n          headers: { 'Content-Type': 'application/json', ...(approvalToken ? { 'x-pm-token': approvalToken } : {}) },\n          body: JSON.stringify({ decision_id: id, action, approved_by: 'tech-lead', token: approvalToken, note, create_task: createTask, task_title: taskTitle })\n        });\n        const data = await res.json().catch(() => ({}));\n        if (!res.ok) throw new Error(data.error || 'No se pudo procesar la decision');\n        showToast(action === 'approved' ? 'Decision aprobada correctamente' : 'Decision rechazada correctamente');\n        setTimeout(() => window.location.reload(), 450);\n      } catch (e) {\n        showToast(e.message || 'Error al procesar. Intenta de nuevo.');\n        buttons.forEach((btn) => { btn.disabled = false; btn.style.opacity = '1'; });\n        if (card) card.style.opacity = '1';\n      }\n    }\n    function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.style.display = 'block'; setTimeout(() => { t.style.display = 'none'; }, 3300); }\n  </script>\n</body>\n</html>`;\n\nreturn [{ json: { html } }];"
+      },
+      "id": "build-dashboard-html",
+      "name": "Build Dashboard HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-html",
+      "name": "Respond HTML",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        620,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "path": "pm-approve",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-approve",
+      "name": "Webhook - Approve Action",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        280
+      ],
+      "webhookId": "pm-approve-action"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "valid-token",
+              "leftValue": "={{ $request.headers['x-pm-token'] || $json.token || '' }}",
+              "rightValue": "={{ $env.PM_APPROVAL_SECRET }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "valid-action",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "^(approved|rejected)$",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            },
+            {
+              "id": "valid-decision-id",
+              "leftValue": "={{ $json.decision_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "validate-token",
+      "name": "Validate Token & Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        220,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"error\": \"Unauthorized or invalid input\"}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "respond-unauthorized",
+      "name": "Respond Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        440,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS ai_decisions (\n  decision_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  correlation_id TEXT,\n  agent_role TEXT,\n  decision_type TEXT,\n  input_summary TEXT,\n  context_used JSONB,\n  evidence JSONB,\n  decision JSONB,\n  recommendation TEXT,\n  confidence DOUBLE PRECISION,\n  risk_level TEXT,\n  requires_human_approval BOOLEAN,\n  status TEXT,\n  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()\n);\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS approved_by TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS action_taken TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS approval_note TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS rejected_reason TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS approval_metadata JSONB;\n\nCREATE TABLE IF NOT EXISTS pm_tareas (\n  id bigserial PRIMARY KEY,\n  titulo text NOT NULL,\n  descripcion text,\n  responsable text,\n  prioridad text NOT NULL DEFAULT 'media',\n  estado text NOT NULL DEFAULT 'pendiente',\n  fecha_limite date,\n  entregable text,\n  sprint text,\n  canal_origen text,\n  creado_por text NOT NULL DEFAULT 'approval_hub',\n  fecha_creacion timestamptz NOT NULL DEFAULT NOW(),\n  fecha_actualizacion timestamptz NOT NULL DEFAULT NOW()\n);\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS titulo text;\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS descripcion text;\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS responsable text;\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS prioridad text NOT NULL DEFAULT 'media';\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS estado text NOT NULL DEFAULT 'pendiente';\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS fecha_limite date;\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS canal_origen text;\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS creado_por text NOT NULL DEFAULT 'approval_hub';\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS fecha_creacion timestamptz NOT NULL DEFAULT NOW();\nALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS fecha_actualizacion timestamptz NOT NULL DEFAULT NOW();\n\nWITH updated AS (\n  UPDATE ai_decisions\n  SET\n    status = $1,\n    approved_by = $2,\n    approved_at = NOW(),\n    action_taken = 'dashboard:' || $1,\n    approval_note = CASE WHEN $1 = 'approved' THEN NULLIF($4, '') ELSE approval_note END,\n    rejected_reason = CASE WHEN $1 = 'rejected' THEN NULLIF($4, '') ELSE rejected_reason END,\n    approval_metadata = jsonb_build_object('create_task', $5::boolean, 'task_title', $6, 'source', 'approval_hub')\n  WHERE decision_id = $3::uuid\n  RETURNING decision_id, agent_role, decision_type, input_summary, recommendation, risk_level, context_used, evidence, decision, approval_note, rejected_reason\n), inserted_task AS (\n  INSERT INTO pm_tareas (titulo, descripcion, responsable, prioridad, estado, fecha_limite, canal_origen, creado_por)\n  SELECT\n    COALESCE(NULLIF($6, ''), 'Seguimiento aprobacion ' || decision_id::text),\n    COALESCE(NULLIF(recommendation, ''), input_summary, 'Tarea creada desde Approval Hub'),\n    $2,\n    CASE risk_level WHEN 'critical' THEN 'critica' WHEN 'high' THEN 'alta' WHEN 'medium' THEN 'media' ELSE 'baja' END,\n    'pendiente',\n    CURRENT_DATE + INTERVAL '1 day',\n    'approval_hub',\n    'approval_hub'\n  FROM updated\n  WHERE $1 = 'approved' AND $5::boolean = true\n  RETURNING id\n)\nSELECT updated.*, (SELECT id FROM inserted_task LIMIT 1) AS created_task_id\nFROM updated;",
+        "options": {
+          "queryReplacement": "={{ [ $json.action, $json.approved_by || \"tech-lead\", $json.decision_id, $json.note || \"\", Boolean($json.create_task), $json.task_title || \"\" ] }}"
+        }
+      },
+      "id": "update-decision",
+      "name": "Update Decision Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        440,
+        280
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $json;\nconst actionBody = $('Webhook - Approve Action').item.json;\nconst action = actionBody.action;\nconst verb = action === 'approved' ? 'aprobada' : 'rechazada';\n\nconst parseMaybeJson = (value) => {\n  if (!value) return {};\n  if (typeof value === 'object') return value;\n  try { return JSON.parse(value); } catch (_) { return {}; }\n};\nconst first = (...values) => values.find((value) => value !== undefined && value !== null && String(value).trim() !== '');\n\nconst ctx = parseMaybeJson(d.context_used);\nconst ev = parseMaybeJson(d.evidence);\nconst dec = parseMaybeJson(d.decision);\nconst repo = first(ctx.repo_full_name, ctx.repo, ev.repo_full_name, ev.repo, dec.repo_full_name, dec.repo);\nconst prNumber = first(ctx.pull_request_number, ctx.pr_number, ev.pull_request_number, ev.pr_number, dec.pull_request_number, dec.pr_number);\nconst prUrl = first(ctx.pr_url, ctx.pull_request_url, ev.pr_url, ev.pull_request_url, dec.pr_url, dec.pull_request_url, repo && prNumber ? `https://github.com/${repo}/pull/${prNumber}` : '');\n\nconst lines = [\n  `**Decision ${verb}** por el Tech Lead`,\n  '',\n  `**Agente:** ${d.agent_role || '-'}`,\n  `**Tipo:** ${d.decision_type || '-'}`,\n  `**Recomendacion:** ${d.recommendation || '-'}`,\n  prUrl ? `**PR:** ${prUrl}` : null,\n  actionBody.note ? `**Nota:** ${actionBody.note}` : null,\n  d.created_task_id ? `**Tarea creada:** #${d.created_task_id}` : null,\n  '',\n  `ID: \\`${d.decision_id}\\``\n].filter((line) => line !== null);\n\nreturn [{ json: { content: lines.join('\\n'), channel_id: process.env.DISCORD_CHANNEL_REPORTES || process.env.DISCORD_CHANNEL_ADMIN || '', event_id: 'approval:' + d.decision_id, idempotency_key: 'approval:' + d.decision_id + ':' + action } }];"
+      },
+      "id": "build-approval-notif",
+      "name": "Build Approval Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS events_outbox (\n  outbox_id bigserial PRIMARY KEY,\n  event_id text,\n  target text NOT NULL DEFAULT 'discord',\n  action text NOT NULL DEFAULT 'notify',\n  idempotency_key text,\n  payload jsonb NOT NULL DEFAULT '{}'::jsonb,\n  status text NOT NULL DEFAULT 'pending',\n  retry_count integer NOT NULL DEFAULT 0,\n  scheduled_at timestamptz NOT NULL DEFAULT NOW(),\n  sent_at timestamptz,\n  last_error text,\n  created_at timestamptz NOT NULL DEFAULT NOW()\n);\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS idempotency_key text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT NOW();\nCREATE UNIQUE INDEX IF NOT EXISTS events_outbox_idempotency_key_uq ON events_outbox (idempotency_key);\nINSERT INTO events_outbox (event_id, target, action, idempotency_key, payload)\nVALUES ($1, 'discord', 'notify', $2, $3::jsonb)\nON CONFLICT (idempotency_key) DO NOTHING\nRETURNING outbox_id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.event_id, $json.idempotency_key, JSON.stringify({ content: $json.content, channel_id: $json.channel_id }) ] }}"
+        }
+      },
+      "id": "notify-approval-discord",
+      "name": "Queue Discord Approval",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        660,
+        280
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, decision_id: $(\"Update Decision Status\").item.json.decision_id, created_task_id: $(\"Update Decision Status\").item.json.created_task_id || null }) }}",
+        "options": {}
+      },
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        880,
+        280
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pending Approvals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pending Approvals": {
+      "main": [
+        [
+          {
+            "node": "Build Dashboard HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Dashboard HTML": {
+      "main": [
+        [
+          {
+            "node": "Respond HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Approve Action": {
+      "main": [
+        [
+          {
+            "node": "Validate Token & Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Token & Input": {
+      "main": [
+        [
+          {
+            "node": "Update Decision Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Decision Status": {
+      "main": [
+        [
+          {
+            "node": "Build Approval Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Approval Notification": {
+      "main": [
+        [
+          {
+            "node": "Queue Discord Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue Discord Approval": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "id": "cLaNDUUSO6PGrR2l",
+  "active": true
+}

@@ -1,0 +1,351 @@
+{
+  "name": "Discord Eventos Trello PetSafe",
+  "nodes": [
+    {
+      "parameters": {
+        "id": "69baa8ff02e1cfb32a461a04"
+      },
+      "id": "f8eeebdf-e214-4a38-b096-3de4f2a336dd",
+      "name": "Trello Event Webhook",
+      "type": "n8n-nodes-base.trelloTrigger",
+      "typeVersion": 1,
+      "position": [
+        32,
+        448
+      ],
+      "webhookId": "3d6027b5-2b1b-4639-b53d-a9c2942c677e",
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || {};\nconst action = body.action || {};\nconst data = action.data || {};\nconst type = action.type || 'unknown';\nconst actor = action.memberCreator?.fullName || action.memberCreator?.username || 'desconocido';\nconst boardName = data.board?.name || body.model?.name || 'tablero';\nconst card = data.card || {};\nconst cardName = card.name || 'tarjeta sin nombre';\nconst cardUrl = card.shortUrl || card.url || body.model?.url || null;\nconst occurredAt = action.date || new Date().toISOString();\nconst rawActionId = String(action.id || '').trim();\n\nlet ignored = false;\nlet tipo = 'trello_evento';\nlet titulo = 'Evento Trello';\nlet descripcion = 'Evento ' + type + ' en ' + boardName + '.';\nlet entityType = card.id ? 'card' : 'board';\nlet entityId = card.id || data.board?.id || body.model?.id || boardName;\n\nif (type === 'updateCard' && data.listBefore && data.listAfter) {\n  tipo = 'trello_card_move';\n  titulo = 'Tarjeta movida';\n  descripcion = actor + ' movio ' + cardName + ' de ' + data.listBefore.name + ' a ' + data.listAfter.name + '.';\n} else if (type === 'commentCard') {\n  tipo = 'trello_comment';\n  titulo = 'Comentario en tarjeta';\n  descripcion = actor + ' comento en ' + cardName + '.';\n} else if (type === 'createCard') {\n  tipo = 'trello_card_created';\n  titulo = 'Tarjeta creada';\n  descripcion = actor + ' creo la tarjeta ' + cardName + '.';\n} else if (type === 'updateCard' && Object.prototype.hasOwnProperty.call(data.old || {}, 'due')) {\n  tipo = 'trello_due_changed';\n  titulo = 'Fecha limite actualizada';\n  descripcion = actor + ' actualizo fecha limite de ' + cardName + '.';\n} else {\n  ignored = true;\n  titulo = 'Evento Trello ignorado';\n  descripcion = 'Evento ' + type + ' no se procesa aqui para evitar duplicar otros workflows.';\n}\n\nconst externalId = rawActionId || [type, card.id || 'board', occurredAt].join(':');\nconst eventId = rawActionId\n  ? 'trello:' + rawActionId\n  : 'trello:' + String(externalId).replace(/[^a-zA-Z0-9:_-]/g, '_');\nconst correlationId = 'evt_' + eventId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 90);\n\nconst detalle = {\n  action_id: rawActionId || null,\n  action_type: type,\n  actor,\n  board_name: boardName,\n  board_id: data.board?.id || body.model?.id || null,\n  card_id: card.id || null,\n  card_name: cardName,\n  card_url: cardUrl,\n  list_before: data.listBefore?.name || null,\n  list_after: data.listAfter?.name || null,\n  comment: data.text || null,\n  due: card.due || null,\n  date: action.date || null,\n  event_id: eventId,\n  correlation_id: correlationId,\n  occurred_at: occurredAt\n};\n\nconst discord_content = '[PetSafe/Trello] ' + titulo + '\\n' + descripcion + (cardUrl ? '\\n' + cardUrl : '');\nconst normalized = {\n  source: 'trello',\n  event_type: tipo,\n  action_type: type,\n  actor,\n  board_name: boardName,\n  board_id: data.board?.id || body.model?.id || null,\n  entity_type: entityType,\n  entity_id: entityId,\n  trello_card_id: card.id || null,\n  occurred_at: occurredAt,\n  card_url: cardUrl,\n  ignored\n};\n\nreturn [{\n  json: {\n    source: 'trello',\n    ignored,\n    tipo,\n    titulo,\n    descripcion,\n    detalle,\n    detalle_json: JSON.stringify(detalle || {}),\n    normalized_json: JSON.stringify(normalized || {}),\n    raw_payload_json: JSON.stringify(body || {}),\n    discord_content,\n    event_id: eventId,\n    external_id: String(externalId || eventId),\n    occurred_at: occurredAt,\n    correlation_id: correlationId,\n    actor,\n    entity_type: entityType,\n    entity_id: entityId,\n    repo: null,\n    trello_card_id: card.id || null,\n    pull_request_number: null,\n    commit_sha: null\n  }\n}];"
+      },
+      "id": "9b864cdc-78af-4040-b174-8bb7af09b416",
+      "name": "Normalizar Evento Trello",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "if-trello-not-ignored",
+              "leftValue": "={{ $json.ignored }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "22579ad2-9271-42d5-97cf-569a06e089f1",
+      "name": "IF Evento Trello Relevante",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        496,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "id": "31f2da6e-54f4-4e92-b995-0b3481959da9",
+      "name": "Discord Evento Trello",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1904,
+        1088
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO eventos_detectados (tipo, descripcion, detalle, notificado) VALUES ($1, $2, $3::jsonb, TRUE);",
+        "options": {
+          "queryReplacement": "={{ [ $json.tipo, $json.descripcion, $json.detalle_json ] }}"
+        }
+      },
+      "id": "f8cb869b-67da-4d46-a5f6-8cedebbaa3a9",
+      "name": "PG Insert Evento Trello",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1328,
+        288
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok (trello procesado)",
+        "options": {}
+      },
+      "id": "d182dc2d-7a3c-4e79-af2e-bf7bd312399f",
+      "name": "Resp Trello Procesado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2064,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok (trello ignorado)",
+        "options": {}
+      },
+      "id": "6bd2da1a-d785-463f-9678-9b820f1621a8",
+      "name": "Resp Trello Ignorado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        896,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ins AS (\n  INSERT INTO events_inbox (\n    event_id, source, event_type, external_id, occurred_at, correlation_id,\n    actor, entity_type, entity_id, repo, trello_card_id, pull_request_number, commit_sha,\n    payload, normalized, processing_status\n  ) VALUES (\n    $1, $2, $3, $4, $5::timestamptz, $6,\n    $7, $8, $9, $10, $11, $12, $13,\n    $14::jsonb, $15::jsonb, 'ingested'\n  )\n  ON CONFLICT (event_id) DO NOTHING\n  RETURNING event_id, correlation_id\n)\nSELECT\n  EXISTS(SELECT 1 FROM ins) AS inserted,\n  COALESCE((SELECT event_id FROM ins LIMIT 1), $1) AS event_id,\n  COALESCE((SELECT correlation_id FROM ins LIMIT 1), $6) AS correlation_id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.event_id, $json.source, $json.tipo, $json.external_id, $json.occurred_at, $json.correlation_id, $json.actor || null, $json.entity_type || null, $json.entity_id || null, $json.repo || null, $json.trello_card_id || null, $json.pull_request_number || null, $json.commit_sha || null, $json.raw_payload_json || '{}', $json.normalized_json || '{}' ] }}"
+        }
+      },
+      "id": "e3e8e6cc-a81d-4383-a185-7910a3d5f117",
+      "name": "PG Insert Inbox Trello",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        880,
+        256
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "if-trello-inbox-inserted",
+              "leftValue": "={{ $json.inserted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "26f0e932-95dc-4726-b82c-c9cbd05466fd",
+      "name": "IF Inbox Trello Nuevo",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1424,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "ok (trello duplicado)",
+        "options": {}
+      },
+      "id": "3c3185d5-0dec-4574-a4b8-278f3413da65",
+      "name": "Resp Trello Duplicado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1904,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_runs_audit (workflow_id, workflow_name, status, completed_at, correlation_id, metrics) VALUES ($1, $2, 'success', NOW(), $3, $4::jsonb);",
+        "options": {
+          "queryReplacement": "={{ [ $workflow.id || 'unknown', $workflow.name, $json.correlation_id || null, JSON.stringify({ event_id: $json.event_id || null, source: $json.source || null, event_type: $json.tipo || $json.event_type || null }) ] }}"
+        }
+      },
+      "id": "aacf5cee-1ae9-4e36-b7ad-c3779dfb6527",
+      "name": "Audit Success",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2032,
+        688
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Trello Event Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Evento Trello",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Evento Trello": {
+      "main": [
+        [
+          {
+            "node": "IF Evento Trello Relevante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Evento Trello Relevante": {
+      "main": [
+        [
+          {
+            "node": "PG Insert Inbox Trello",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resp Trello Ignorado",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Audit Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PG Insert Inbox Trello": {
+      "main": [
+        [
+          {
+            "node": "IF Inbox Trello Nuevo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Inbox Trello Nuevo": {
+      "main": [
+        [
+          {
+            "node": "PG Insert Evento Trello",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Resp Trello Procesado",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Audit Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resp Trello Duplicado",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Audit Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "9cceca4e-129e-4f6c-a1af-f208ecff8f6e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "GmfJjSBAgedWN4Fd",
+  "tags": []
+}

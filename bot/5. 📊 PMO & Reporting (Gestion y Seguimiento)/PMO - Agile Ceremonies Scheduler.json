@@ -1,0 +1,116 @@
+{
+  "name": "PMO - Agile Ceremonies Scheduler",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 9 * * 5" }] } },
+      "id": "cron-stakeholder",
+      "name": "Every Friday 9am - Stakeholder",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 10 1 * *" }] } },
+      "id": "cron-agile",
+      "name": "1st of Month 10am - Retro",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 200]
+    },
+    {
+      "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 8 * * 1" }] } },
+      "id": "cron-finops",
+      "name": "Every Monday 8am - FinOps",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 400]
+    },
+    {
+      "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 8 * * 3" }] } },
+      "id": "cron-capacity",
+      "name": "Every Wednesday 8am - Capacity",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 600]
+    },
+    {
+      "parameters": { "jsCode": "return [{ json: { correlation_id: `stakeholder-auto-${Date.now()}`, event_type: 'stakeholder_report', actor: 'scheduler', payload: 'reporte ejecutivo semanal automatico', trigger_mode: 'auto' } }];" },
+      "id": "prep-stakeholder",
+      "name": "Prep Stakeholder Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": { "jsCode": "return [{ json: { correlation_id: `retro-auto-${Date.now()}`, event_type: 'retrospectiva_mensual', actor: 'scheduler', payload: 'retrospectiva mensual automatica agile coach', trigger_mode: 'retro' } }];" },
+      "id": "prep-retro",
+      "name": "Prep Retro Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 200]
+    },
+    {
+      "parameters": { "jsCode": "return [{ json: { correlation_id: `finops-auto-${Date.now()}`, event_type: 'finops_report', actor: 'scheduler', payload: 'reporte financiero semanal automatico' } }];" },
+      "id": "prep-finops",
+      "name": "Prep FinOps Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 400]
+    },
+    {
+      "parameters": { "jsCode": "return [{ json: { correlation_id: `capacity-auto-${Date.now()}`, event_type: 'capacity_forecast', actor: 'scheduler', payload: 'proyeccion de capacidad bisemanal automatica' } }];" },
+      "id": "prep-capacity",
+      "name": "Prep Capacity Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 600]
+    },
+    {
+      "parameters": { "workflowId": { "__rl": true, "value": "stakeholder-liaison-wf", "mode": "id" }, "options": {} },
+      "id": "run-stakeholder",
+      "name": "Run Stakeholder Liaison",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [440, 0]
+    },
+    {
+      "parameters": { "workflowId": { "__rl": true, "value": "agile-coach-wf", "mode": "id" }, "options": {} },
+      "id": "run-agile",
+      "name": "Run Agile Coach",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [440, 200]
+    },
+    {
+      "parameters": { "workflowId": { "__rl": true, "value": "finops-wf", "mode": "id" }, "options": {} },
+      "id": "run-finops",
+      "name": "Run FinOps",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [440, 400]
+    },
+    {
+      "parameters": { "workflowId": { "__rl": true, "value": "capacity-forecaster-wf", "mode": "id" }, "options": {} },
+      "id": "run-capacity",
+      "name": "Run Capacity Forecaster",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [440, 600]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every Friday 9am - Stakeholder": { "main": [[{ "node": "Prep Stakeholder Event", "type": "main", "index": 0 }]] },
+    "1st of Month 10am - Retro": { "main": [[{ "node": "Prep Retro Event", "type": "main", "index": 0 }]] },
+    "Every Monday 8am - FinOps": { "main": [[{ "node": "Prep FinOps Event", "type": "main", "index": 0 }]] },
+    "Every Wednesday 8am - Capacity": { "main": [[{ "node": "Prep Capacity Event", "type": "main", "index": 0 }]] },
+    "Prep Stakeholder Event": { "main": [[{ "node": "Run Stakeholder Liaison", "type": "main", "index": 0 }]] },
+    "Prep Retro Event": { "main": [[{ "node": "Run Agile Coach", "type": "main", "index": 0 }]] },
+    "Prep FinOps Event": { "main": [[{ "node": "Run FinOps", "type": "main", "index": 0 }]] },
+    "Prep Capacity Event": { "main": [[{ "node": "Run Capacity Forecaster", "type": "main", "index": 0 }]] }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1", "binaryMode": "separate", "errorWorkflow": "O4qJYNx2qDrWB3wt" },
+  "meta": { "templateCredsSetupCompleted": true, "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5" },
+  "tags": []
+}

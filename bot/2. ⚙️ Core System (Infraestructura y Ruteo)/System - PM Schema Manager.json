@@ -1,0 +1,119 @@
+{
+  "name": "System - PM Schema Manager",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "schema-trigger",
+      "name": "When clicking \"Execute\"",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- PM Schema Manager: creates/validates all PM tables\n-- Run this workflow once on setup or whenever schema changes needed\n\n-- 1. PM Tasks\nCREATE TABLE IF NOT EXISTS pm_tareas (\n  id bigserial PRIMARY KEY,\n  titulo text NOT NULL,\n  descripcion text,\n  responsable text,\n  prioridad text NOT NULL DEFAULT 'media' CHECK (prioridad IN ('baja','media','alta','critica')),\n  estado text NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','en_progreso','bloqueada','en_revision','completada','cancelada')),\n  fecha_limite date,\n  entregable text,\n  sprint text,\n  canal_origen text,\n  creado_por text NOT NULL DEFAULT 'system',\n  trello_card_id text,\n  github_issue_id text,\n  fecha_creacion timestamptz NOT NULL DEFAULT NOW(),\n  fecha_actualizacion timestamptz NOT NULL DEFAULT NOW()\n);\nCREATE INDEX IF NOT EXISTS idx_pm_tareas_estado ON pm_tareas(estado);\nCREATE INDEX IF NOT EXISTS idx_pm_tareas_responsable ON pm_tareas(responsable);\nCREATE INDEX IF NOT EXISTS idx_pm_tareas_prioridad ON pm_tareas(prioridad);\n\n-- 2. PM Avances\nCREATE TABLE IF NOT EXISTS pm_avances (\n  id bigserial PRIMARY KEY,\n  tarea_id bigint REFERENCES pm_tareas(id) ON DELETE SET NULL,\n  responsable text NOT NULL,\n  descripcion text NOT NULL,\n  porcentaje integer DEFAULT 0 CHECK (porcentaje >= 0 AND porcentaje <= 100),\n  bloqueos_reportados text,\n  fecha timestamptz NOT NULL DEFAULT NOW()\n);\nCREATE INDEX IF NOT EXISTS idx_pm_avances_fecha ON pm_avances(fecha);\n\n-- 3. PM Bloqueos\nCREATE TABLE IF NOT EXISTS pm_bloqueos (\n  id bigserial PRIMARY KEY,\n  descripcion text NOT NULL,\n  responsable_afectado text,\n  tarea_id bigint REFERENCES pm_tareas(id) ON DELETE SET NULL,\n  severidad text NOT NULL DEFAULT 'media' CHECK (severidad IN ('baja','media','alta','critica')),\n  estado text NOT NULL DEFAULT 'abierto' CHECK (estado IN ('abierto','en_proceso','resuelto')),\n  accion_recomendada text,\n  resolucion text,\n  creado_por text,\n  fecha_creacion timestamptz NOT NULL DEFAULT NOW(),\n  fecha_resolucion timestamptz\n);\nCREATE INDEX IF NOT EXISTS idx_pm_bloqueos_estado ON pm_bloqueos(estado);\n\n-- 4. PM Riesgos\nCREATE TABLE IF NOT EXISTS pm_riesgos (\n  id bigserial PRIMARY KEY,\n  descripcion text NOT NULL,\n  probabilidad text NOT NULL DEFAULT 'media' CHECK (probabilidad IN ('baja','media','alta')),\n  impacto text NOT NULL DEFAULT 'medio' CHECK (impacto IN ('bajo','medio','alto','critico')),\n  prioridad_calculada text,\n  mitigacion text,\n  estado text NOT NULL DEFAULT 'abierto' CHECK (estado IN ('abierto','mitigado','cerrado')),\n  responsable text,\n  creado_por text,\n  fecha_creacion timestamptz NOT NULL DEFAULT NOW(),\n  fecha_actualizacion timestamptz NOT NULL DEFAULT NOW()\n);\nCREATE INDEX IF NOT EXISTS idx_pm_riesgos_estado ON pm_riesgos(estado);\n\n-- 5. PM Decisiones\nCREATE TABLE IF NOT EXISTS pm_decisiones (\n  id bigserial PRIMARY KEY,\n  decision text NOT NULL,\n  contexto text,\n  justificacion text,\n  responsable text NOT NULL,\n  impacto text,\n  creado_por text,\n  fecha timestamptz NOT NULL DEFAULT NOW()\n);\n\n-- 6. PM Entregables\nCREATE TABLE IF NOT EXISTS pm_entregables (\n  id bigserial PRIMARY KEY,\n  nombre text NOT NULL,\n  responsable text,\n  estado text NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','en_progreso','en_revision','entregado','aprobado')),\n  fecha_limite date,\n  version text DEFAULT '1.0',\n  enlace text,\n  observaciones text,\n  tipo text DEFAULT 'tecnico' CHECK (tipo IN ('tecnico','academico','documentacion','prototipo','informe')),\n  creado_por text,\n  fecha_creacion timestamptz NOT NULL DEFAULT NOW(),\n  fecha_actualizacion timestamptz NOT NULL DEFAULT NOW()\n);\nCREATE INDEX IF NOT EXISTS idx_pm_entregables_estado ON pm_entregables(estado);\n\n-- 7. PM Retrospectivas\nCREATE TABLE IF NOT EXISTS pm_retrospectivas (\n  id bigserial PRIMARY KEY,\n  sprint text,\n  tipo text NOT NULL CHECK (tipo IN ('bien','mejorar','accion')),\n  descripcion text NOT NULL,\n  responsable text,\n  estado text DEFAULT 'pendiente',\n  creado_por text,\n  fecha timestamptz NOT NULL DEFAULT NOW()\n);\n\n-- 8. PM Reuniones (acuerdos y compromisos)\nCREATE TABLE IF NOT EXISTS pm_reuniones (\n  id bigserial PRIMARY KEY,\n  titulo text NOT NULL,\n  tipo text DEFAULT 'seguimiento',\n  fecha_reunion timestamptz,\n  participantes text[],\n  agenda text,\n  acuerdos text,\n  compromisos text,\n  decisiones text,\n  acta text,\n  estado text DEFAULT 'programada' CHECK (estado IN ('programada','en_curso','completada','cancelada')),\n  creado_por text,\n  fecha_creacion timestamptz NOT NULL DEFAULT NOW()\n);\n\n-- 9. PM Command Log (audit trail of all bot interactions)\nCREATE TABLE IF NOT EXISTS pm_command_log (\n  id bigserial PRIMARY KEY,\n  comando text,\n  intencion text,\n  usuario text,\n  canal text,\n  datos_extraidos jsonb,\n  respuesta_bot text,\n  exito boolean DEFAULT true,\n  fecha timestamptz NOT NULL DEFAULT NOW()\n);\nCREATE INDEX IF NOT EXISTS idx_pm_command_log_fecha ON pm_command_log(fecha);\n\n-- 10. PM Bot errors\nCREATE TABLE IF NOT EXISTS pm_bot_errors (\n  id bigserial PRIMARY KEY,\n  workflow_name text,\n  node_name text,\n  error_message text,\n  execution_id text,\n  payload jsonb,\n  fecha timestamptz NOT NULL DEFAULT NOW()\n);\nCREATE INDEX IF NOT EXISTS idx_pm_bot_errors_fecha ON pm_bot_errors(fecha);\n\n\n\n\n\n-- Ensure existing tables exist too\nCREATE TABLE IF NOT EXISTS finops_budget_snapshots (\n  id bigserial PRIMARY KEY,\n  fecha timestamptz NOT NULL DEFAULT NOW(),\n  presupuesto_total numeric(10,2),\n  gastado_total numeric(10,2),\n  semaforo text,\n  detalle jsonb\n);\nCREATE TABLE IF NOT EXISTS finops_team_rates (\n  id bigserial PRIMARY KEY,\n  miembro text NOT NULL UNIQUE,\n  rol text NOT NULL,\n  tarifa_hora numeric(6,2) NOT NULL,\n  horas_semana numeric(4,1) NOT NULL DEFAULT 8,\n  activo boolean NOT NULL DEFAULT true\n);\nCREATE TABLE IF NOT EXISTS team_pto (\n  id bigserial PRIMARY KEY,\n  miembro text NOT NULL,\n  fecha_inicio date NOT NULL,\n  fecha_fin date NOT NULL,\n  motivo text DEFAULT 'PTO',\n  registrado_por text DEFAULT 'system',\n  registrado_at timestamptz NOT NULL DEFAULT NOW()\n);\nCREATE TABLE IF NOT EXISTS capacity_forecasts (\n  id bigserial PRIMARY KEY,\n  fecha timestamptz NOT NULL DEFAULT NOW(),\n  velocidad_actual numeric(5,2),\n  capacidad_pct numeric(5,2),\n  tareas_pendientes integer,\n  dias_estimados_cierre integer,\n  riesgo_fecha text,\n  ia_diagnostico text\n);\nCREATE TABLE IF NOT EXISTS qa_quality_snapshots (\n  id bigserial PRIMARY KEY,\n  fecha timestamptz NOT NULL DEFAULT NOW(),\n  bugs_abiertos integer,\n  semaforo text,\n  deuda_tecnica_score numeric(5,2),\n  kpis jsonb\n);\n\nSELECT 'PM Schema Manager: All tables created/validated successfully' AS result;",
+        "options": {}
+      },
+      "id": "schema-create",
+      "name": "Create PM Tables",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Seed initial entregables for PetSafe project\nINSERT INTO pm_entregables (nombre, responsable, estado, fecha_limite, tipo, observaciones) VALUES\n  ('Project Charter', 'Bonilla Joel', 'entregado', '2026-02-14', 'documentacion', 'Documento base del proyecto'),\n  ('Planificación del Cronograma', 'Bonilla Joel', 'entregado', '2026-02-21', 'documentacion', 'Cronograma de 16 semanas'),\n  ('Matriz de Proveedores', 'Bonilla Joel', 'entregado', '2026-02-28', 'documentacion', 'Evaluación y adjudicación de VPS'),\n  ('Contrato VPS Contabo', 'Bonilla Joel', 'entregado', '2026-03-07', 'documentacion', 'Contrato de servicios cloud'),\n  ('Documentación Técnica Backend', 'García Josué', 'en_progreso', '2026-05-30', 'tecnico', 'API docs, arquitectura NestJS'),\n  ('Documentación Técnica Frontend', 'Barragán David', 'en_progreso', '2026-05-30', 'tecnico', 'Componentes Angular, guía UI'),\n  ('Prototipo Funcional Backend', 'García Josué', 'en_progreso', '2026-05-23', 'prototipo', 'API REST completa con tests'),\n  ('Prototipo Funcional Frontend', 'Manjarres David', 'en_progreso', '2026-05-23', 'prototipo', 'UI completa con integración API'),\n  ('Informe Final del Proyecto', 'Bonilla Joel', 'pendiente', '2026-06-10', 'informe', 'Informe final académico'),\n  ('Pruebas de Integración', 'García Josué', 'en_progreso', '2026-06-01', 'tecnico', 'E2E tests y validación'),\n  ('Manual de Usuario', 'Manjarres David', 'pendiente', '2026-06-05', 'documentacion', 'Guía para el cliente')\nON CONFLICT DO NOTHING;\n\nSELECT 'Seed data inserted' AS result;",
+        "options": {}
+      },
+      "id": "schema-seed",
+      "name": "Seed Entregables",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        440,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { status: 'ok', message: 'PM Schema Manager ejecutado exitosamente. Todas las tablas PM creadas/validadas.', tables: ['pm_tareas','pm_avances','pm_bloqueos','pm_riesgos','pm_decisiones','pm_entregables','pm_retrospectivas','pm_reuniones','pm_command_log','finops_budget_snapshots','finops_team_rates','team_pto','capacity_forecasts','qa_quality_snapshots'], timestamp: new Date().toISOString() } }];"
+      },
+      "id": "schema-result",
+      "name": "Schema Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking \"Execute\"": {
+      "main": [
+        [
+          {
+            "node": "Create PM Tables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create PM Tables": {
+      "main": [
+        [
+          {
+            "node": "Seed Entregables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Seed Entregables": {
+      "main": [
+        [
+          {
+            "node": "Schema Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "wf-pm-error-handler"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "tags": [],
+  "id": "wf-pm-schema-manager"
+}

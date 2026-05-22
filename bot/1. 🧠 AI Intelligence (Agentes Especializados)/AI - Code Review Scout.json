@@ -1,0 +1,169 @@
+{
+  "name": "AI - Code Review Scout",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "16e9bac9-5c63-4539-9df2-2ff112b983ac",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        144,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $json || {};\nconst rawPayload = event.payload;\nconst parsedPayload = typeof rawPayload === 'string'\n  ? (() => { try { return JSON.parse(rawPayload); } catch(e) { return {}; } })()\n  : (rawPayload || {});\nconst body = parsedPayload.body || parsedPayload;\nconst normalized = event.normalized || body.normalized || {};\nconst pr = body.pull_request || parsedPayload.pull_request || {};\nconst repoObj = body.repository || parsedPayload.repository || {};\n\nconst prNumber = pr.number || body.number || normalized.pull_request_number || event.pull_request_number || null;\nconst repoFullName = repoObj.full_name || normalized.repo || event.repo || repoObj.name || 'unknown_repo';\nconst repo = repoObj.name || String(repoFullName).split('/').pop() || 'unknown_repo';\nconst title = pr.title || body.title || normalized.title || 'Unknown title';\nconst description = pr.body || body.body || 'No description provided';\nconst actor = event.actor || body.sender?.login || parsedPayload.actor || 'system';\nconst branch = pr.head?.ref || normalized.branch || event.branch || null;\nconst commitSha = pr.head?.sha || normalized.commit_sha || event.commit_sha || null;\nconst prUrl = pr.html_url || normalized.url || event.url || null;\n\nreturn [{\n  json: {\n    correlation_id: event.correlation_id || `crs-${Date.now()}`,\n    source: event.source || 'github',\n    event_type: event.event_type || normalized.event_type || 'code_review',\n    actor,\n    repo,\n    repo_full_name: repoFullName,\n    pr_number: prNumber,\n    pr_url: prUrl,\n    branch,\n    commit_sha: commitSha,\n    title,\n    body: description,\n    is_pr: Boolean(prNumber || pr.html_url),\n    raw_event: event\n  }\n}];"
+      },
+      "id": "e845b8fd-8b56-4524-b1e5-8cd36807e215",
+      "name": "Extract PR Details",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Eres el Code Review Scout de PetSafe. Un desarrollador (' + $json.actor + ') acaba de abrir/modificar un Pull Request en el repositorio: ' + $json.repo + '\\n\\nTítulo: ' + $json.title + '\\nDescripción: ' + $json.body + '\\n\\nTu misión: Analiza rápidamente la calidad de la descripción, posibles riesgos implícitos en el título y si cumple las convenciones (ej. conventional commits). Si la descripción está vacía, es un riesgo alto de falta de contexto.\\n\\nResponde SOLO con JSON válido, sin markdown, sin ``` y sin texto adicional:\\n{\\n  \"evaluation\": \"Tu análisis completo y constructivo\",\\n  \"risk_level\": \"low|medium|high\",\\n  \"suggested_comment\": \"Un comentario amigable pero firme para dejar en GitHub/Discord\",\\n  \"requires_human_approval\": false\\n}' }}"
+      },
+      "id": "d8725e6d-b39d-4b5a-b98f-9c01c182d026",
+      "name": "Gemini PR Reviewer",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        544,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "1cdae668-3fb3-4694-ab9e-ce68d16a97cb",
+      "name": "Google Gemini Model Pro",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        544,
+        -96
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "O6F3cHruroRP0y6x",
+          "name": "Gemini - Jos"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\nlet raw = input.text ?? input.output ?? input.response ?? input.result ?? input;\n\nif (typeof raw !== 'string') {\n  raw = JSON.stringify(raw || {});\n}\n\nraw = raw.trim().replace(/^```(?:json)?\\s*/i, '').replace(/```$/i, '').trim();\nconst start = raw.indexOf('{');\nconst end = raw.lastIndexOf('}');\nif (start !== -1 && end !== -1 && end > start) raw = raw.slice(start, end + 1);\n\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (error) {\n  parsed = {\n    evaluation: raw,\n    risk_level: 'medium',\n    suggested_comment: 'No pude parsear la respuesta del modelo como JSON estricto. Revisar manualmente.',\n    requires_human_approval: true,\n    parse_error: error.message\n  };\n}\n\nconst ctx = $('Extract PR Details').item.json;\nconst risk = ['low', 'medium', 'high'].includes(String(parsed.risk_level || '').toLowerCase())\n  ? String(parsed.risk_level).toLowerCase()\n  : 'medium';\n\nreturn [{\n  json: {\n    correlation_id: ctx.correlation_id,\n    agent_role: 'Code Review Scout',\n    decision_type: 'code_review',\n    input_summary: `PR ${ctx.pr_number ? '#' + ctx.pr_number + ' ' : ''}${ctx.title} in ${ctx.repo_full_name}`,\n    context_used: {\n      source: ctx.source,\n      event_type: ctx.event_type,\n      actor: ctx.actor,\n      repo: ctx.repo_full_name,\n      pr_number: ctx.pr_number,\n      pr_url: ctx.pr_url,\n      branch: ctx.branch,\n      commit_sha: ctx.commit_sha,\n      title: ctx.title,\n      body: ctx.body\n    },\n    evidence: {\n      model_output: parsed,\n      parse_error: parsed.parse_error || null\n    },\n    decision: {\n      evaluation: parsed.evaluation || 'Sin evaluación generada',\n      suggested_comment: parsed.suggested_comment || 'Revisar manualmente este PR.'\n    },\n    recommendation: parsed.suggested_comment || parsed.evaluation || 'Revisar manualmente este PR.',\n    confidence: parsed.confidence || 0.75,\n    risk_level: risk,\n    requires_human_approval: Boolean(parsed.requires_human_approval || risk === 'high')\n  }\n}];"
+      },
+      "id": "77c5f640-65d3-4c19-a6b1-3c381167f640",
+      "name": "Parse Review JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wcNFn0XHidnGmrHg",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/wcNFn0XHidnGmrHg",
+          "cachedResultName": "System - AI Decision Logger"
+        },
+        "options": {}
+      },
+      "id": "b4d797c2-8d31-4f6f-b191-bb4e0fdb0c54",
+      "name": "Log AI Decision",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        1232,
+        -288
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract PR Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PR Details": {
+      "main": [
+        [
+          {
+            "node": "Gemini PR Reviewer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini PR Reviewer": {
+      "main": [
+        [
+          {
+            "node": "Parse Review JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Review JSON": {
+      "main": [
+        [
+          {
+            "node": "Log AI Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Model Pro": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Gemini PR Reviewer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "b1f29c56-5fef-4296-b28c-e3591f93ecdb",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "DQlNLv1Ok6V5TXVb",
+  "tags": []
+}

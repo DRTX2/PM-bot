@@ -1,0 +1,222 @@
+{
+  "name": "AI - QA Quality Lead",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "qa-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [0, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Ensure snapshot table exists\nCREATE TABLE IF NOT EXISTS qa_quality_snapshots (\n  id bigserial PRIMARY KEY,\n  fecha timestamptz NOT NULL DEFAULT NOW(),\n  repo text NOT NULL,\n  bugs_abiertos integer NOT NULL DEFAULT 0,\n  prs_rechazados_30d integer NOT NULL DEFAULT 0,\n  bug_reopen_rate_pct numeric(5,2) NOT NULL DEFAULT 0,\n  pct_commits_convencionales numeric(5,2) NOT NULL DEFAULT 0,\n  ci_failures_14d integer NOT NULL DEFAULT 0,\n  semaforo text NOT NULL DEFAULT 'gris',\n  deuda_tecnica_score numeric(5,2) NOT NULL DEFAULT 0,\n  ia_diagnostico text,\n  kpis jsonb\n);\n-- Bug reopen: cards Trello que tienen historial Done -> activo\nSELECT\n  COUNT(*) FILTER (WHERE lista_nombre ILIKE '%done%' OR lista_nombre ILIKE '%completad%') AS total_done_cards,\n  COUNT(*) FILTER (WHERE completada = false AND lista_nombre NOT ILIKE '%done%' AND id IN (\n    SELECT DISTINCT et2.id FROM estado_tareas et2\n    WHERE et2.completada = true\n  )) AS reopen_cards,\n  COUNT(*) AS total_cards,\n  (SELECT COUNT(*) FROM workflow_runs_audit WHERE status = 'error' AND completed_at > NOW() - INTERVAL '14 days') AS workflow_errors_14d,\n  (SELECT COUNT(*) FROM ai_decisions WHERE risk_level = 'high' AND created_at > NOW() - INTERVAL '30 days') AS high_risk_decisions_30d,\n  (SELECT recomendaciones_ia FROM analisis_proyecto ORDER BY id DESC LIMIT 1) AS last_ia_recomendaciones,\n  (SELECT kpis FROM analisis_proyecto ORDER BY id DESC LIMIT 1) AS kpis,\n  (SELECT github FROM analisis_proyecto ORDER BY id DESC LIMIT 1) AS github_data,\n  (SELECT progreso_pct FROM analisis_proyecto ORDER BY id DESC LIMIT 1) AS progreso_pct\nFROM estado_tareas;",
+        "options": {}
+      },
+      "id": "qa-fetch-pg",
+      "name": "Fetch QA Data from PG",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [220, 400],
+      "credentials": { "postgres": { "id": "upx1y0H6Nw7XOqLJ", "name": "Postgres account" } }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/STRATIUM-UTA/PetSafe-Back/issues?state=open&labels=bug&per_page=50",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.GITHUB_TOKEN_BACKEND || $env.GITHUB_TOKEN }}" },
+            { "name": "Accept", "value": "application/vnd.github+json" },
+            { "name": "X-GitHub-Api-Version", "value": "2022-11-28" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "qa-github-bugs-back",
+      "name": "GitHub Bug Issues Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 200],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/JosueGarciaAbata/PetSafe-Front/issues?state=open&labels=bug&per_page=50",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.GITHUB_TOKEN_FRONTEND || $env.GITHUB_TOKEN }}" },
+            { "name": "Accept", "value": "application/vnd.github+json" },
+            { "name": "X-GitHub-Api-Version", "value": "2022-11-28" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "qa-github-bugs-front",
+      "name": "GitHub Bug Issues Frontend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 600],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/STRATIUM-UTA/PetSafe-Back/pulls?state=closed&per_page=30",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.GITHUB_TOKEN_BACKEND || $env.GITHUB_TOKEN }}" },
+            { "name": "Accept", "value": "application/vnd.github+json" },
+            { "name": "X-GitHub-Api-Version", "value": "2022-11-28" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "qa-github-prs-back",
+      "name": "GitHub Closed PRs Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 200],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/JosueGarciaAbata/PetSafe-Front/pulls?state=closed&per_page=30",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.GITHUB_TOKEN_FRONTEND || $env.GITHUB_TOKEN }}" },
+            { "name": "Accept", "value": "application/vnd.github+json" },
+            { "name": "X-GitHub-Api-Version", "value": "2022-11-28" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "qa-github-prs-front",
+      "name": "GitHub Closed PRs Frontend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 600],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $('Execute Workflow Trigger').item.json;\nconst pgRow = $('Fetch QA Data from PG').item.json || {};\nconst safeArr = v => Array.isArray(v) ? v : [];\nconst safeObj = v => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};\n\n// GitHub data\nconst bugsBack = safeArr($('GitHub Bug Issues Backend').item.json);\nconst bugsFront = safeArr($('GitHub Bug Issues Frontend').item.json);\nconst prsBack = safeArr($('GitHub Closed PRs Backend').item.json);\nconst prsFront = safeArr($('GitHub Closed PRs Frontend').item.json);\n\nconst bugsBackCount = bugsBack.filter(i => !i.pull_request).length;\nconst bugsFrontCount = bugsFront.filter(i => !i.pull_request).length;\nconst totalBugsAbiertos = bugsBackCount + bugsFrontCount;\n\n// PRs rechazados (cerrados sin merge) en últimos 30d\nconst cutoff30d = new Date(Date.now() - 30 * 86400000);\nconst prsRechazadosBack = prsBack.filter(pr => !pr.merged_at && new Date(pr.closed_at) > cutoff30d).length;\nconst prsRechazadosFront = prsFront.filter(pr => !pr.merged_at && new Date(pr.closed_at) > cutoff30d).length;\nconst totalPrsRechazados = prsRechazadosBack + prsRechazadosFront;\n\n// PR avg review time (merged PRs)\nconst allMergedPrs = [...prsBack, ...prsFront].filter(pr => pr.merged_at);\nconst avgReviewHours = allMergedPrs.length > 0\n  ? allMergedPrs.reduce((sum, pr) => {\n      const created = new Date(pr.created_at);\n      const merged = new Date(pr.merged_at);\n      return sum + (merged - created) / 3600000;\n    }, 0) / allMergedPrs.length\n  : 0;\n\n// Bugs críticos: los que tienen label 'critical' o 'high'\nconst bugsCriticosBack = bugsBack.filter(i => !i.pull_request && i.labels?.some(l => /critical|high|blocker/.test(l.name?.toLowerCase())));\nconst bugsCriticosFront = bugsFront.filter(i => !i.pull_request && i.labels?.some(l => /critical|high|blocker/.test(l.name?.toLowerCase())));\nconst totalBugsCriticos = bugsCriticosBack.length + bugsCriticosFront.length;\n\n// Bug list detallado (top 5 más antiguos)\nconst allBugs = [\n  ...bugsBack.filter(i => !i.pull_request).map(b => ({ ...b, repo: 'Backend' })),\n  ...bugsFront.filter(i => !i.pull_request).map(b => ({ ...b, repo: 'Frontend' }))\n].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));\nconst topBugs = allBugs.slice(0, 6).map(b => {\n  const diasAbierto = Math.floor((Date.now() - new Date(b.created_at)) / 86400000);\n  const esCritico = b.labels?.some(l => /critical|high|blocker/.test(l.name?.toLowerCase()));\n  return `${esCritico ? '🔴' : '🟡'} [${b.repo}] #${b.number} ${b.title?.slice(0, 60)} — ${diasAbierto}d abierto — asignado: ${b.assignee?.login || 'nadie'}`;\n}).join('\\n') || '(ninguno)';\n\n// PG data\nconst kpis = safeObj(pgRow.kpis);\nconst github = safeObj(pgRow.github_data);\nconst totalDone = Number(pgRow.total_done_cards || 0);\nconst reopenCards = Number(pgRow.reopen_cards || 0);\nconst totalCards = Number(pgRow.total_cards || 1);\nconst workflowErrors14d = Number(pgRow.workflow_errors_14d || 0);\nconst highRisk30d = Number(pgRow.high_risk_decisions_30d || 0);\nconst progreso = Number(pgRow.progreso_pct || 0);\nconst pctConv = Number(kpis.pct_commits_convencionales || 0);\nconst busF = Number(kpis.bus_factor_14d || 0);\nconst prMergeRatio = Number(kpis.pr_merge_ratio_30d || 0);\nconst ciBack = safeObj(github.ci_back);\nconst ciFront = safeObj(github.ci_front);\nconst ciFailed14d = (ciBack.status === 'failure' ? 1 : 0) + (ciFront.status === 'failure' ? 1 : 0);\n\n// Bug Reopen Rate\nconst bugReopenRate = totalDone > 0 ? Number(((reopenCards / totalDone) * 100).toFixed(2)) : 0;\n\n// Deuda técnica score (0-100, mayor = peor)\nlet deudaScore = 0;\ndeudaScore += Math.min(totalBugsAbiertos * 5, 30);         // max 30 pts por bugs\ndeudaScore += Math.min(totalPrsRechazados * 4, 20);        // max 20 pts por PRs rechazados\ndeudaScore += Math.min(bugReopenRate * 0.5, 15);           // max 15 pts reopen rate\ndeudaScore += Math.min(totalBugsCriticos * 8, 20);         // max 20 pts bugs críticos\ndeudaScore += pctConv < 30 ? 10 : pctConv < 60 ? 5 : 0;  // conv commits\ndeudaScore += busF <= 1 ? 5 : 0;                           // bus factor\ndeudaScore = Math.min(Number(deudaScore.toFixed(2)), 100);\n\n// Semáforo QA\nlet semaforo = 'verde';\nif (deudaScore >= 50 || totalBugsCriticos >= 2 || bugReopenRate >= 20) semaforo = 'rojo';\nelse if (deudaScore >= 25 || totalBugsAbiertos >= 5 || totalPrsRechazados >= 3) semaforo = 'amarillo';\n\n// Snapshot histórico comparativo\nconst historyQuery = `SELECT fecha, bugs_abiertos, deuda_tecnica_score, semaforo FROM qa_quality_snapshots ORDER BY id DESC LIMIT 3`;\n\nconst ciBackStr = ciBack.status ? `${ciBack.status} en ${ciBack.branch} (${(ciBack.date||'').slice(0,10)})` : 'sin datos';\nconst ciFrontStr = ciFront.status ? `${ciFront.status} en ${ciFront.branch} (${(ciFront.date||'').slice(0,10)})` : 'sin datos';\n\nconst prompt = `Eres el QA Quality Lead del proyecto PetSafe (NestJS backend + Angular frontend, cierre 10-jun-2026). Analiza los datos de calidad del sistema y genera un diagnóstico técnico accionable en español, texto plano, SIN markdown, SIN asteriscos.\n\nDATA DE CALIDAD ACTUAL:\nBugs abiertos: ${totalBugsAbiertos} (Backend: ${bugsBackCount}, Frontend: ${bugsFrontCount})\nBugs críticos (alta prioridad): ${totalBugsCriticos}\nPRs rechazados últimos 30d: ${totalPrsRechazados}\nBug Reopen Rate: ${bugReopenRate}% (${reopenCards} cards regresaron de Done)\nTiempo promedio de review de PRs merged: ${avgReviewHours.toFixed(1)}h\nErrores de sistema/workflow 14d: ${workflowErrors14d}\nDecisiones de alto riesgo 30d: ${highRisk30d}\nCI Backend: ${ciBackStr}\nCI Frontend: ${ciFrontStr}\nConvención de commits: ${pctConv}%\nBus Factor 14d: ${busF} (autores distintos con commits)\nMerge ratio PRs 30d: ${prMergeRatio}%\nProgreso del proyecto: ${progreso}%\nScore de Deuda Técnica: ${deudaScore}/100 (mayor = peor)\nSemáforo QA: ${semaforo.toUpperCase()}\n\nTOP BUGS MÁS ANTIGUOS:\n${topBugs}\n\nEstructura obligatoria (máx 3 oraciones por sección):\nSALUD QA: Estado general (${semaforo}) con justificación numérica.\nBUGS CRÍTICOS: Análisis de los bugs de mayor antigüedad o severidad. Menciona si alguno bloquea el cierre del proyecto.\nDEUDA TÉCNICA: Qué generó la deuda (PRs rechazados, bugs sin cerrar, baja cobertura de convenciones).\nRIESGOS DE CALIDAD: Top 2 riesgos específicos para la fecha de entrega.\nACCIONES: 3 acciones concretas asignadas por nombre del equipo (FG, DM, DP, JA) con criterio de done claro.`;\n\nreturn [{ json: {\n  correlation_id: event.correlation_id || `qa-${Date.now()}`,\n  event_type: event.event_type || 'qa_review',\n  actor: event.actor || 'system',\n  prompt,\n  // Métricas para persistir\n  metrics: {\n    bugs_abiertos: totalBugsAbiertos,\n    bugs_criticos: totalBugsCriticos,\n    prs_rechazados_30d: totalPrsRechazados,\n    bug_reopen_rate_pct: bugReopenRate,\n    pct_commits_convencionales: pctConv,\n    ci_failures: ciFailed14d,\n    semaforo,\n    deuda_tecnica_score: deudaScore,\n    avg_review_hours: Number(avgReviewHours.toFixed(1)),\n    top_bugs: topBugs\n  },\n  semaforo,\n  deudaScore,\n  totalBugsAbiertos,\n  totalBugsCriticos,\n  topBugs\n}}];"
+      },
+      "id": "qa-build-context",
+      "name": "Build QA Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 400]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}"
+      },
+      "id": "qa-chain",
+      "name": "Gemini QA Analyst",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [880, 400]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": { "temperature": 0.2 }
+      },
+      "id": "qa-model",
+      "name": "Google Gemini Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [880, 608],
+      "credentials": { "googlePalmApi": { "id": "O6F3cHruroRP0y6x", "name": "Gemini - Jos" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.text ?? $json.output ?? $json.response ?? '';\nconst iaText = typeof raw === 'string' ? raw.trim() : JSON.stringify(raw);\nconst ctx = $('Build QA Context').item.json;\nconst m = ctx.metrics || {};\n\nconst semE = { verde: '🟢', amarillo: '🟡', rojo: '🔴', gris: '⚪' }[ctx.semaforo] || '⚪';\nconst colorMap = { rojo: 15158332, amarillo: 16761095, verde: 3066993, gris: 9807270 };\nconst color = colorMap[ctx.semaforo] || 9807270;\n\nconst kpiField = [\n  `🐛 Bugs abiertos: **${m.bugs_abiertos}** (${m.bugs_criticos} críticos)`,\n  `🔄 Bug Reopen Rate: **${m.bug_reopen_rate_pct}%**`,\n  `❌ PRs rechazados 30d: **${m.prs_rechazados_30d}**`,\n  `⏱️ Avg review time: **${m.avg_review_hours}h**`,\n  `📐 Commits convencionales: **${m.pct_commits_convencionales}%**`,\n  `🏗️ Deuda técnica score: **${m.deuda_tecnica_score}/100**`\n].join('\\n');\n\nconst discord_payload = {\n  username: 'PM PetSafe · QA Lead',\n  embeds: [{\n    title: `${semE} Reporte de Calidad PetSafe · ${new Date().toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' })}`,\n    description: `Semáforo QA: **${ctx.semaforo.toUpperCase()}** · Score de deuda técnica: **${ctx.deudaScore}/100**`,\n    color,\n    fields: [\n      { name: '📊 KPIs de Calidad', value: kpiField, inline: false },\n      { name: '🐛 Top Bugs Más Antiguos', value: ctx.topBugs.slice(0, 900), inline: false },\n      { name: '🤖 Diagnóstico QA', value: iaText.slice(0, 1000), inline: false }\n    ],\n    footer: { text: 'QA Quality Lead · PM PetSafe AI' },\n    timestamp: new Date().toISOString()\n  }],\n  allowed_mentions: { parse: [] }\n};\n\nreturn [{ json: {\n  correlation_id: ctx.correlation_id,\n  agent_role: 'QA Quality Lead',\n  decision_type: 'qa_review',\n  input_summary: `QA: ${m.bugs_abiertos} bugs, deuda=${m.deuda_tecnica_score}, semaforo=${ctx.semaforo}`.slice(0,500),\n  context_used: { semaforo: ctx.semaforo, deuda_score: ctx.deudaScore },\n  evidence: { metrics: m, ia_diagnostico: iaText.slice(0,1000) },\n  decision: { semaforo: ctx.semaforo, score: ctx.deudaScore },\n  recommendation: iaText.slice(0,500),\n  confidence: 0.9,\n  risk_level: ctx.semaforo === 'rojo' ? 'high' : ctx.semaforo === 'amarillo' ? 'medium' : 'low',\n  requires_human_approval: ctx.semaforo === 'rojo' || ctx.totalBugsCriticos >= 2,\n  discord_payload,\n  metrics: m,\n  ia_text: iaText\n}}];"
+      },
+      "id": "qa-build-payload",
+      "name": "Build QA Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO qa_quality_snapshots (repo, bugs_abiertos, prs_rechazados_30d, bug_reopen_rate_pct, pct_commits_convencionales, ci_failures_14d, semaforo, deuda_tecnica_score, ia_diagnostico, kpis)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb);",
+        "options": {
+          "queryReplacement": "={{ ['petsafe-all', $json.metrics.bugs_abiertos, $json.metrics.prs_rechazados_30d, $json.metrics.bug_reopen_rate_pct, $json.metrics.pct_commits_convencionales, $json.metrics.ci_failures, $json.metrics.semaforo, $json.metrics.deuda_tecnica_score, $json.ia_text.slice(0,2000), JSON.stringify($json.metrics)] }}"
+        }
+      },
+      "id": "qa-snapshot-insert",
+      "name": "Persist QA Snapshot",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1320, 200],
+      "credentials": { "postgres": { "id": "upx1y0H6Nw7XOqLJ", "name": "Postgres account" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ai_decisions (correlation_id, agent_role, decision_type, input_summary, context_used, evidence, decision, recommendation, confidence, risk_level, requires_human_approval, status) VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12);",
+        "options": {
+          "queryReplacement": "={{ [$json.correlation_id, $json.agent_role, $json.decision_type, $json.input_summary, JSON.stringify($json.context_used), JSON.stringify($json.evidence), JSON.stringify($json.decision), $json.recommendation.slice(0,1000), $json.confidence, $json.risk_level, $json.requires_human_approval, 'logged'] }}"
+        }
+      },
+      "id": "qa-log-decision",
+      "name": "Log AI Decision",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1320, 400],
+      "credentials": { "postgres": { "id": "upx1y0H6Nw7XOqLJ", "name": "Postgres account" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.discord_payload) }}",
+        "options": {}
+      },
+      "id": "qa-discord",
+      "name": "Discord QA Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 600],
+      "continueOnFail": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [[
+        { "node": "Fetch QA Data from PG", "type": "main", "index": 0 },
+        { "node": "GitHub Bug Issues Backend", "type": "main", "index": 0 },
+        { "node": "GitHub Bug Issues Frontend", "type": "main", "index": 0 }
+      ]]
+    },
+    "GitHub Bug Issues Backend": { "main": [[{ "node": "GitHub Closed PRs Backend", "type": "main", "index": 0 }]] },
+    "GitHub Bug Issues Frontend": { "main": [[{ "node": "GitHub Closed PRs Frontend", "type": "main", "index": 0 }]] },
+    "GitHub Closed PRs Backend": { "main": [[{ "node": "Build QA Context", "type": "main", "index": 0 }]] },
+    "GitHub Closed PRs Frontend": { "main": [[{ "node": "Build QA Context", "type": "main", "index": 0 }]] },
+    "Fetch QA Data from PG": { "main": [[{ "node": "Build QA Context", "type": "main", "index": 0 }]] },
+    "Build QA Context": { "main": [[{ "node": "Gemini QA Analyst", "type": "main", "index": 0 }]] },
+    "Gemini QA Analyst": { "main": [[{ "node": "Build QA Payload", "type": "main", "index": 0 }]] },
+    "Google Gemini Model": { "ai_languageModel": [[{ "node": "Gemini QA Analyst", "type": "ai_languageModel", "index": 0 }]] },
+    "Build QA Payload": { "main": [[
+      { "node": "Persist QA Snapshot", "type": "main", "index": 0 },
+      { "node": "Log AI Decision", "type": "main", "index": 0 },
+      { "node": "Discord QA Report", "type": "main", "index": 0 }
+    ]] }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1", "binaryMode": "separate", "errorWorkflow": "O4qJYNx2qDrWB3wt" },
+  "meta": { "templateCredsSetupCompleted": true, "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5" },
+  "tags": []
+}

@@ -1,0 +1,111 @@
+{
+  "id": "wf-pm-bloqueos-riesgos",
+  "name": "WF_PM_Bloqueos_Riesgos",
+  "active": true,
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "build-br",
+      "name": "Build Bloqueo/Riesgo Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const ctx = $json;\nconst datos = ctx.datos || {};\nconst raw = String(datos.texto || datos.texto_original || ctx.mensaje_original || '');\nconst q = (v) => v === null || v === undefined || v === '' ? 'NULL' : \"'\" + String(v).replace(/'/g, \"''\") + \"'\";\nconst norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\nconst intencion = ctx.intencion;\nconst taskId = Number(datos.id || raw.match(/#?(\\d+)/)?.[1] || 0) || null;\nconst sev = ['baja','media','alta','critica'].includes(norm(datos.prioridad)) ? norm(datos.prioridad) : (/crit|urg/i.test(raw) ? 'critica' : /alta|bloquea/i.test(raw) ? 'alta' : 'media');\nconst prob = ['baja','media','alta'].includes(norm(datos.probabilidad)) ? norm(datos.probabilidad) : (/probabilidad alta|muy probable/i.test(raw) ? 'alta' : 'media');\nconst impactoRaw = norm(datos.impacto || '');\nconst impacto = ['bajo','medio','alto','critico'].includes(impactoRaw) ? impactoRaw : (/crit|grave/i.test(raw) ? 'critico' : /alto/i.test(raw) ? 'alto' : 'medio');\nconst prioMap = { 'baja-bajo': 'baja', 'baja-medio': 'baja', 'baja-alto': 'media', 'baja-critico': 'alta', 'media-bajo': 'baja', 'media-medio': 'media', 'media-alto': 'alta', 'media-critico': 'critica', 'alta-bajo': 'media', 'alta-medio': 'alta', 'alta-alto': 'critica', 'alta-critico': 'critica' };\nconst desc = raw.replace(/^\\/pm\\s+(bloqueo|riesgo)\\s+\\w+/i, '').trim() || raw;\nlet query;\nlet target;\nif (intencion === 'riesgo') {\n  target = 'DISCORD_CHANNEL_RIESGOS';\n  const prioridad = prioMap[`${prob}-${impacto}`] || 'media';\n  const mitigacion = raw.match(/mitigaci[oó]n:?\\s*([^;\\n]+)/i)?.[1]?.trim() || 'Definir mitigacion, responsable y fecha de revision.';\n  query = `INSERT INTO pm_riesgos (descripcion, probabilidad, impacto, prioridad_calculada, mitigacion, estado, responsable, creado_por)\nVALUES (${q(desc)}, ${q(prob)}, ${q(impacto)}, ${q(prioridad)}, ${q(mitigacion)}, 'abierto', ${q(datos.responsable || ctx.usuario)}, ${q(ctx.usuario)})\nRETURNING 'risk' AS action, id, descripcion, probabilidad, impacto, prioridad_calculada, mitigacion, responsable;`;\n} else {\n  target = 'DISCORD_CHANNEL_BLOQUEOS';\n  const action = raw.match(/accion:?\\s*([^;\\n]+)/i)?.[1]?.trim() || 'Asignar responsable de resolucion y revisar impacto en el plan.';\n  query = `INSERT INTO pm_bloqueos (descripcion, responsable_afectado, tarea_id, severidad, estado, accion_recomendada, creado_por)\nVALUES (${q(desc)}, ${q(datos.responsable || ctx.usuario)}, ${taskId || 'NULL'}, ${q(sev)}, 'abierto', ${q(action)}, ${q(ctx.usuario)})\nRETURNING 'blocker' AS action, id, descripcion, responsable_afectado, tarea_id, severidad, accion_recomendada;`;\n}\nreturn [{ json: { query, canal_destino: target, canal_id: process.env[target] || ctx.canal_origen } }];"
+      }
+    },
+    {
+      "id": "run-br",
+      "name": "Run Bloqueo/Riesgo Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        500,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.query }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "format-br",
+      "name": "Format Bloqueo/Riesgo Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const r = $json;\nconst ctx = $('Build Bloqueo/Riesgo Query').item.json;\nlet respuesta;\nif (r.action === 'risk') {\n  respuesta = `Riesgo registrado.\\nID: #${r.id}\\nDescripcion: ${r.descripcion}\\nProbabilidad: ${r.probabilidad}\\nImpacto: ${r.impacto}\\nPrioridad calculada: ${r.prioridad_calculada}\\nMitigacion sugerida: ${r.mitigacion}\\nProximo paso: revisar el riesgo en el siguiente reporte PM.`;\n} else {\n  respuesta = `Detecte y registre un bloqueo.\\nID: #${r.id}\\nAfectado: ${r.responsable_afectado}\\nSeveridad: ${r.severidad}\\nTarea: ${r.tarea_id ? '#' + r.tarea_id : 'sin tarea asociada'}\\nAccion recomendada: ${r.accion_recomendada}`;\n}\nreturn [{ json: { respuesta, canal_destino: ctx.canal_destino, canal_id: ctx.canal_id, storage: r.action === 'risk' ? 'postgres:pm_riesgos' : 'postgres:pm_bloqueos' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Bloqueo/Riesgo Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Bloqueo/Riesgo Query": {
+      "main": [
+        [
+          {
+            "node": "Run Bloqueo/Riesgo Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Bloqueo/Riesgo Query": {
+      "main": [
+        [
+          {
+            "node": "Format Bloqueo/Riesgo Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "wf-pm-error-handler"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  }
+}

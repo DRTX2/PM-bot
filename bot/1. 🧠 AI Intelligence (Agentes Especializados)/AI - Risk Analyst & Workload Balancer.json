@@ -1,0 +1,202 @@
+{
+  "name": "AI - Risk Analyst & Workload Balancer",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c17dfec2-7ee0-4c0c-967f-0916773bd33c",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        1296,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS estado_tareas (\n  id bigserial PRIMARY KEY,\n  analisis_id bigint,\n  fecha timestamptz NOT NULL DEFAULT NOW(),\n  card_id text NOT NULL DEFAULT 'unknown',\n  card_nombre text,\n  lista_nombre text,\n  miembro_id text,\n  miembro_nombre text,\n  fecha_vencimiento timestamptz,\n  completada boolean NOT NULL DEFAULT false,\n  tiene_adjuntos boolean NOT NULL DEFAULT false,\n  adjuntos_count integer NOT NULL DEFAULT 0\n);\nSELECT miembro_nombre, COUNT(*) as tareas_activas, MIN(fecha_vencimiento) as proximo_vencimiento\nFROM estado_tareas\nWHERE completada = false AND miembro_nombre IS NOT NULL\nGROUP BY miembro_nombre;",
+        "options": {}
+      },
+      "id": "2012fd6a-d51b-4657-ab81-806823c8f173",
+      "name": "Fetch Current WIP",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1504,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $('Execute Workflow Trigger').item.json;\nconst wip_rows = $input.all().map(item => item.json).filter(r => r && r.miembro_nombre);\nconst wip_stats = wip_rows.length > 0\n  ? JSON.stringify(wip_rows)\n  : 'No hay tareas activas registradas en estado_tareas.';\n\nreturn [{\n  json: {\n    correlation_id: event.correlation_id || `risk-${Date.now()}`,\n    event_type: event.event_type || 'workload_check',\n    actor: event.actor || 'system',\n    payload: typeof event.payload === 'string' ? event.payload : JSON.stringify(event.payload || {}),\n    wip_stats,\n    has_data: wip_rows.length > 0\n  }\n}];"
+      },
+      "id": "1cbca53d-d94b-46f1-8894-dbf1eefd9e8a",
+      "name": "Prepare Risk Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1696,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Eres el Risk Analyst & Workload Balancer de PetSafe. Tu rol es monitorear la salud del equipo, prevenir cuellos de botella (bottlenecks) y alertar sobre riesgos de entrega.\\n\\nEstado actual de carga de trabajo (WIP):\\n' + $json.wip_stats + '\\n\\nEvento que detonó este análisis:\\nTipo: ' + $json.event_type + '\\nDetalles: ' + $json.payload + '\\n\\nTu misión: Evalúa la distribución del trabajo. Identifica si alguien está sobrecargado (más de 3 tareas activas), si hay vencimientos críticos o riesgos de entrega, y genera una recomendación accionable de balanceo o mitigación.\\n\\nIMPORTANTE: responde únicamente con JSON válido. No uses markdown, no uses ```json, no agregues texto antes ni después. La respuesta debe tener exactamente esta forma:\\n{\\n  \"analysis\": \"Tu análisis de la carga y riesgos detectados\",\\n  \"risk_level\": \"low|medium|high\",\\n  \"recommendation\": \"Sugerencia de reasignación o enfoque\",\\n  \"requires_human_approval\": true\\n}' }}"
+      },
+      "id": "a95ee1e9-c53b-4ddd-9742-fcd43ca898ed",
+      "name": "Gemini Risk Analyst",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        1904,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "63f02766-896c-40ec-aef3-b0d5346921a2",
+      "name": "Google Gemini Model Pro",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1904,
+        608
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "O6F3cHruroRP0y6x",
+          "name": "Gemini - Jos"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawInput = $json.text ?? $json.output ?? $json.response ?? $json.result ?? $json;\nlet content = typeof rawInput === 'string' ? rawInput : JSON.stringify(rawInput || {});\ncontent = content.replace(/```json/gi, '').replace(/```/g, '').trim();\nconst firstBrace = content.indexOf('{');\nconst lastBrace = content.lastIndexOf('}');\nif (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) content = content.slice(firstBrace, lastBrace + 1);\n\nlet parsed;\ntry {\n  parsed = JSON.parse(content);\n} catch (error) {\n  parsed = {\n    analysis: `No se pudo parsear la respuesta del modelo como JSON válido. Respuesta original: ${content}`,\n    risk_level: 'medium',\n    recommendation: 'Revisar manualmente la salida del Risk Analyst y ajustar el prompt o parser si se repite.',\n    requires_human_approval: true,\n    parse_error: error.message\n  };\n}\n\nconst ctx = $('Prepare Risk Context').item.json;\nconst riskLevel = String(parsed.risk_level || 'medium').toLowerCase();\nconst risk = ['low', 'medium', 'high'].includes(riskLevel) ? riskLevel : 'medium';\n\nreturn [{\n  json: {\n    correlation_id: ctx.correlation_id,\n    agent_role: 'Risk Analyst & Workload Balancer',\n    decision_type: 'risk_workload',\n    input_summary: `Risk/workload analysis for ${ctx.event_type}`,\n    context_used: {\n      event_type: ctx.event_type,\n      actor: ctx.actor,\n      payload: ctx.payload,\n      wip_stats: ctx.wip_stats,\n      has_data: ctx.has_data\n    },\n    evidence: {\n      model_output: parsed,\n      parse_error: parsed.parse_error || null\n    },\n    decision: {\n      analysis: parsed.analysis || 'Sin análisis generado por el modelo.',\n      workload_action: parsed.workload_action || null\n    },\n    recommendation: parsed.recommendation || 'Revisar manualmente la carga de trabajo antes de tomar decisiones.',\n    confidence: parsed.confidence || 0.8,\n    risk_level: risk,\n    requires_human_approval: Boolean(parsed.requires_human_approval || risk === 'high')\n  }\n}];"
+      },
+      "id": "28c933db-a4e1-4e67-bb8a-a2eee022f310",
+      "name": "Parse Risk JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2256,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wcNFn0XHidnGmrHg",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/wcNFn0XHidnGmrHg",
+          "cachedResultName": "System - AI Decision Logger"
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "id": "d05af845-587a-466e-aac9-57c5d09d3b98",
+      "name": "Log AI Decision",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2432,
+        400
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Current WIP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Current WIP": {
+      "main": [
+        [
+          {
+            "node": "Prepare Risk Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Risk Context": {
+      "main": [
+        [
+          {
+            "node": "Gemini Risk Analyst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Risk Analyst": {
+      "main": [
+        [
+          {
+            "node": "Parse Risk JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Risk JSON": {
+      "main": [
+        [
+          {
+            "node": "Log AI Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Model Pro": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Gemini Risk Analyst",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "5eb1d3f3-f622-4be8-b25a-c118c6aef999",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "8JW6ctHsQJ3OmO6N",
+  "tags": []
+}

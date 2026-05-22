@@ -1,0 +1,194 @@
+{
+  "id": "wf-pm-reportes",
+  "name": "WF_PM_Reportes",
+  "active": true,
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "query-report",
+      "name": "Query PM Report Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT COUNT(*) FROM pm_tareas WHERE estado = 'completada' AND fecha_actualizacion::date >= CURRENT_DATE - INTERVAL '7 days') AS tareas_completadas_7d,\n  (SELECT COUNT(*) FROM pm_tareas WHERE estado NOT IN ('completada','cancelada')) AS tareas_pendientes,\n  (SELECT COUNT(*) FROM pm_tareas WHERE fecha_limite < CURRENT_DATE AND estado NOT IN ('completada','cancelada')) AS tareas_atrasadas,\n  (SELECT COUNT(*) FROM pm_bloqueos WHERE estado <> 'resuelto') AS bloqueos_activos,\n  (SELECT COUNT(*) FROM pm_riesgos WHERE estado = 'abierto') AS riesgos_abiertos,\n  (SELECT COALESCE(json_agg(t ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,titulo,responsable,prioridad,estado,fecha_limite FROM pm_tareas WHERE estado NOT IN ('completada','cancelada') ORDER BY fecha_limite NULLS LAST LIMIT 8) t) AS tareas,\n  (SELECT COALESCE(json_agg(b ORDER BY fecha_creacion DESC), '[]'::json) FROM (SELECT id,descripcion,responsable_afectado,severidad FROM pm_bloqueos WHERE estado <> 'resuelto' ORDER BY fecha_creacion DESC LIMIT 5) b) AS bloqueos,\n  (SELECT COALESCE(json_agg(r ORDER BY fecha_creacion DESC), '[]'::json) FROM (SELECT id,descripcion,prioridad_calculada,mitigacion FROM pm_riesgos WHERE estado='abierto' ORDER BY fecha_creacion DESC LIMIT 5) r) AS riesgos,\n  (SELECT COALESCE(json_agg(e ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,nombre,responsable,estado,fecha_limite FROM pm_entregables WHERE estado NOT IN ('entregado','aprobado') ORDER BY fecha_limite NULLS LAST LIMIT 5) e) AS entregables,\n  (SELECT COALESCE(json_agg(d ORDER BY fecha DESC), '[]'::json) FROM (SELECT id,decision,responsable,fecha FROM pm_decisiones ORDER BY fecha DESC LIMIT 5) d) AS decisiones;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "format-report",
+      "name": "Format PM Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const row = $json;\nconst ctx = $('Execute Workflow Trigger').item.json || {};\nconst tipo = ctx.sub_intencion === 'semanal' ? 'semanal' : (ctx.intencion === 'estado_proyecto' ? 'estado general' : 'diario');\nfunction list(arr, fn, empty) { return (arr || []).length ? arr.map(fn).join('\\n') : empty; }\nconst tareas = typeof row.tareas === 'string' ? JSON.parse(row.tareas) : row.tareas;\nconst bloqueos = typeof row.bloqueos === 'string' ? JSON.parse(row.bloqueos) : row.bloqueos;\nconst riesgos = typeof row.riesgos === 'string' ? JSON.parse(row.riesgos) : row.riesgos;\nconst entregables = typeof row.entregables === 'string' ? JSON.parse(row.entregables) : row.entregables;\nconst decisiones = typeof row.decisiones === 'string' ? JSON.parse(row.decisiones) : row.decisiones;\nconst recomendaciones = [];\nif (Number(row.tareas_atrasadas) > 0) recomendaciones.push('Priorizar tareas atrasadas y validar bloqueos con responsables hoy.');\nif (Number(row.bloqueos_activos) > 0) recomendaciones.push('Revisar bloqueos activos antes de abrir trabajo nuevo.');\nif (Number(row.riesgos_abiertos) > 0) recomendaciones.push('Actualizar mitigaciones de riesgos abiertos y asignar fecha de revision.');\nif (!recomendaciones.length) recomendaciones.push('Mantener cadencia de avances y preparar evidencia de entregables.');\nconst respuesta = [\n  `Reporte ${tipo} PetSafe`,\n  `Tareas completadas ultimos 7 dias: ${row.tareas_completadas_7d}`,\n  `Pendientes: ${row.tareas_pendientes} | Atrasadas: ${row.tareas_atrasadas}`,\n  `Bloqueos activos: ${row.bloqueos_activos} | Riesgos abiertos: ${row.riesgos_abiertos}`,\n  '',\n  'Tareas clave:',\n  list(tareas, t => `- #${t.id} [${t.estado}/${t.prioridad}] ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - ' + t.fecha_limite : ''}`, '- Sin tareas activas.'),\n  '',\n  'Bloqueos:',\n  list(bloqueos, b => `- #${b.id} [${b.severidad}] ${b.descripcion}`, '- Sin bloqueos activos.'),\n  '',\n  'Riesgos:',\n  list(riesgos, r => `- #${r.id} [${r.prioridad_calculada}] ${r.descripcion}`, '- Sin riesgos abiertos.'),\n  '',\n  'Entregables proximos:',\n  list(entregables, e => `- #${e.id} ${e.nombre} - ${e.estado} - ${e.responsable || 'sin responsable'}${e.fecha_limite ? ' - ' + e.fecha_limite : ''}`, '- Sin entregables pendientes.'),\n  '',\n  'Decisiones recientes:',\n  list(decisiones, d => `- #${d.id} ${d.decision} (${d.responsable || 'sin responsable'})`, '- Sin decisiones registradas.'),\n  '',\n  'Recomendaciones PM:',\n  recomendaciones.map(r => `- ${r}`).join('\\n')\n].join('\\n');\nreturn [{ json: { respuesta, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: ctx.intencion === 'reporte' } }];"
+      }
+    },
+    {
+      "id": "publish?",
+      "name": "Publish Report?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        760,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "publish",
+              "leftValue": "={{ $json.should_publish ? 1 : 0 }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "outbox-report",
+      "name": "Queue Report To Discord",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1000,
+        -80
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO events_outbox (event_id, target, action, idempotency_key, payload)\nVALUES ($1, 'discord', 'pm_report', $2, $3::jsonb)\nON CONFLICT (idempotency_key) DO NOTHING\nRETURNING outbox_id;",
+        "options": {
+          "queryReplacement": "={{ [ \"pm-report-\" + Date.now(), \"pm-report-\" + Date.now(), JSON.stringify({ content: $json.respuesta, channel_id: $json.canal_id }) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "return-report",
+      "name": "Return Report Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const r = $('Format PM Report').item.json; return [{ json: r }];"
+      }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Query PM Report Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query PM Report Data": {
+      "main": [
+        [
+          {
+            "node": "Format PM Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format PM Report": {
+      "main": [
+        [
+          {
+            "node": "Publish Report?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish Report?": {
+      "main": [
+        [
+          {
+            "node": "Queue Report To Discord",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Report Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue Report To Discord": {
+      "main": [
+        [
+          {
+            "node": "Return Report Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "wf-pm-error-handler"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  }
+}

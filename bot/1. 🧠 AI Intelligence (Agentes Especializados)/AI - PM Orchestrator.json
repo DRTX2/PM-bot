@@ -1,0 +1,456 @@
+{
+  "name": "AI - PM Orchestrator",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "289c2259-8e23-4b5a-b501-cc98b5535745",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1856,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $json;\nreturn [{\n  json: {\n    correlation_id: event.correlation_id || event.event_id || `orchestrator-${Date.now()}`,\n    source: event.source || 'unknown',\n    event_type: event.event_type || 'unknown',\n    actor: event.actor || 'system',\n    payload: typeof event.payload === 'string' ? event.payload : JSON.stringify(event.payload || event.normalized || {})\n  }\n}];"
+      },
+      "id": "d690db10-6e8f-46e3-96dd-070eb9d6cf7c",
+      "name": "Prepare Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1680,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preserve both the routing decision AND the original context for sub-agents\nconst parsed = $json;\nconst ctx = $('Prepare Context').item.json;\n\nconst validAgents = ['CodeReviewScout', 'RiskAnalyst', 'ContextGuardian', 'ReleaseGuard', 'None'];\nlet normalizedAgent = String(parsed.assigned_agent || 'None').trim();\nconst releaseHints = [ctx.event_type, ctx.payload, ctx.source].filter(Boolean).join(' ').toLowerCase();\nif (/github_pr_merged|release|deploy|deployment|main|master|qa|produccion|producción/.test(releaseHints)) {\n  normalizedAgent = 'ReleaseGuard';\n}\n\nreturn [{\n  json: {\n    ...ctx,\n    assigned_agent: validAgents.includes(normalizedAgent) ? normalizedAgent : 'None',\n    reasoning: parsed.reasoning || '',\n    priority: parsed.priority || 'low',\n    requires_human_approval: Boolean(parsed.requires_human_approval)\n  }\n}];"
+      },
+      "id": "c10f7b57-8f49-4efa-b045-61cb0a50a41f",
+      "name": "Merge Routing Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1136,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $json;\nreturn [{\n  json: {\n    correlation_id: d.correlation_id,\n    agent_role: 'PM Orchestrator',\n    decision_type: 'routing',\n    input_summary: `Event: ${d.event_type} from ${d.source}`,\n    context_used: { event_details: d.payload },\n    evidence: {},\n    decision: { routed_to: d.assigned_agent, priority: d.priority },\n    recommendation: d.reasoning,\n    confidence: 0.95,\n    risk_level: d.priority,\n    requires_human_approval: d.requires_human_approval\n  }\n}];"
+      },
+      "id": "73959996-25aa-4b02-8a28-573c0ae0637a",
+      "name": "Prepare Log Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -928,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wcNFn0XHidnGmrHg",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/wcNFn0XHidnGmrHg",
+          "cachedResultName": "System - AI Decision Logger"
+        },
+        "options": {}
+      },
+      "id": "ccb5b776-21d3-4e25-9bbc-99549614a125",
+      "name": "Log AI Decision",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        -736,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": [{ "value1": "={{ $json.assigned_agent }}", "operation": "equal", "value2": "CodeReviewScout" }] },
+            { "conditions": [{ "value1": "={{ $json.assigned_agent }}", "operation": "equal", "value2": "RiskAnalyst" }] },
+            { "conditions": [{ "value1": "={{ $json.assigned_agent }}", "operation": "equal", "value2": "ContextGuardian" }] },
+            { "conditions": [{ "value1": "={{ $json.assigned_agent }}", "operation": "equal", "value2": "ReleaseGuard" }] },
+            { "conditions": [{ "value1": "={{ $json.assigned_agent }}", "operation": "equal", "value2": "StakeholderLiaison" }] },
+            { "conditions": [{ "value1": "={{ $json.assigned_agent }}", "operation": "equal", "value2": "AgileCoach" }] },
+            { "conditions": [{ "value1": "={{ $json.assigned_agent }}", "operation": "equal", "value2": "QualityLead" }] },
+            { "conditions": [{ "value1": "={{ $json.assigned_agent }}", "operation": "equal", "value2": "TeamOnboarding" }] },
+            { "conditions": [{ "value1": "={{ $json.assigned_agent }}", "operation": "equal", "value2": "FinOps" }] },
+            { "conditions": [{ "value1": "={{ $json.assigned_agent }}", "operation": "equal", "value2": "CapacityForecaster" }] },
+            { "conditions": [{ "value1": "={{ $json.assigned_agent }}", "operation": "equal", "value2": "None" }] }
+          ]
+        },
+        "options": {}
+      },
+      "id": "da3764ac-8f9e-4504-ac64-29982325da51",
+      "name": "Route to Sub-Agent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -736,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "DQlNLv1Ok6V5TXVb",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/DQlNLv1Ok6V5TXVb",
+          "cachedResultName": "AI - Code Review Scout"
+        },
+        "options": {}
+      },
+      "id": "00359729-9e43-4020-adb8-47891511c390",
+      "name": "Call Code Review Scout",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        -480,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "8JW6ctHsQJ3OmO6N",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/8JW6ctHsQJ3OmO6N",
+          "cachedResultName": "AI - Risk Analyst & Workload Balancer"
+        },
+        "options": {}
+      },
+      "id": "610de4f0-adb1-47f1-b3df-e62e9fb85e74",
+      "name": "Call Risk Analyst",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        -480,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "j21sSuSm2XWHrXSx",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/j21sSuSm2XWHrXSx",
+          "cachedResultName": "AI - Context Guardian"
+        },
+        "options": {}
+      },
+      "id": "ea6ad0f1-3e21-4234-ad3a-2afa7f52abd6",
+      "name": "Call Context Guardian",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        -480,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    ...$json,\n    routed: false,\n    message: 'No sub-agent selected by PM Orchestrator.'\n  }\n}];"
+      },
+      "id": "c3788c68-eb0c-4647-ab07-804e95d6a388",
+      "name": "No Agent Selected",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        976
+      ]
+    },
+    {
+      "parameters": { "numberInputs": 11 },
+      "id": "merge-agent-results",
+      "name": "Merge Agent Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -240,
+        576
+      ]
+    },
+    {
+      "parameters": { "workflowId": { "__rl": true, "value": "quality-lead-wf", "mode": "id" }, "options": {} },
+      "id": "call-quality-lead",
+      "name": "Call Quality Lead",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [-480, 1552]
+    },
+    {
+      "parameters": { "workflowId": { "__rl": true, "value": "team-onboarding-wf", "mode": "id" }, "options": {} },
+      "id": "call-team-onboarding",
+      "name": "Call Team Onboarding",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [-480, 1744]
+    },
+    {
+      "parameters": { "workflowId": { "__rl": true, "value": "finops-wf", "mode": "id" }, "options": {} },
+      "id": "call-finops",
+      "name": "Call FinOps",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [-480, 1936]
+    },
+    {
+      "parameters": { "workflowId": { "__rl": true, "value": "capacity-forecaster-wf", "mode": "id" }, "options": {} },
+      "id": "call-capacity",
+      "name": "Call Capacity Forecaster",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [-480, 2128]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "88q7NxJeROvqvj4Z",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/88q7NxJeROvqvj4Z",
+          "cachedResultName": "AI - Release Guard"
+        },
+        "options": {}
+      },
+      "id": "call-release-guard",
+      "name": "Call Release Guard",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        -480,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nconst source = String(ctx.source || '').toLowerCase();\nconst type = String(ctx.event_type || '').toLowerCase();\nconst payloadText = String(ctx.payload || '').toLowerCase();\nconst blob = [source, type, payloadText].join(' ');\nconst emptyPayload = !ctx.payload || ctx.payload === '{}' || ctx.payload === 'null';\n\nlet assigned_agent = 'None';\nlet reasoning = 'Evento informativo sin accion PM.';\nlet priority = 'low';\nlet requires_human_approval = false;\n\nif ((!source || source === 'unknown') && (!type || type === 'unknown') && emptyPayload) {\n  assigned_agent = 'None'; reasoning = 'Evento sin fuente, tipo ni payload util.';\n} else if (/finops|presupuesto|budget|burn.rate|costo|gasto|earned.value|cpi|eac/.test(blob)) {\n  assigned_agent = 'FinOps'; reasoning = 'Solicitud financiera o de presupuesto.'; priority = 'medium';\n} else if (/capacidad|capacity|forecast|pto|vacacion|ausencia|proyeccion|what.if|escenario/.test(blob)) {\n  assigned_agent = 'CapacityForecaster'; reasoning = 'Solicitud de capacidad, PTOs o proyeccion.'; priority = 'medium';\n} else if (/onboarding|nuevo.miembro|new.member|guild_member_add|bienvenida|welcome/.test(blob)) {\n  assigned_agent = 'TeamOnboarding'; reasoning = 'Nuevo integrante detectado.'; priority = 'medium';\n} else if (/calidad|quality|qa|bug.report|deuda.tecnica|tech.debt|reopen|cobertura|coverage/.test(blob)) {\n  assigned_agent = 'QualityLead'; reasoning = 'Solicitud de revision de calidad o deuda tecnica.'; priority = 'medium';\n} else if (/retro|retrospectiva|sprint_end|postmortem|post.mortem|mejora|agile_coach/.test(blob)) {\n  assigned_agent = 'AgileCoach'; reasoning = 'Evento de ceremonia agil o post-mortem.'; priority = /postmortem|ci_fail|critical/.test(blob) ? 'high' : 'medium'; requires_human_approval = /postmortem/.test(blob);\n} else if (/stakeholder|sponsor|reporte.ejecutivo|executive|negocio|business/.test(blob)) {\n  assigned_agent = 'StakeholderLiaison'; reasoning = 'Reporte para stakeholders o negocio.'; priority = 'medium';\n} else if (/github_pr_merged|release|deploy|deployment|production|produccion|ci_failed|pipeline|build/.test(blob)) {\n  assigned_agent = 'ReleaseGuard'; reasoning = 'Evento de release, deploy o CI.'; priority = /failed|error|critical|prod/.test(blob) ? 'high' : 'medium';\n} else if (/github|pull_request|pr|commit|branch|code|bug|fix|feat|merge/.test(blob)) {\n  assigned_agent = 'CodeReviewScout'; reasoning = 'Evento tecnico de GitHub.'; priority = /hotfix|bug|failed|critical/.test(blob) ? 'high' : 'medium';\n} else if (/risk|riesgo|bloqueo|blocked|deadline|overdue|vencid|workload|carga/.test(blob)) {\n  assigned_agent = 'RiskAnalyst'; reasoning = 'Evento con señales de riesgo o carga.'; priority = /critical|alto|high|bloqueo|overdue/.test(blob) ? 'high' : 'medium';\n} else if (/trello|card|pdf|document|requisito|arquitectura|decision|alcance/.test(blob)) {\n  assigned_agent = 'ContextGuardian'; reasoning = 'Evento de tablero o contexto.'; priority = /cliente|entrega|aprobacion/.test(blob) ? 'medium' : 'low';\n} else {\n  assigned_agent = 'RiskAnalyst'; reasoning = 'Evento ambiguo, triage PM.';\n}\n\nreturn [{ json: { assigned_agent, reasoning, priority, requires_human_approval } }];"
+      },
+      "id": "rule-based-routing",
+      "name": "Rule-Based Routing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1488,
+        384
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Context": {
+      "main": [
+        [
+          {
+            "node": "Rule-Based Routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Routing Decision": {
+      "main": [
+        [
+          {
+            "node": "Prepare Log Payload",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route to Sub-Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Log Payload": {
+      "main": [
+        [
+          {
+            "node": "Log AI Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Sub-Agent": {
+      "main": [
+        [
+          {
+            "node": "Call Code Review Scout",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Risk Analyst",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Context Guardian",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Release Guard",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Stakeholder Liaison",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Agile Coach",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Quality Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Team Onboarding",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [{ "node": "Call FinOps", "type": "main", "index": 0 }],
+        [{ "node": "Call Capacity Forecaster", "type": "main", "index": 0 }],
+        [{ "node": "No Agent Selected", "type": "main", "index": 0 }]
+      ]
+    },
+    "Call Quality Lead": {
+      "main": [[{ "node": "Merge Agent Results", "type": "main", "index": 7 }]]
+    },
+    "Call Team Onboarding": {
+      "main": [[{ "node": "Merge Agent Results", "type": "main", "index": 8 }]]
+    },
+    "Call Stakeholder Liaison": {
+      "main": [[{ "node": "Merge Agent Results", "type": "main", "index": 5 }]]
+    },
+    "Call Agile Coach": {
+      "main": [[{ "node": "Merge Agent Results", "type": "main", "index": 6 }]]
+    },
+    "Call Code Review Scout": {
+      "main": [
+        [
+          {
+            "node": "Merge Agent Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Risk Analyst": {
+      "main": [
+        [
+          {
+            "node": "Merge Agent Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Call Context Guardian": {
+      "main": [
+        [
+          {
+            "node": "Merge Agent Results",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Call Release Guard": {
+      "main": [
+        [
+          {
+            "node": "Merge Agent Results",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Call FinOps": {
+      "main": [[{ "node": "Merge Agent Results", "type": "main", "index": 9 }]]
+    },
+    "Call Capacity Forecaster": {
+      "main": [[{ "node": "Merge Agent Results", "type": "main", "index": 10 }]]
+    },
+    "No Agent Selected": {
+      "main": [[{ "node": "Merge Agent Results", "type": "main", "index": 10 }]]
+    },
+    "Rule-Based Routing": {
+      "main": [
+        [
+          {
+            "node": "Merge Routing Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "f397bb6f-8a9f-4e78-8da0-7ed92fbb4085",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "jT21FJtXSh2U8D0s",
+  "tags": []
+}

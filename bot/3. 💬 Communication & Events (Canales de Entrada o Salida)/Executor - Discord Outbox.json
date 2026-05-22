@@ -1,0 +1,267 @@
+{
+  "name": "Executor - Discord Outbox",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "id": "625126f3-51de-4ecc-b559-79d1bbdbff0e",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1008,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS events_outbox (\n  outbox_id bigserial PRIMARY KEY,\n  event_id text,\n  target text NOT NULL DEFAULT 'discord',\n  action text NOT NULL DEFAULT 'notify',\n  idempotency_key text,\n  payload jsonb NOT NULL DEFAULT '{}'::jsonb,\n  status text NOT NULL DEFAULT 'pending',\n  retry_count integer NOT NULL DEFAULT 0,\n  scheduled_at timestamptz NOT NULL DEFAULT NOW(),\n  sent_at timestamptz,\n  last_error text,\n  created_at timestamptz NOT NULL DEFAULT NOW()\n);\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS event_id text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS target text NOT NULL DEFAULT 'discord';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS action text NOT NULL DEFAULT 'notify';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS idempotency_key text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS payload jsonb NOT NULL DEFAULT '{}'::jsonb;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'pending';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS retry_count integer NOT NULL DEFAULT 0;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS scheduled_at timestamptz NOT NULL DEFAULT NOW();\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS sent_at timestamptz;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS last_error text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT NOW();\nCREATE UNIQUE INDEX IF NOT EXISTS events_outbox_idempotency_key_uq ON events_outbox (idempotency_key);\nUPDATE events_outbox SET status = 'sending' WHERE outbox_id IN (SELECT outbox_id FROM events_outbox WHERE status = 'pending' ORDER BY scheduled_at ASC LIMIT 50 FOR UPDATE SKIP LOCKED) RETURNING *;",
+        "options": {}
+      },
+      "id": "094cca54-8455-4264-be4f-f714f756f3d5",
+      "name": "Fetch Pending Outbox",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -800,
+        128
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "has-outbox",
+              "leftValue": "={{ Number($json.outbox_id || 0) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7eb6f64d-defe-4ef8-bd53-fc60cb659d90",
+      "name": "Has Outbox?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -608,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.payload?.channel_id ? 'https://discord.com/api/v10/channels/' + $json.payload.channel_id + '/messages' : $env.DISCORD_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.payload?.channel_id ? { content: String($json.payload.content || $json.payload.text || '').slice(0, 2000), embeds: $json.payload.embeds, components: $json.payload.components } : ($json.payload || { content: $json.content || 'outbox event' }) }}",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $json.payload?.channel_id ? 'Bot ' + $env.DISCORD_BOT_TOKEN : '' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "id": "931894bf-c7f2-44c9-ae2d-f748ac61885b",
+      "name": "Send Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -400,
+        128
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "no-http-error",
+              "leftValue": "={{ $json.error ? 0 : 1 }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "478cd495-924e-4714-a77c-e0712db2539d",
+      "name": "Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -208,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS events_outbox (\n  outbox_id bigserial PRIMARY KEY,\n  event_id text,\n  target text NOT NULL DEFAULT 'discord',\n  action text NOT NULL DEFAULT 'notify',\n  idempotency_key text,\n  payload jsonb NOT NULL DEFAULT '{}'::jsonb,\n  status text NOT NULL DEFAULT 'pending',\n  retry_count integer NOT NULL DEFAULT 0,\n  scheduled_at timestamptz NOT NULL DEFAULT NOW(),\n  sent_at timestamptz,\n  last_error text,\n  created_at timestamptz NOT NULL DEFAULT NOW()\n);\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS event_id text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS target text NOT NULL DEFAULT 'discord';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS action text NOT NULL DEFAULT 'notify';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS idempotency_key text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS payload jsonb NOT NULL DEFAULT '{}'::jsonb;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'pending';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS retry_count integer NOT NULL DEFAULT 0;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS scheduled_at timestamptz NOT NULL DEFAULT NOW();\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS sent_at timestamptz;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS last_error text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT NOW();\nCREATE UNIQUE INDEX IF NOT EXISTS events_outbox_idempotency_key_uq ON events_outbox (idempotency_key);\nUPDATE events_outbox SET status = 'sent', sent_at = NOW(), last_error = NULL WHERE outbox_id = $1;",
+        "options": {
+          "queryReplacement": "={{ [ $node[\"Fetch Pending Outbox\"].json.outbox_id ] }}"
+        }
+      },
+      "id": "bb4e4666-b97e-4c85-9948-909b596ff52a",
+      "name": "Mark Sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS events_outbox (\n  outbox_id bigserial PRIMARY KEY,\n  event_id text,\n  target text NOT NULL DEFAULT 'discord',\n  action text NOT NULL DEFAULT 'notify',\n  idempotency_key text,\n  payload jsonb NOT NULL DEFAULT '{}'::jsonb,\n  status text NOT NULL DEFAULT 'pending',\n  retry_count integer NOT NULL DEFAULT 0,\n  scheduled_at timestamptz NOT NULL DEFAULT NOW(),\n  sent_at timestamptz,\n  last_error text,\n  created_at timestamptz NOT NULL DEFAULT NOW()\n);\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS event_id text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS target text NOT NULL DEFAULT 'discord';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS action text NOT NULL DEFAULT 'notify';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS idempotency_key text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS payload jsonb NOT NULL DEFAULT '{}'::jsonb;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'pending';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS retry_count integer NOT NULL DEFAULT 0;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS scheduled_at timestamptz NOT NULL DEFAULT NOW();\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS sent_at timestamptz;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS last_error text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT NOW();\nCREATE UNIQUE INDEX IF NOT EXISTS events_outbox_idempotency_key_uq ON events_outbox (idempotency_key);\nUPDATE events_outbox SET retry_count = retry_count + 1, last_error = $2, status = CASE WHEN retry_count + 1 >= 5 THEN 'dead' ELSE 'pending' END, scheduled_at = CASE WHEN retry_count + 1 >= 5 THEN scheduled_at ELSE NOW() + interval '5 minutes' END WHERE outbox_id = $1;",
+        "options": {
+          "queryReplacement": "={{ [ $node[\"Fetch Pending Outbox\"].json.outbox_id, JSON.stringify($json.body || $json.error || $json) ] }}"
+        }
+      },
+      "id": "3fa34e6f-04d5-45b4-85a1-afb882867bb0",
+      "name": "Mark Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pending Outbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pending Outbox": {
+      "main": [
+        [
+          {
+            "node": "Has Outbox?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Outbox?": {
+      "main": [
+        [
+          {
+            "node": "Send Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Discord": {
+      "main": [
+        [
+          {
+            "node": "Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success?": {
+      "main": [
+        [
+          {
+            "node": "Mark Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "302ed3ad-9926-4176-ad1f-a355fe7aab2a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "5XZCUDBxom8gdm8z",
+  "tags": []
+}

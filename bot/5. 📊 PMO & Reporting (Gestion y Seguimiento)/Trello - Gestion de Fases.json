@@ -1,0 +1,794 @@
+{
+  "name": "Trello - Gestion de Fases",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trello-fases",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "591ef384-0cc6-45a5-888b-9adddbf8d3f7",
+      "name": "Webhook Discord Command",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        2688,
+        512
+      ],
+      "webhookId": "trello-fases"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst raw = (body.content || body.message || '').trim();\n\n// Comandos soportados:\n// !fase listar\n// !fase add <nombre> <fecha_inicio YYYY-MM-DD> <fecha_fin YYYY-MM-DD> [responsable]\n// !fase edit <list_id> nombre=<nuevo_nombre> fin=<YYYY-MM-DD> responsable=<nombre>\n// !fase delete <list_id>\n// !fase sync   <- sincroniza listas Trello -> BD\n// !doc <card_id> <- extrae resumen del PDF adjunto a una tarjeta\n\nconst docMatch = raw.match(/^!doc\\s+(\\S+)/i);\nif (docMatch) {\n  return [{ json: { action: 'doc_summary', card_id: docMatch[1], raw } }];\n}\n\nconst match = raw.match(/^!fase\\s+(\\S+)(?:\\s+(.*))?$/i);\nif (!match) {\n  return [{ json: { action: 'unknown', raw } }];\n}\n\nconst subCmd = match[1].toLowerCase();\nconst rest = (match[2] || '').trim();\n\nif (subCmd === 'listar') {\n  return [{ json: { action: 'list', raw } }];\n}\n\nif (subCmd === 'sync') {\n  return [{ json: { action: 'sync', raw } }];\n}\n\nif (subCmd === 'add') {\n  const parts = rest.split(/\\s+/);\n  if (parts.length < 3) {\n    return [{ json: { action: 'error', message: '⚠️ Uso: `!fase add <nombre> <inicio YYYY-MM-DD> <fin YYYY-MM-DD> [responsable]`', raw } }];\n  }\n  const start_date = parts[parts.length - 2];\n  const end_date = parts[parts.length - 1];\n  const dateRe = /^\\d{4}-\\d{2}-\\d{2}$/;\n  if (!dateRe.test(start_date) || !dateRe.test(end_date)) {\n    return [{ json: { action: 'error', message: '⚠️ Fechas inválidas. Usa formato YYYY-MM-DD', raw } }];\n  }\n  const name = parts.slice(0, parts.length - 2).join(' ');\n  return [{ json: { action: 'add', name, start_date, end_date, raw } }];\n}\n\nif (subCmd === 'edit') {\n  const parts = rest.split(/\\s+/);\n  const list_id = parts[0];\n  const kvs = {};\n  parts.slice(1).forEach(p => {\n    const [k, v] = p.split('=');\n    if (k && v) kvs[k] = v;\n  });\n  return [{ json: { action: 'edit', list_id, updates: kvs, raw } }];\n}\n\nif (subCmd === 'delete') {\n  return [{ json: { action: 'delete', list_id: rest, raw } }];\n}\n\nreturn [{ json: { action: 'unknown', raw } }];"
+      },
+      "id": "66128a90-416f-4225-9391-529ea779ddbb",
+      "name": "Parse Phase Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.action }}",
+                  "operation": "equal",
+                  "value2": "list"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.action }}",
+                  "operation": "equal",
+                  "value2": "sync"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.action }}",
+                  "operation": "equal",
+                  "value2": "add"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.action }}",
+                  "operation": "equal",
+                  "value2": "edit"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.action }}",
+                  "operation": "equal",
+                  "value2": "delete"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ $json.action }}",
+                  "operation": "equal",
+                  "value2": "doc_summary"
+                }
+              ]
+            },
+            {
+              "conditions": [
+                {
+                  "value1": "={{ ['unknown', 'error'].includes($json.action) }}",
+                  "operation": "equal",
+                  "value2": true
+                }
+              ]
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1eb469eb-1a8a-4395-abd9-b0847343f79e",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        3136,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT p.list_id, p.name, p.position, p.start_date, p.end_date, p.status, p.responsible, COALESCE(card_counts.total, 0) as total_cards, COALESCE(card_counts.done, 0) as done_cards FROM project_phases p LEFT JOIN (SELECT lista_nombre, COUNT(*) as total, SUM(CASE WHEN completada THEN 1 ELSE 0 END) as done FROM estado_tareas GROUP BY lista_nombre) card_counts ON p.name = card_counts.lista_nombre ORDER BY p.position ASC;",
+        "options": {}
+      },
+      "id": "976869fa-df91-4267-b145-dc1c2ff19db6",
+      "name": "PG List Phases",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3344,
+        112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const phases = $input.all().map(item => item.json);\nif (phases.length === 0) {\n  return [{ json: { content: '📋 No hay fases registradas. Usa `!fase sync` para sincronizar desde Trello.' } }];\n}\n\nconst statusEmoji = { active: '🔵', completed: '✅', on_hold: '⏸️' };\nconst lines = ['📋 **Fases del Proyecto PetSafe**', ''];\n\nphases.forEach((p, i) => {\n  const pct = p.total_cards > 0 ? Math.round((p.done_cards / p.total_cards) * 100) : 0;\n  const bar = '█'.repeat(Math.floor(pct / 10)) + '░'.repeat(10 - Math.floor(pct / 10));\n  const emoji = statusEmoji[p.status] || '⚪';\n  lines.push(`${emoji} **${i + 1}. ${p.name}**`);\n  if (p.start_date && p.end_date) lines.push(`   📅 ${p.start_date} → ${p.end_date}`);\n  if (p.responsible) lines.push(`   👤 ${p.responsible}`);\n  lines.push(`   ${bar} ${pct}% (${p.done_cards}/${p.total_cards} tarjetas)`);\n  lines.push(`   ID: \\`${p.list_id}\\``);\n  lines.push('');\n});\n\nreturn [{ json: { content: lines.join('\\n').slice(0, 2000) } }];"
+      },
+      "id": "b196c1af-4cf7-465f-b617-1d4a920c70ac",
+      "name": "Format Phase List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3568,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.trello.com/1/boards/{{ $env.TRELLO_BOARD_ID }}/lists?fields=id,name,pos,closed",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "trelloApi",
+        "options": {}
+      },
+      "id": "eceec998-f2d8-4162-9fba-cc515149ca0a",
+      "name": "Trello Get Lists",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3344,
+        304
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const lists = $input.all().map(item => item.json).filter(l => !l.closed);\nconst upserts = lists.map((l, idx) => [\n  l.id, l.name, idx + 1\n]);\nreturn upserts.map((row, idx) => ({ json: { list_id: row[0], name: row[1], position: row[2] } }));"
+      },
+      "id": "1f8cfa83-d25a-43a9-98dd-a38010ff34ca",
+      "name": "Prepare Sync Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3568,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO project_phases (list_id, name, position) VALUES ($1, $2, $3) ON CONFLICT (list_id) DO UPDATE SET name = EXCLUDED.name, position = EXCLUDED.position, updated_at = NOW();",
+        "options": {
+          "queryReplacement": "={{ [$json.list_id, $json.name, $json.position] }}"
+        }
+      },
+      "id": "5d39125c-ac18-4e82-8395-1da7301e7511",
+      "name": "Upsert Phase",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3792,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO project_phases (list_id, name, start_date, end_date, position) VALUES (gen_random_uuid()::text, $1, $2, $3, (SELECT COALESCE(MAX(position),0)+1 FROM project_phases)) RETURNING list_id, name, start_date, end_date;",
+        "options": {
+          "queryReplacement": "={{ [$('Parse Phase Command').item.json.name, $('Parse Phase Command').item.json.start_date, $('Parse Phase Command').item.json.end_date] }}"
+        }
+      },
+      "id": "f8c8c57b-8fc7-4207-b8d4-28e582698999",
+      "name": "PG Add Phase",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3344,
+        512
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Parse Phase Command').item.json;\nconst updates = ctx.updates || {};\nconst setClauses = [];\nconst params = [ctx.list_id];\nlet idx = 2;\nif (updates.nombre) { setClauses.push(`name = $${idx++}`); params.push(updates.nombre); }\nif (updates.fin) { setClauses.push(`end_date = $${idx++}`); params.push(updates.fin); }\nif (updates.inicio) { setClauses.push(`start_date = $${idx++}`); params.push(updates.inicio); }\nif (updates.responsable) { setClauses.push(`responsible = $${idx++}`); params.push(updates.responsable); }\nif (updates.estado) { setClauses.push(`status = $${idx++}`); params.push(updates.estado); }\n\nif (setClauses.length === 0) {\n  return [{ json: { skip: true, content: '⚠️ No se especificaron campos a actualizar.' } }];\n}\n\nreturn [{\n  json: {\n    query: `UPDATE project_phases SET ${setClauses.join(', ')}, updated_at = NOW() WHERE list_id = $1 RETURNING name, list_id;`,\n    params: JSON.stringify(params),\n    list_id: ctx.list_id\n  }\n}];"
+      },
+      "id": "c5694397-e97e-48e0-aada-379ee8759ccd",
+      "name": "Build Edit Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3344,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ $json.query }}",
+        "options": {
+          "queryReplacement": "={{ JSON.parse($json.params) }}"
+        }
+      },
+      "id": "0d863744-da24-471b-8da0-e76b2f072bf1",
+      "name": "PG Edit Phase",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3568,
+        704
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE project_phases SET status = 'archived', updated_at = NOW() WHERE list_id = $1 RETURNING name;",
+        "options": {
+          "queryReplacement": "={{ [$('Parse Phase Command').item.json.list_id] }}"
+        }
+      },
+      "id": "6830314e-b718-4507-b5d8-f1d2a8003db9",
+      "name": "PG Archive Phase",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3344,
+        912
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ca.attachment_id, ca.filename, ca.url, ca.summary_extracted, ca.summary_extracted_at, ca.file_size_bytes FROM card_attachments ca WHERE ca.card_id = $1 ORDER BY ca.added_at DESC LIMIT 5;",
+        "options": {
+          "queryReplacement": "={{ [$('Parse Phase Command').item.json.card_id] }}"
+        }
+      },
+      "id": "c5a94e8f-5e73-42e8-8127-497bd8215179",
+      "name": "Fetch Card Attachments",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3344,
+        1104
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "has-attachment",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "larger"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "032a1b1a-a575-47a4-a895-c2a1b61f1183",
+      "name": "Has Attachment?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3568,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "already-summarized",
+              "leftValue": "={{ $json.summary_extracted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fde97bac-23f5-480b-9a8c-b7030b77beab",
+      "name": "Already Summarized?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3824,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Eres un asistente experto en gestión de proyectos de software. Se te proporciona el contenido de un documento técnico adjunto a una tarjeta de Trello.\\n\\nDocumento: ' + $json.filename + '\\nTamaño: ' + Math.round(($json.file_size_bytes || 0) / 1024) + ' KB\\nURL: ' + $json.url + '\\n\\nAnaliza el documento y proporciona:\\n1. Resumen ejecutivo (máx 3 oraciones)\\n2. Módulos o componentes principales cubiertos\\n3. Estado o avance implícito del trabajo\\n4. Riesgos o puntos de atención detectados\\n\\nSé conciso. Máximo 400 palabras.' }}"
+      },
+      "id": "beb94fc6-673e-4f20-8ad2-c56eef1544da",
+      "name": "Gemini PDF Summarizer",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        4080,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "76b461a7-761e-4051-bc97-82cb776dc465",
+      "name": "Google Gemini Flash",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        4080,
+        1344
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "EcY5DyLsH2bNwVtM",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE card_attachments SET summary_extracted = $1, summary_extracted_at = NOW(), tokens_used = $2 WHERE attachment_id = $3;",
+        "options": {
+          "queryReplacement": "={{ [$json.text, 500, $('Fetch Card Attachments').first().json.attachment_id] }}"
+        }
+      },
+      "id": "bd65346e-d5ea-42d2-93b0-caa144f41bf0",
+      "name": "Save Summary to DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        4512,
+        1088
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const attachment = $('Fetch Card Attachments').first()?.json || {};\nconst summary = $json.text || attachment.summary_extracted || 'Sin resumen disponible';\nconst kb = Math.round((attachment.file_size_bytes || 0) / 1024);\nconst content = `📎 **${attachment.filename}** (${kb} KB)\\n\\n${summary}\\n\\n*Resumen generado por IA — extrae sólo metadatos y contexto*`;\nreturn [{ json: { content: content.slice(0, 2000) } }];"
+      },
+      "id": "fbb00d6c-7671-4790-8b0e-4e3f4b57a215",
+      "name": "Format PDF Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4624,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const action = $('Parse Phase Command').item.json.action;\nconst phase = $json;\nlet content = '';\n\nif (action === 'add') {\n  content = `✅ **Fase creada:** \\`${phase.name}\\`\\n📅 ${phase.start_date} → ${phase.end_date}\\nID: \\`${phase.list_id}\\`\\n\\n💡 Tip: Usa \\`!fase sync\\` para vincularla con Trello si ya existe la lista.`;\n} else if (action === 'edit') {\n  content = `✏️ **Fase actualizada:** \\`${phase.name}\\`\\nID: \\`${phase.list_id}\\``;\n} else if (action === 'delete') {\n  content = `🗑️ **Fase archivada:** \\`${phase.name}\\`\\n*Las tarjetas existentes no fueron afectadas.*`;\n} else if (action === 'sync') {\n  content = `🔄 **Sincronización completada.** Las listas de Trello fueron importadas a la BD.`;\n} else {\n  content = $json.content || $json.message || 'Acción desconocida.';\n}\nreturn [{ json: { content } }];"
+      },
+      "id": "2809e2c3-8b7f-4eb8-b4e4-3b57de7f1870",
+      "name": "Build Success Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3792,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "jT21FJtXSh2U8D0s",
+        "options": {}
+      },
+      "id": "89a105c4-8f86-4984-80d7-4feed7b5fe88",
+      "name": "Notify Orchestrator",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        3984,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ content: $json.content || $json.message || 'Listo.' }) }}",
+        "options": {}
+      },
+      "id": "2ec1f882-19ff-44cc-b56a-bcf9eda7b57f",
+      "name": "Respond to Discord",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        4912,
+        496
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Discord Command": {
+      "main": [
+        [
+          {
+            "node": "Parse Phase Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Phase Command": {
+      "main": [
+        [
+          {
+            "node": "Route Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Action": {
+      "main": [
+        [
+          {
+            "node": "PG List Phases",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Trello Get Lists",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PG Add Phase",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Edit Query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PG Archive Phase",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Card Attachments",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PG List Phases": {
+      "main": [
+        [
+          {
+            "node": "Format Phase List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Phase List": {
+      "main": [
+        [
+          {
+            "node": "Respond to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trello Get Lists": {
+      "main": [
+        [
+          {
+            "node": "Prepare Sync Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Sync Rows": {
+      "main": [
+        [
+          {
+            "node": "Upsert Phase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Phase": {
+      "main": [
+        [
+          {
+            "node": "Build Success Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PG Add Phase": {
+      "main": [
+        [
+          {
+            "node": "Build Success Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Edit Query": {
+      "main": [
+        [
+          {
+            "node": "PG Edit Phase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PG Edit Phase": {
+      "main": [
+        [
+          {
+            "node": "Build Success Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PG Archive Phase": {
+      "main": [
+        [
+          {
+            "node": "Build Success Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Success Message": {
+      "main": [
+        [
+          {
+            "node": "Notify Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Orchestrator": {
+      "main": [
+        [
+          {
+            "node": "Respond to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Card Attachments": {
+      "main": [
+        [
+          {
+            "node": "Has Attachment?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Attachment?": {
+      "main": [
+        [
+          {
+            "node": "Already Summarized?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Summarized?": {
+      "main": [
+        [
+          {
+            "node": "Format PDF Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini PDF Summarizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Flash": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Gemini PDF Summarizer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini PDF Summarizer": {
+      "main": [
+        [
+          {
+            "node": "Save Summary to DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Summary to DB": {
+      "main": [
+        [
+          {
+            "node": "Format PDF Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format PDF Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "e8e4445b-383d-4f2c-bec3-bf4a0ef445cf",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "axPabQ2tvu05IYgR",
+  "tags": []
+}

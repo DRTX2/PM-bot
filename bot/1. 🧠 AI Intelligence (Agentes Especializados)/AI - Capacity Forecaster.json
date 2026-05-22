@@ -1,0 +1,114 @@
+{
+  "name": "AI - Capacity Forecaster",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "cap-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [0, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS team_pto (\n  id bigserial PRIMARY KEY,\n  miembro text NOT NULL,\n  fecha_inicio date NOT NULL,\n  fecha_fin date NOT NULL,\n  motivo text DEFAULT 'PTO',\n  registrado_por text DEFAULT 'system',\n  registrado_at timestamptz NOT NULL DEFAULT NOW()\n);\nCREATE TABLE IF NOT EXISTS capacity_forecasts (\n  id bigserial PRIMARY KEY,\n  fecha timestamptz NOT NULL DEFAULT NOW(),\n  velocidad_actual numeric(5,2),\n  velocidad_ajustada numeric(5,2),\n  capacidad_pct numeric(5,2),\n  tareas_pendientes integer,\n  dias_estimados_cierre integer,\n  fecha_estimada_cierre date,\n  riesgo_fecha text,\n  escenarios jsonb,\n  ia_diagnostico text\n);\nSELECT\n  ap.progreso_pct, ap.total_completadas, ap.total_tarjetas,\n  ap.kpis, ap.fases, ap.ranking, ap.hitos_proximos, ap.fecha,\n  (SELECT json_agg(p) FROM team_pto p WHERE p.fecha_fin >= CURRENT_DATE) AS ptos_activos,\n  (SELECT json_agg(r) FROM finops_team_rates r WHERE r.activo = true) AS team_rates,\n  (SELECT COUNT(*) FROM estado_tareas WHERE completada = false) AS tareas_pendientes,\n  (SELECT COUNT(*) FROM estado_tareas WHERE completada = true AND fecha > NOW() - INTERVAL '7 days') AS completadas_7d,\n  (SELECT COUNT(*) FROM estado_tareas WHERE completada = true AND fecha > NOW() - INTERVAL '14 days') AS completadas_14d\nFROM analisis_proyecto ap ORDER BY ap.id DESC LIMIT 1;",
+        "options": {}
+      },
+      "id": "cap-fetch",
+      "name": "Fetch Capacity Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [220, 400],
+      "credentials": { "postgres": { "id": "upx1y0H6Nw7XOqLJ", "name": "Postgres account" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $('Execute Workflow Trigger').item.json;\nconst row = $json || {};\nconst safeArr = v => Array.isArray(v) ? v : [];\nconst safeObj = v => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};\n\nconst kpis = safeObj(row.kpis);\nconst ranking = safeArr(row.ranking);\nconst hitos = safeArr(row.hitos_proximos);\nconst ptos = safeArr(row.ptos_activos);\nconst teamRates = safeArr(row.team_rates);\nconst totalTeam = teamRates.length || 4;\n\nconst PROJECT_END = new Date('2026-06-10');\nconst now = new Date();\nconst diasRestantes = Math.max(0, Math.ceil((PROJECT_END - now) / 86400000));\nconst semanasRestantes = Math.max(1, Math.ceil(diasRestantes / 7));\n\nconst progreso = Number(row.progreso_pct || 0);\nconst totalTarjetas = Number(row.total_tarjetas || 1);\nconst completadas = Number(row.total_completadas || 0);\nconst pendientes = Number(row.tareas_pendientes || totalTarjetas - completadas);\nconst completadas7d = Number(row.completadas_7d || 0);\nconst completadas14d = Number(row.completadas_14d || 0);\n\n// Velocity\nconst velocidad7d = completadas7d / 7;\nconst velocidad14d = completadas14d / 14;\nconst velocidadPromedio = (velocidad7d + velocidad14d) / 2;\n\n// PTO impact\nconst hoy = new Date();\nconst ptosActivos = ptos.filter(p => {\n  const inicio = new Date(p.fecha_inicio);\n  const fin = new Date(p.fecha_fin);\n  return inicio <= PROJECT_END && fin >= hoy;\n});\n\nlet diasPTOTotal = 0;\nconst ptoDetalle = [];\nfor (const p of ptosActivos) {\n  const inicio = new Date(p.fecha_inicio) < hoy ? hoy : new Date(p.fecha_inicio);\n  const fin = new Date(p.fecha_fin) > PROJECT_END ? PROJECT_END : new Date(p.fecha_fin);\n  const dias = Math.max(0, Math.ceil((fin - inicio) / 86400000));\n  diasPTOTotal += dias;\n  ptoDetalle.push(`${p.miembro}: ${dias}d (${p.motivo || 'PTO'}, ${new Date(p.fecha_inicio).toLocaleDateString('es-EC')} - ${new Date(p.fecha_fin).toLocaleDateString('es-EC')})`);\n}\n\n// Capacity reduction from PTO\nconst diasEquipoTotal = diasRestantes * totalTeam;\nconst diasEfectivos = Math.max(1, diasEquipoTotal - diasPTOTotal);\nconst capacidadPct = Number(((diasEfectivos / diasEquipoTotal) * 100).toFixed(1));\nconst velocidadAjustada = velocidadPromedio * (capacidadPct / 100);\n\n// Forecasting\nconst diasParaCerrar = velocidadAjustada > 0 ? Math.ceil(pendientes / velocidadAjustada) : 999;\nconst fechaEstimadaCierre = new Date(now.getTime() + diasParaCerrar * 86400000);\nconst enTiempo = fechaEstimadaCierre <= PROJECT_END;\n\n// Scenarios\nconst escenarios = [\n  { nombre: 'Optimista (+20% velocidad)', vel: velocidadAjustada * 1.2, dias: Math.ceil(pendientes / (velocidadAjustada * 1.2)), en_tiempo: new Date(now.getTime() + Math.ceil(pendientes / (velocidadAjustada * 1.2)) * 86400000) <= PROJECT_END },\n  { nombre: 'Base (actual)', vel: velocidadAjustada, dias: diasParaCerrar, en_tiempo: enTiempo },\n  { nombre: 'Pesimista (-20% velocidad)', vel: velocidadAjustada * 0.8, dias: Math.ceil(pendientes / (velocidadAjustada * 0.8)), en_tiempo: new Date(now.getTime() + Math.ceil(pendientes / (velocidadAjustada * 0.8)) * 86400000) <= PROJECT_END },\n  { nombre: 'Con 1 miembro menos', vel: velocidadAjustada * ((totalTeam - 1) / totalTeam), dias: Math.ceil(pendientes / (velocidadAjustada * ((totalTeam - 1) / totalTeam))), en_tiempo: false }\n];\n\nconst escenariosStr = escenarios.map(e => `${e.nombre}: ${e.vel.toFixed(2)} tareas/dia, ${e.dias}d para cerrar ${e.en_tiempo ? '(A TIEMPO)' : '(FUERA DE PLAZO)'}`).join('\\n');\n\nconst rankingStr = ranking.slice(0, 5).map(r => `${r.trello_name}: done=${r.tareas_done}, pending=${r.tareas_pending}, overdue=${r.tareas_overdue}`).join(' | ');\n\nconst hitosStr = hitos.slice(0, 4).map(h => `${h.nombre} en ${h.dias_faltan}d`).join(', ');\n\nconst ptoStr = ptoDetalle.length > 0 ? ptoDetalle.join('\\n') : 'Ningún PTO registrado.';\n\nlet riesgoFecha = 'bajo';\nif (!enTiempo) riesgoFecha = 'critico';\nelse if (diasParaCerrar > diasRestantes * 0.85) riesgoFecha = 'alto';\nelse if (diasParaCerrar > diasRestantes * 0.7) riesgoFecha = 'medio';\n\nconst prompt = `Eres el Capacity Forecaster del proyecto PetSafe (NestJS+Angular, cierre 10-jun-2026). Analiza capacidad del equipo, velocidad, PTOs y genera proyecciones. Texto plano, SIN markdown, SIN asteriscos, en español.\\n\\nDATA ACTUAL\\nProgreso: ${progreso}% (${completadas}/${totalTarjetas})\\nPendientes: ${pendientes} tareas\\nDias hasta cierre: ${diasRestantes} (${semanasRestantes} semanas)\\nEquipo activo: ${totalTeam} miembros\\n\\nVELOCIDAD\\n7d: ${velocidad7d.toFixed(2)} tareas/dia | 14d: ${velocidad14d.toFixed(2)} | Promedio: ${velocidadPromedio.toFixed(2)}\\nAjustada por PTOs: ${velocidadAjustada.toFixed(2)} tareas/dia\\n\\nPTOs REGISTRADOS\\n${ptoStr}\\nDias-persona perdidos por PTO: ${diasPTOTotal} de ${diasEquipoTotal} disponibles\\nCapacidad efectiva: ${capacidadPct}%\\n\\nPROYECCION\\nDias estimados para cerrar (ajustado): ${diasParaCerrar}\\nFecha estimada cierre: ${fechaEstimadaCierre.toLocaleDateString('es-EC')}\\nEn tiempo: ${enTiempo ? 'SI' : 'NO - FUERA DE PLAZO'}\\nRiesgo de fecha: ${riesgoFecha.toUpperCase()}\\n\\nESCENARIOS\\n${escenariosStr}\\n\\nCARGA EQUIPO: ${rankingStr}\\nHITOS PROXIMOS: ${hitosStr}\\n\\nEstructura obligatoria:\\nCAPACIDAD: Estado de capacidad del equipo y efecto de PTOs.\\nPROYECCION: Escenario mas probable y si se cumple el 10-jun-2026.\\nACCIONES: 3 acciones por nombre (FG, DM, DP, JA) para garantizar entrega.\\nSI NO SE LLEGA: Plan B concreto (que recortar, que priorizar, que negociar con cliente).`;\n\nreturn [{ json: {\n  correlation_id: event.correlation_id || `cap-${Date.now()}`,\n  event_type: event.event_type || 'capacity_forecast',\n  prompt, riesgoFecha, capacidadPct, velocidadAjustada, diasParaCerrar,\n  fechaEstimadaCierre: fechaEstimadaCierre.toLocaleDateString('es-EC'),\n  enTiempo, diasRestantes, pendientes, progreso, escenarios, ptoStr, diasPTOTotal\n}}];"
+      },
+      "id": "cap-context",
+      "name": "Build Capacity Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 400]
+    },
+    {
+      "parameters": { "promptType": "define", "text": "={{ $json.prompt }}" },
+      "id": "cap-chain",
+      "name": "Gemini Capacity Forecast",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [660, 400]
+    },
+    {
+      "parameters": { "modelName": "models/gemini-3.1-flash-lite", "options": { "temperature": 0.2 } },
+      "id": "cap-model",
+      "name": "Google Gemini Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [660, 608],
+      "credentials": { "googlePalmApi": { "id": "O6F3cHruroRP0y6x", "name": "Gemini - Jos" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.text ?? $json.output ?? $json.response ?? '';\nconst iaText = typeof raw === 'string' ? raw.trim() : JSON.stringify(raw);\nconst ctx = $('Build Capacity Context').item.json;\nconst rE = { critico: '🔴', alto: '🟠', medio: '🟡', bajo: '🟢' }[ctx.riesgoFecha] || '⚪';\nconst colorMap = { critico: 15158332, alto: 16744192, medio: 16761095, bajo: 3066993 };\nconst escStr = ctx.escenarios.map(e => `${e.en_tiempo ? '✅' : '❌'} ${e.nombre}: ${e.dias}d`).join('\\n');\nconst discord_payload = {\n  username: 'PM PetSafe · Capacity',\n  embeds: [{\n    title: `${rE} Forecast de Capacidad · ${ctx.diasRestantes}d hasta cierre`,\n    description: `Riesgo de fecha: **${ctx.riesgoFecha.toUpperCase()}** · Capacidad efectiva: **${ctx.capacidadPct}%** · ${ctx.enTiempo ? '✅ En tiempo' : '❌ FUERA DE PLAZO'}`,\n    color: colorMap[ctx.riesgoFecha] || 3066993,\n    fields: [\n      { name: '📊 Velocidad', value: `**${ctx.velocidadAjustada.toFixed(2)}** tareas/día (ajustada por PTOs)`, inline: true },\n      { name: '📅 Cierre Estimado', value: `**${ctx.fechaEstimadaCierre}** (${ctx.diasParaCerrar}d)`, inline: true },\n      { name: '🏖️ PTOs', value: ctx.ptoStr.slice(0, 500) || 'Ninguno', inline: false },\n      { name: '🔮 Escenarios', value: escStr.slice(0, 800), inline: false },\n      { name: '🤖 Análisis IA', value: iaText.slice(0, 900), inline: false }\n    ],\n    footer: { text: 'Capacity Forecaster · PM PetSafe AI' },\n    timestamp: new Date().toISOString()\n  }]\n};\nreturn [{ json: {\n  correlation_id: ctx.correlation_id, agent_role: 'Capacity Forecaster', decision_type: 'capacity_forecast',\n  input_summary: `Capacity: ${ctx.capacidadPct}% eff, ${ctx.diasParaCerrar}d to close, risk=${ctx.riesgoFecha}`.slice(0,500),\n  context_used: { capacidadPct: ctx.capacidadPct, diasParaCerrar: ctx.diasParaCerrar, riesgoFecha: ctx.riesgoFecha },\n  evidence: { escenarios: ctx.escenarios, ia: iaText.slice(0,1000) },\n  decision: { riesgoFecha: ctx.riesgoFecha, enTiempo: ctx.enTiempo, fechaEstimada: ctx.fechaEstimadaCierre },\n  recommendation: iaText.slice(0,500), confidence: 0.85,\n  risk_level: ctx.riesgoFecha === 'critico' ? 'high' : ctx.riesgoFecha === 'alto' ? 'high' : 'medium',\n  requires_human_approval: !ctx.enTiempo, discord_payload, ia_text: iaText,\n  forecast_data: { velocidad: ctx.velocidadAjustada, capacidad: ctx.capacidadPct, dias: ctx.diasParaCerrar, pendientes: ctx.pendientes, ptos: ctx.diasPTOTotal, escenarios: ctx.escenarios }\n}}];"
+      },
+      "id": "cap-payload",
+      "name": "Build Forecast Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO capacity_forecasts (velocidad_actual,velocidad_ajustada,capacidad_pct,tareas_pendientes,dias_estimados_cierre,fecha_estimada_cierre,riesgo_fecha,escenarios,ia_diagnostico) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9);",
+        "options": { "queryReplacement": "={{ [$json.forecast_data.velocidad, $json.forecast_data.velocidad, $json.forecast_data.capacidad, $json.forecast_data.pendientes, $json.forecast_data.dias, $json.decision.fechaEstimada, $json.decision.riesgoFecha, JSON.stringify($json.forecast_data.escenarios), $json.ia_text.slice(0,2000)] }}" }
+      },
+      "id": "cap-snapshot",
+      "name": "Persist Forecast",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1100, 200],
+      "credentials": { "postgres": { "id": "upx1y0H6Nw7XOqLJ", "name": "Postgres account" } }
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "={{ $env.DISCORD_WEBHOOK_URL }}", "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.discord_payload) }}", "options": {}
+      },
+      "id": "cap-discord",
+      "name": "Discord Forecast Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 400],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ai_decisions (correlation_id,agent_role,decision_type,input_summary,context_used,evidence,decision,recommendation,confidence,risk_level,requires_human_approval,status) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8,$9,$10,$11,$12);",
+        "options": { "queryReplacement": "={{ [$json.correlation_id,$json.agent_role,$json.decision_type,$json.input_summary,JSON.stringify($json.context_used),JSON.stringify($json.evidence),JSON.stringify($json.decision),$json.recommendation.slice(0,1000),$json.confidence,$json.risk_level,$json.requires_human_approval,'logged'] }}" }
+      },
+      "id": "cap-log",
+      "name": "Log AI Decision",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1100, 600],
+      "credentials": { "postgres": { "id": "upx1y0H6Nw7XOqLJ", "name": "Postgres account" } }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": { "main": [[{ "node": "Fetch Capacity Data", "type": "main", "index": 0 }]] },
+    "Fetch Capacity Data": { "main": [[{ "node": "Build Capacity Context", "type": "main", "index": 0 }]] },
+    "Build Capacity Context": { "main": [[{ "node": "Gemini Capacity Forecast", "type": "main", "index": 0 }]] },
+    "Gemini Capacity Forecast": { "main": [[{ "node": "Build Forecast Payload", "type": "main", "index": 0 }]] },
+    "Google Gemini Model": { "ai_languageModel": [[{ "node": "Gemini Capacity Forecast", "type": "ai_languageModel", "index": 0 }]] },
+    "Build Forecast Payload": { "main": [[{ "node": "Persist Forecast", "type": "main", "index": 0 }, { "node": "Discord Forecast Report", "type": "main", "index": 0 }, { "node": "Log AI Decision", "type": "main", "index": 0 }]] }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1", "binaryMode": "separate", "errorWorkflow": "O4qJYNx2qDrWB3wt" },
+  "meta": { "templateCredsSetupCompleted": true, "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5" },
+  "tags": []
+}

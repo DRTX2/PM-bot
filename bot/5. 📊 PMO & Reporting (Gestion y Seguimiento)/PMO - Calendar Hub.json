@@ -1,0 +1,352 @@
+{
+  "name": "PMO - Calendar Hub",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "pm-calendar",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-calendar",
+      "name": "Webhook - Calendar",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "pmo-calendar-hub"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "valid-token",
+              "leftValue": "={{ $json.query?.token || '' }}",
+              "rightValue": "={{ $env.PM_APPROVAL_SECRET }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "validate-calendar-token",
+      "name": "Validate Calendar Token",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS pmo_meetings (\n  meeting_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  idempotency_key TEXT UNIQUE,\n  correlation_id TEXT,\n  source TEXT,\n  title TEXT NOT NULL,\n  objective TEXT,\n  context_summary TEXT,\n  status TEXT NOT NULL DEFAULT 'scheduled',\n  priority TEXT,\n  requested_for TIMESTAMPTZ,\n  scheduled_for TIMESTAMPTZ,\n  duration_minutes INTEGER NOT NULL DEFAULT 30,\n  timezone TEXT NOT NULL DEFAULT 'America/Guayaquil',\n  scheduling_status TEXT,\n  scheduling_notes TEXT,\n  requested_by TEXT,\n  calendar_provider TEXT,\n  calendar_event_id TEXT,\n  calendar_url TEXT,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\n\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS idempotency_key TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS correlation_id TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS source TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS objective TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS context_summary TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS requested_for TIMESTAMPTZ;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS duration_minutes INTEGER NOT NULL DEFAULT 30;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/Guayaquil';\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_status TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_notes TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_provider TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_event_id TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_url TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS requested_for TIMESTAMPTZ;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/Guayaquil';\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_status TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_notes TEXT;\nCREATE TABLE IF NOT EXISTS pmo_meeting_invitees (invitee_id BIGSERIAL PRIMARY KEY, meeting_id UUID REFERENCES pmo_meetings(meeting_id) ON DELETE CASCADE, name TEXT NOT NULL, role TEXT, reason TEXT, email TEXT, discord_id TEXT, is_client BOOLEAN NOT NULL DEFAULT FALSE, attendance_status TEXT NOT NULL DEFAULT 'invited', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(meeting_id, name));\n\nALTER TABLE pmo_meeting_invitees ADD COLUMN IF NOT EXISTS is_client BOOLEAN NOT NULL DEFAULT FALSE;\nALTER TABLE pmo_meeting_invitees ADD COLUMN IF NOT EXISTS attendance_status TEXT NOT NULL DEFAULT 'invited';\nCREATE TABLE IF NOT EXISTS pmo_meeting_reminders (reminder_id BIGSERIAL PRIMARY KEY, meeting_id UUID REFERENCES pmo_meetings(meeting_id) ON DELETE CASCADE, reminder_type TEXT NOT NULL, scheduled_at TIMESTAMPTZ NOT NULL, status TEXT NOT NULL DEFAULT 'pending', payload JSONB NOT NULL DEFAULT '{}'::jsonb, queued_at TIMESTAMPTZ, sent_at TIMESTAMPTZ, last_error TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(meeting_id, reminder_type));\nCREATE TABLE IF NOT EXISTS pmo_meeting_logs (log_id BIGSERIAL PRIMARY KEY, meeting_id UUID REFERENCES pmo_meetings(meeting_id) ON DELETE SET NULL, correlation_id TEXT, action TEXT NOT NULL, actor TEXT, details JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\nSELECT\n  json_build_object(\n    'scheduled', (SELECT COUNT(*) FROM pmo_meetings WHERE status IN ('scheduled','confirmed')),\n    'needs_reschedule', (SELECT COUNT(*) FROM pmo_meetings WHERE status = 'needs_reschedule'),\n    'today', (SELECT COUNT(*) FROM pmo_meetings WHERE status IN ('scheduled','confirmed') AND (scheduled_for AT TIME ZONE 'America/Guayaquil')::date = (NOW() AT TIME ZONE 'America/Guayaquil')::date),\n    'week', (SELECT COUNT(*) FROM pmo_meetings WHERE status IN ('scheduled','confirmed') AND scheduled_for BETWEEN NOW() AND NOW() + INTERVAL '7 days')\n  ) AS stats,\n  COALESCE((SELECT json_agg(t) FROM (\n    SELECT m.*, COALESCE((SELECT json_agg(i) FROM (SELECT name, role, reason, is_client, attendance_status FROM pmo_meeting_invitees WHERE meeting_id = m.meeting_id ORDER BY is_client DESC, name) i), '[]'::json) AS invitees,\n      COALESCE((SELECT json_agg(r) FROM (SELECT reminder_type, scheduled_at, status FROM pmo_meeting_reminders WHERE meeting_id = m.meeting_id ORDER BY scheduled_at) r), '[]'::json) AS reminders\n    FROM pmo_meetings m\n    WHERE COALESCE(m.scheduled_for, m.created_at) >= NOW() - INTERVAL '2 days'\n    ORDER BY COALESCE(m.scheduled_for, m.created_at) ASC\n    LIMIT 80\n  ) t), '[]'::json) AS meetings,\n  COALESCE((SELECT json_agg(t) FROM (SELECT log_id, meeting_id, action, actor, details, created_at FROM pmo_meeting_logs ORDER BY created_at DESC LIMIT 40) t), '[]'::json) AS logs;"
+      },
+      "id": "fetch-calendar",
+      "name": "Fetch Calendar",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        460,
+        -80
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const parseArr = (v) => Array.isArray(v) ? v : (typeof v === 'string' ? JSON.parse(v || '[]') : []);\nconst parseObj = (v) => v && typeof v === 'object' && !Array.isArray(v) ? v : (typeof v === 'string' ? JSON.parse(v || '{}') : {});\nconst stats = parseObj($json.stats);\nconst meetings = parseArr($json.meetings);\nconst logs = parseArr($json.logs);\nconst token = String($('Webhook - Calendar').first().json.query?.token || '');\nconst focus = String($('Webhook - Calendar').first().json.query?.focus || '');\nconst esc = (v) => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');\nconst fmt = (v) => v ? new Date(v).toLocaleString('es-EC', { timeZone:'America/Guayaquil', dateStyle:'medium', timeStyle:'short' }) : 'Sin horario';\nconst day = (v) => v ? new Date(v).toLocaleDateString('es-EC', { timeZone:'America/Guayaquil', weekday:'long', month:'short', day:'numeric' }) : 'Sin horario';\nconst parseInvitees = (m) => parseArr(m.invitees);\nconst badge = (s) => {\n  const v = String(s || 'scheduled').toLowerCase();\n  const cls = ['cancelled','needs_reschedule'].includes(v) ? 'bad' : ['scheduled','proposed'].includes(v) ? 'warn' : 'ok';\n  return `<span class='badge ${cls}'>${esc(v)}</span>`;\n};\nconst groups = new Map();\nfor (const m of meetings) {\n  const key = day(m.scheduled_for || m.created_at);\n  if (!groups.has(key)) groups.set(key, []);\n  groups.get(key).push(m);\n}\nconst meetingCards = [...groups.entries()].map(([label, items]) => `\n  <section class='day'><h2>${esc(label)}</h2>${items.map((m) => {\n    const invitees = parseInvitees(m);\n    const highlighted = focus && (String(m.idempotency_key) === focus || String(m.meeting_id) === focus);\n    return `<article class='meeting ${highlighted ? 'focus' : ''}' data-search='${esc(JSON.stringify(m).toLowerCase())}'>\n      <div class='meeting-top'><div>${badge(m.status)} <span class='priority'>${esc(m.priority || 'medium')}</span></div><code>${esc(String(m.meeting_id).slice(0,8))}</code></div>\n      <h3>${esc(m.title)}</h3>\n      <p>${esc(m.objective || m.context_summary || '-')}</p>\n      <div class='meta'><span>${esc(fmt(m.scheduled_for))}</span><span>${esc(m.duration_minutes || 30)} min</span><span>${esc(m.scheduling_status || '')}</span></div>\n      ${m.scheduling_notes ? `<div class='note'>${esc(m.scheduling_notes)}</div>` : ''}\n      <div class='invitees'>${invitees.map(i => `<span>${esc(i.name)}${i.is_client ? ' · cliente' : ''}</span>`).join('')}</div>\n      <div class='actions'>\n        <button onclick=\"act('${esc(m.meeting_id)}','confirm')\">Confirmar</button>\n        <button onclick=\"act('${esc(m.meeting_id)}','done')\">Finalizar</button>\n        <button class='danger' onclick=\"act('${esc(m.meeting_id)}','cancel')\">Cancelar</button>\n      </div>\n    </article>`;\n  }).join('')}</section>`).join('');\nconst logRows = logs.length ? logs.map(l => `<tr><td>${esc(fmt(l.created_at))}</td><td>${esc(l.action)}</td><td>${esc(l.actor || '-')}</td><td><code>${esc(String(l.meeting_id || '').slice(0,8))}</code></td></tr>`).join('') : `<tr><td colspan='4' class='empty'>Sin logs recientes.</td></tr>`;\nconst html = `<!doctype html><html lang='es'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>PetSafe PM Calendar</title><style>\n:root{--bg:#0d1421;--panel:#141f31;--line:rgba(148,163,184,.18);--text:#eef4ff;--muted:#94a3b8;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--accent:#60a5fa}*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:linear-gradient(135deg,#0d1421,#111827 60%,#18243a);color:var(--text)}.shell{width:min(1180px,calc(100% - 28px));margin:24px auto 48px}.hero{border:1px solid var(--line);border-radius:26px;background:rgba(20,31,49,.88);padding:28px;box-shadow:0 24px 70px rgba(0,0,0,.34)}h1{font-size:clamp(2rem,4vw,3rem);margin:0 0 8px}p{color:var(--muted);line-height:1.55}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:20px}.stat{border:1px solid var(--line);border-radius:18px;padding:16px;background:rgba(255,255,255,.035)}.stat span{display:block;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em}.stat strong{font-size:1.8rem}.toolbar{display:flex;gap:10px;margin:18px 0}.toolbar input{flex:1;background:#0b1220;border:1px solid var(--line);border-radius:14px;color:var(--text);padding:12px}.calendar{display:grid;grid-template-columns:1fr;gap:18px}.day{border:1px solid var(--line);border-radius:22px;background:rgba(20,31,49,.72);padding:18px}.day h2{margin:0 0 14px;text-transform:capitalize}.meeting{border:1px solid var(--line);border-radius:18px;background:rgba(8,13,22,.44);padding:16px;margin:12px 0}.meeting.focus{outline:2px solid var(--accent)}.meeting-top{display:flex;justify-content:space-between;gap:12px;align-items:center}.badge{display:inline-flex;border-radius:999px;padding:5px 9px;font-size:.72rem;font-weight:800}.badge.ok{background:rgba(34,197,94,.14);color:#bbf7d0}.badge.warn{background:rgba(245,158,11,.14);color:#fde68a}.badge.bad{background:rgba(239,68,68,.14);color:#fecaca}.priority{color:var(--muted);font-size:.8rem;margin-left:8px}h3{font-size:1.12rem;margin:12px 0 6px}.meta,.invitees{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.meta span,.invitees span{border:1px solid rgba(148,163,184,.14);border-radius:999px;background:rgba(255,255,255,.04);padding:7px 10px;color:#cbd5e1;font-size:.82rem}.note{margin-top:10px;color:#fed7aa}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}button{border:0;border-radius:12px;padding:9px 12px;background:#2563eb;color:white;font-weight:800;cursor:pointer}.danger{background:#7f1d1d}.logs{margin-top:20px;border:1px solid var(--line);border-radius:22px;overflow:hidden;background:rgba(20,31,49,.72)}table{width:100%;border-collapse:collapse}th,td{padding:12px;border-bottom:1px solid rgba(148,163,184,.1);text-align:left}th{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em}.empty{text-align:center;color:var(--muted)}.hide{display:none}@media(max-width:760px){.stats{grid-template-columns:1fr}.actions button{width:100%}}</style></head><body><div class='shell'>\n<section class='hero'><h1>PetSafe PM Calendar</h1><p>Calendario PMO interno. Evita choques por invitado, agenda en horas prudentes y mantiene recordatorios por Discord sin depender de Google Calendar u Outlook.</p><div class='stats'>\n<div class='stat'><span>Agendadas</span><strong>${Number(stats.scheduled||0)}</strong></div><div class='stat'><span>Hoy</span><strong>${Number(stats.today||0)}</strong></div><div class='stat'><span>7 dias</span><strong>${Number(stats.week||0)}</strong></div><div class='stat'><span>Replanificar</span><strong>${Number(stats.needs_reschedule||0)}</strong></div>\n</div></section><div class='toolbar'><input placeholder='Filtrar por titulo, invitado, estado...' oninput='filterRows(this.value)'></div><main class='calendar'>${meetingCards || `<section class='day'><p class='empty'>No hay reuniones próximas.</p></section>`}</main>\n<section class='logs'><table><thead><tr><th>Fecha</th><th>Accion</th><th>Actor</th><th>Meeting</th></tr></thead><tbody>${logRows}</tbody></table></section>\n</div><script>\nconst token=${JSON.stringify(token)} || new URLSearchParams(location.search).get('token') || '';\nfunction filterRows(q){q=(q||'').toLowerCase();document.querySelectorAll('.meeting[data-search]').forEach(el=>el.classList.toggle('hide',q&&!el.dataset.search.includes(q)));}\nasync function act(id, action){\n  const res=await fetch('/webhook/pm-calendar-action',{method:'POST',headers:{'Content-Type':'application/json','x-pm-token':token},body:JSON.stringify({meeting_id:id,action,token})});\n  if(!res.ok){ alert('No se pudo actualizar la reunion'); return; }\n  location.reload();\n}\n</script></body></html>`;\nreturn [{ json: { html } }];"
+      },
+      "id": "build-calendar-html",
+      "name": "Build Calendar HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-calendar-html",
+      "name": "Respond Calendar HTML",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        940,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"error\":\"Unauthorized\"}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "respond-calendar-unauthorized",
+      "name": "Respond Calendar Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        460,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "path": "pm-calendar-action",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-calendar-action",
+      "name": "Webhook - Calendar Action",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        360
+      ],
+      "webhookId": "pmo-calendar-action"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "valid-token",
+              "leftValue": "={{ $request.headers['x-pm-token'] || $json.token || '' }}",
+              "rightValue": "={{ $env.PM_APPROVAL_SECRET }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "meeting-id",
+              "leftValue": "={{ $json.meeting_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "action",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "validate-action-token",
+      "name": "Validate Action Token",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        220,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS pmo_meetings (meeting_id UUID PRIMARY KEY DEFAULT gen_random_uuid(), idempotency_key TEXT UNIQUE, correlation_id TEXT, source TEXT, title TEXT NOT NULL, objective TEXT, context_summary TEXT, status TEXT NOT NULL DEFAULT 'scheduled', priority TEXT, requested_for TIMESTAMPTZ, scheduled_for TIMESTAMPTZ, duration_minutes INTEGER NOT NULL DEFAULT 30, timezone TEXT NOT NULL DEFAULT 'America/Guayaquil', scheduling_status TEXT, scheduling_notes TEXT, requested_by TEXT, calendar_provider TEXT, calendar_event_id TEXT, calendar_url TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS idempotency_key TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS correlation_id TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS source TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS objective TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS context_summary TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS requested_for TIMESTAMPTZ;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS duration_minutes INTEGER NOT NULL DEFAULT 30;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/Guayaquil';\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_status TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS scheduling_notes TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_provider TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_event_id TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS calendar_url TEXT;\nALTER TABLE pmo_meetings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();\nCREATE TABLE IF NOT EXISTS pmo_meeting_logs (log_id BIGSERIAL PRIMARY KEY, meeting_id UUID, correlation_id TEXT, action TEXT NOT NULL, actor TEXT, details JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\nCREATE TABLE IF NOT EXISTS events_outbox (outbox_id BIGSERIAL PRIMARY KEY, event_id TEXT, target TEXT NOT NULL DEFAULT 'discord', action TEXT NOT NULL DEFAULT 'notify', idempotency_key TEXT, payload JSONB NOT NULL DEFAULT '{}'::jsonb, status TEXT NOT NULL DEFAULT 'pending', retry_count INTEGER NOT NULL DEFAULT 0, scheduled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), sent_at TIMESTAMPTZ, last_error TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\nCREATE UNIQUE INDEX IF NOT EXISTS events_outbox_idempotency_key_uq ON events_outbox (idempotency_key);\nWITH input AS (\n  SELECT $1::uuid AS meeting_id, lower($2::text) AS action, COALESCE($3::text, 'pm_bot') AS actor\n), updated AS (\n  UPDATE pmo_meetings m\n  SET status = CASE input.action WHEN 'confirm' THEN 'confirmed' WHEN 'cancel' THEN 'cancelled' WHEN 'done' THEN 'done' ELSE m.status END,\n      updated_at = NOW()\n  FROM input\n  WHERE m.meeting_id = input.meeting_id\n    AND input.action IN ('confirm','cancel','done')\n  RETURNING m.*, input.action, input.actor\n), log_row AS (\n  INSERT INTO pmo_meeting_logs (meeting_id, correlation_id, action, actor, details)\n  SELECT meeting_id, correlation_id, 'calendar_' || action, actor, jsonb_build_object('status', status, 'title', title, 'scheduled_for', scheduled_for)\n  FROM updated\n), outbox AS (\n  INSERT INTO events_outbox (event_id, target, action, idempotency_key, payload)\n  SELECT correlation_id, 'discord', 'notify', 'calendar-action:' || meeting_id || ':' || action,\n    jsonb_build_object('content', '**Calendario PMO actualizado**\\n' || title || '\\nEstado: ' || status || '\\nID: `' || meeting_id || '`')\n  FROM updated\n  ON CONFLICT (idempotency_key) DO NOTHING\n)\nSELECT true AS ok, meeting_id, title, status, scheduled_for, action, NULL::text AS error FROM updated\nUNION ALL\nSELECT false AS ok, $1::uuid AS meeting_id, NULL::text AS title, NULL::text AS status, NULL::timestamptz AS scheduled_for, lower($2::text) AS action, 'meeting_not_found_or_invalid_action' AS error\nWHERE NOT EXISTS (SELECT 1 FROM updated);",
+        "options": {
+          "queryReplacement": "={{ [ $json.meeting_id, $json.action, $json.actor || 'pm_bot' ] }}"
+        }
+      },
+      "id": "update-calendar-action",
+      "name": "Update Calendar Action",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: $json.ok, meeting_id: $json.meeting_id, status: $json.status, action: $json.action, error: $json.error }) }}",
+        "options": {}
+      },
+      "id": "respond-action-ok",
+      "name": "Respond Action OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"error\":\"Unauthorized or invalid input\"}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "respond-action-unauthorized",
+      "name": "Respond Action Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        460,
+        480
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Calendar": {
+      "main": [
+        [
+          {
+            "node": "Validate Calendar Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Calendar Token": {
+      "main": [
+        [
+          {
+            "node": "Fetch Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Calendar Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Calendar": {
+      "main": [
+        [
+          {
+            "node": "Build Calendar HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Calendar HTML": {
+      "main": [
+        [
+          {
+            "node": "Respond Calendar HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Calendar Action": {
+      "main": [
+        [
+          {
+            "node": "Validate Action Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Action Token": {
+      "main": [
+        [
+          {
+            "node": "Update Calendar Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Action Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Calendar Action": {
+      "main": [
+        [
+          {
+            "node": "Respond Action OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "id": "pmoCalendarHub",
+  "tags": []
+}

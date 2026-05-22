@@ -1,0 +1,161 @@
+{
+  "id": "wf-pm-tareas",
+  "name": "WF_PM_Tareas",
+  "active": true,
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "build-task",
+      "name": "Build Task Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const ctx = $json;\nconst datos = ctx.datos || {};\nconst raw = String(datos.texto || datos.texto_original || ctx.mensaje_original || '');\nconst sub = String(ctx.sub_intencion || 'listar').toLowerCase();\nconst q = (v) => v === null || v === undefined || v === '' ? 'NULL' : \"'\" + String(v).replace(/'/g, \"''\") + \"'\";\nconst id = Number(datos.id || (raw.match(/#?(\\d+)/) || [])[1] || 0);\nconst norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\nconst prio = ['baja','media','alta','critica'].includes(norm(datos.prioridad)) ? norm(datos.prioridad) : (norm(raw).match(/prioridad:?\\s*(baja|media|alta|critica)/)?.[1] || 'media');\nconst stateMap = { progreso: 'en_progreso', revision: 'en_revision', revisar: 'en_revision', terminado: 'completada', terminada: 'completada', hecho: 'completada' };\nlet estado = norm(datos.estado) || norm(raw).match(/estado:?\\s*([a-z_]+)/)?.[1] || '';\nestado = stateMap[estado] || estado;\nif (!['pendiente','en_progreso','bloqueada','en_revision','completada','cancelada'].includes(estado)) estado = 'pendiente';\nconst responsable = datos.responsable || raw.match(/responsable:?\\s*([^,;\\n]+)/i)?.[1]?.trim() || raw.match(/asigna(?:r|le)?\\s+a\\s+([^,;\\n]+)/i)?.[1]?.trim() || null;\nconst fecha = datos.fecha_limite || raw.match(/(\\d{4}-\\d{2}-\\d{2})/)?.[1] || null;\nconst entregable = raw.match(/entregable:?\\s*([^,;\\n]+)/i)?.[1]?.trim() || null;\nconst sprint = raw.match(/sprint:?\\s*([^,;\\n]+)/i)?.[1]?.trim() || null;\nconst cleaned = raw\n  .replace(/^\\/pm\\s+tarea\\s+\\w+/i, '')\n  .replace(/responsable:?\\s*[^,;\\n]+/ig, '')\n  .replace(/prioridad:?\\s*(baja|media|alta|cr[ií]tica)/ig, '')\n  .replace(/estado:?\\s*[a-z_]+/ig, '')\n  .replace(/limite:?\\s*\\d{4}-\\d{2}-\\d{2}/ig, '')\n  .replace(/l[ií]mite:?\\s*\\d{4}-\\d{2}-\\d{2}/ig, '')\n  .replace(/#?\\d+/g, '')\n  .trim();\nconst titulo = cleaned || datos.titulo || datos.texto || 'Tarea sin titulo';\n\nlet query;\nlet action = sub;\nif (['crear','nueva','registrar'].includes(sub)) {\n  query = `INSERT INTO pm_tareas (titulo, descripcion, responsable, prioridad, estado, fecha_limite, entregable, sprint, creado_por, canal_origen)\nVALUES (${q(titulo)}, ${q(raw)}, ${q(responsable)}, ${q(prio)}, 'pendiente', ${fecha ? q(fecha) + '::date' : 'NULL'}, ${q(entregable)}, ${q(sprint)}, ${q(ctx.usuario)}, ${q(ctx.canal_origen)})\nRETURNING 'created' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, entregable, sprint;`;\n} else if (['asignar','assign'].includes(sub)) {\n  if (!id || !responsable) {\n    return [{ json: { action: 'validation_error', respuesta: 'Faltan datos para asignar la tarea. Indica ID y responsable. Ejemplo: `/pm tarea asignar #12 responsable: David`', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];\n  }\n  query = `UPDATE pm_tareas SET responsable=${q(responsable)}, fecha_actualizacion=NOW() WHERE id=${id} RETURNING 'assigned' AS action, id, titulo, responsable, prioridad, estado, fecha_limite;`;\n} else if (['actualizar','update','estado'].includes(sub)) {\n  if (!id) {\n    return [{ json: { action: 'validation_error', respuesta: 'Falta el ID de la tarea para actualizar. Ejemplo: `/pm tarea actualizar #12 estado: en_revision`', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];\n  }\n  const updates = [`estado=${q(estado)}`, `prioridad=${q(prio)}`, `fecha_actualizacion=NOW()`];\n  if (responsable) updates.push(`responsable=${q(responsable)}`);\n  if (fecha) updates.push(`fecha_limite=${q(fecha)}::date`);\n  query = `UPDATE pm_tareas SET ${updates.join(', ')} WHERE id=${id} RETURNING 'updated' AS action, id, titulo, responsable, prioridad, estado, fecha_limite;`;\n} else if (['atrasos','vencidas','vencidos'].includes(sub)) {\n  query = `SELECT 'overdue' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, (CURRENT_DATE - fecha_limite::date) AS dias_atraso\nFROM pm_tareas WHERE fecha_limite < CURRENT_DATE AND estado NOT IN ('completada','cancelada')\nORDER BY dias_atraso DESC, prioridad LIMIT 20;`;\n} else {\n  action = ['pendientes','listar','lista','list'].includes(sub) ? sub : 'listar';\n  query = `SELECT 'list' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, entregable, sprint\nFROM pm_tareas WHERE estado NOT IN ('completada','cancelada')\nORDER BY CASE prioridad WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, fecha_limite NULLS LAST LIMIT 20;`;\n}\nreturn [{ json: { query, action, canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];"
+      }
+    },
+    {
+      "id": "task-valid?",
+      "name": "Task Validation Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        500,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "has-response",
+              "leftValue": "={{ $json.respuesta }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "run-task",
+      "name": "Run Task Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        760,
+        120
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.query }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "format-task",
+      "name": "Format Task Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\nconst ctx = $('Build Task Query').item.json;\nif (ctx.respuesta) return [{ json: ctx }];\nconst action = rows[0]?.action || ctx.action;\nconst lineTask = (t) => `#${t.id} ${t.prioridad ? '[' + t.prioridad + '] ' : ''}${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - vence ' + t.fecha_limite : ''}`;\nlet respuesta;\nif (!rows.length) {\n  respuesta = action === 'overdue' ? 'No hay tareas atrasadas. El proyecto va en tiempo.' : 'No hay tareas activas registradas.';\n} else if (action === 'created') {\n  const t = rows[0];\n  respuesta = `Tarea registrada.\\nID: #${t.id}\\nTitulo: ${t.titulo}\\nResponsable: ${t.responsable || 'sin asignar'}\\nFecha limite: ${t.fecha_limite || 'sin fecha'}\\nPrioridad: ${t.prioridad}\\nProximo paso: validar avance antes de la siguiente reunion de seguimiento.`;\n} else if (action === 'assigned') {\n  const t = rows[0];\n  respuesta = `Tarea asignada.\\nID: #${t.id}\\nTitulo: ${t.titulo}\\nResponsable: ${t.responsable}\\nProximo paso: registrar avance con /pm avance registrar #${t.id}.`;\n} else if (action === 'updated') {\n  const t = rows[0];\n  respuesta = `Tarea actualizada.\\nID: #${t.id}\\nEstado: ${t.estado}\\nPrioridad: ${t.prioridad}\\nResponsable: ${t.responsable || 'sin asignar'}\\nProximo paso: revisar si requiere bloqueo, entregable o evidencia.`;\n} else if (action === 'overdue') {\n  respuesta = `Tareas atrasadas (${rows.length}):\\n` + rows.map(t => `- ${lineTask(t)} - atraso: ${t.dias_atraso} dia(s)`).join('\\n') + '\\nRecomendacion PM: revisar responsables y bloqueos activos hoy.';\n} else {\n  respuesta = `Tareas activas (${rows.length}):\\n` + rows.map(t => `- ${lineTask(t)}`).join('\\n');\n}\nreturn [{ json: { respuesta, canal_destino: ctx.canal_destino, canal_id: ctx.canal_id, storage: 'postgres:pm_tareas' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Task Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Task Query": {
+      "main": [
+        [
+          {
+            "node": "Task Validation Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task Validation Error?": {
+      "main": [
+        [
+          {
+            "node": "Format Task Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Task Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Task Query": {
+      "main": [
+        [
+          {
+            "node": "Format Task Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "wf-pm-error-handler"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  }
+}

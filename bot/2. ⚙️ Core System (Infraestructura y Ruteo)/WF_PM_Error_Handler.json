@@ -1,0 +1,123 @@
+{
+  "id": "wf-pm-error-handler",
+  "name": "WF_PM_Error_Handler",
+  "active": true,
+  "nodes": [
+    {
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "format-error",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const e = $json || {};\nconst workflow = e.workflow?.name || e.workflowName || 'workflow desconocido';\nconst node = e.execution?.lastNodeExecuted || e.node?.name || 'nodo desconocido';\nconst msg = e.error?.message || e.message || JSON.stringify(e).slice(0, 500);\nconst content = `Error critico en PM Bot\\nWorkflow: ${workflow}\\nNodo: ${node}\\nError: ${msg}`;\nreturn [{ json: { workflow, node, msg, execution_id: e.execution?.id || e.executionId || '', payload: e, content, channel_id: process.env.DISCORD_CHANNEL_ADMIN || process.env.DISCORD_CHANNEL_BOT_LOG || '' } }];"
+      }
+    },
+    {
+      "id": "store-error",
+      "name": "Store PM Bot Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        500,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO pm_bot_errors (workflow_name,node_name,error_message,execution_id,payload)\nVALUES ($1,$2,$3,$4,$5::jsonb) RETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.workflow, $json.node, $json.msg, $json.execution_id, JSON.stringify($json.payload || {}) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "queue-error",
+      "name": "Queue Error Notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        760,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO events_outbox (event_id, target, action, idempotency_key, payload)\nVALUES ($1, 'discord', 'pm_report', $2, $3::jsonb)\nON CONFLICT (idempotency_key) DO NOTHING\nRETURNING outbox_id;",
+        "options": {
+          "queryReplacement": "={{ [ \"pm-error-\" + Date.now(), \"pm-error-\" + Date.now(), JSON.stringify({ content: $(\"Format Error\").item.json.content, channel_id: $(\"Format Error\").item.json.channel_id }) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error": {
+      "main": [
+        [
+          {
+            "node": "Store PM Bot Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store PM Bot Error": {
+      "main": [
+        [
+          {
+            "node": "Queue Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "wf-pm-error-handler"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  }
+}

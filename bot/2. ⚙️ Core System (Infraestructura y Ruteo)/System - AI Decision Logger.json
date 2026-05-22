@@ -1,0 +1,179 @@
+{
+  "name": "System - AI Decision Logger",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "9ba8e0f5-2f8e-44aa-b1f5-b439fb0385f7",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json || {};\nif (!input.agent_role) throw new Error('agent_role is required');\nif (input.decision === undefined || input.decision === null) throw new Error('decision is required');\n\nconst parseObject = (value, fallback = {}) => {\n  if (value === undefined || value === null || value === '') return fallback;\n  if (typeof value === 'object') return value;\n  if (typeof value !== 'string') return fallback;\n  try { return JSON.parse(value); } catch (_) { return fallback; }\n};\n\nconst parseBool = (value) => {\n  if (typeof value === 'boolean') return value;\n  if (typeof value === 'number') return value !== 0;\n  if (typeof value === 'string') return ['true', '1', 'yes', 'si', 'sí'].includes(value.trim().toLowerCase());\n  return false;\n};\n\nconst firstNonEmpty = (...values) => values.find((value) =>\n  value !== undefined && value !== null && String(value).trim() !== ''\n);\n\nconst normalizeRisk = (value) => {\n  const risk = String(value || 'low').trim().toLowerCase();\n  return ['low', 'medium', 'high', 'critical'].includes(risk) ? risk : 'low';\n};\n\nconst normalizeDeadline = (value) => {\n  const raw = firstNonEmpty(value);\n  if (!raw) return null;\n  const date = new Date(raw);\n  return Number.isNaN(date.getTime()) ? null : date.toISOString();\n};\n\nconst decisionObj = typeof input.decision === 'string'\n  ? parseObject(input.decision, { raw: input.decision })\n  : parseObject(input.decision, {});\n\nconst contextUsed = parseObject(input.context_used, {});\nconst evidence = parseObject(input.evidence, {});\nconst requiresApproval = parseBool(input.requires_human_approval);\nconst confidenceRaw = Number.parseFloat(input.confidence);\nconst confidenceNormalized = Number.isFinite(confidenceRaw)\n  ? Math.max(0, Math.min(1, confidenceRaw > 1 ? confidenceRaw / 100 : confidenceRaw))\n  : 1.0;\n\nconst pmImpact = firstNonEmpty(\n  input.pm_impact,\n  input.impact,\n  decisionObj.impact,\n  decisionObj.pm_impact,\n  decisionObj.summary,\n  input.input_summary,\n  input.recommendation\n);\nconst pmNextAction = firstNonEmpty(\n  input.pm_next_action,\n  input.next_action,\n  decisionObj.next_action,\n  decisionObj.pm_next_action,\n  decisionObj.suggested_action,\n  decisionObj.suggested_comment,\n  input.recommendation\n);\nconst pmOwner = firstNonEmpty(\n  input.pm_owner,\n  input.owner,\n  decisionObj.owner,\n  decisionObj.pm_owner,\n  contextUsed.owner,\n  contextUsed.actor,\n  input.actor,\n  'Tech Lead'\n);\nconst pmDeadline = normalizeDeadline(firstNonEmpty(\n  input.pm_deadline,\n  input.deadline,\n  decisionObj.deadline,\n  decisionObj.pm_deadline\n));\nconst pmRiskReason = firstNonEmpty(\n  input.pm_risk_reason,\n  input.risk_reason,\n  decisionObj.risk_reason,\n  decisionObj.pm_risk_reason,\n  decisionObj.analysis,\n  input.recommendation\n);\n\nreturn [{\n  json: {\n    ...input,\n    correlation_id: input.correlation_id || `ai-${Date.now()}`,\n    decision_type: input.decision_type || 'general',\n    risk_level: normalizeRisk(input.risk_level || decisionObj.risk_level),\n    confidence: confidenceNormalized,\n    requires_human_approval: requiresApproval,\n    status: input.status || (requiresApproval ? 'pending_approval' : 'approved'),\n    decision: decisionObj,\n    context_used: contextUsed,\n    evidence,\n    pm_impact: pmImpact || null,\n    pm_next_action: pmNextAction || null,\n    pm_owner: pmOwner || null,\n    pm_deadline: pmDeadline,\n    pm_risk_reason: pmRiskReason || null\n  }\n}];"
+      },
+      "id": "66a0f077-c96a-4e60-b9e1-e898d571e7a8",
+      "name": "Validate & Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -608,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS ai_decisions (\n  decision_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  correlation_id TEXT,\n  agent_role TEXT NOT NULL,\n  decision_type TEXT,\n  input_summary TEXT,\n  context_used JSONB,\n  evidence JSONB,\n  decision JSONB NOT NULL,\n  recommendation TEXT,\n  confidence DOUBLE PRECISION,\n  risk_level TEXT,\n  requires_human_approval BOOLEAN NOT NULL DEFAULT FALSE,\n  approved_by TEXT,\n  action_taken TEXT,\n  approved_at TIMESTAMP WITH TIME ZONE,\n  pm_impact TEXT,\n  pm_next_action TEXT,\n  pm_owner TEXT,\n  pm_deadline TIMESTAMP WITH TIME ZONE,\n  pm_risk_reason TEXT,\n  status TEXT NOT NULL DEFAULT 'pending',\n  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()\n);\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS approved_by TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS action_taken TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP WITH TIME ZONE;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS pm_impact TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS pm_next_action TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS pm_owner TEXT;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS pm_deadline TIMESTAMP WITH TIME ZONE;\nALTER TABLE ai_decisions ADD COLUMN IF NOT EXISTS pm_risk_reason TEXT;\nCREATE UNIQUE INDEX IF NOT EXISTS ai_decisions_dedupe_idx ON ai_decisions (correlation_id, agent_role, decision_type) WHERE correlation_id IS NOT NULL;\nINSERT INTO ai_decisions (\n  correlation_id, agent_role, decision_type, input_summary,\n  context_used, evidence, decision, recommendation, confidence,\n  risk_level, requires_human_approval, status,\n  pm_impact, pm_next_action, pm_owner, pm_deadline, pm_risk_reason\n)\nVALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15, $16::timestamptz, $17)\nON CONFLICT (correlation_id, agent_role, decision_type) WHERE correlation_id IS NOT NULL\nDO UPDATE SET\n  input_summary = EXCLUDED.input_summary,\n  context_used = EXCLUDED.context_used,\n  evidence = EXCLUDED.evidence,\n  decision = EXCLUDED.decision,\n  recommendation = EXCLUDED.recommendation,\n  confidence = EXCLUDED.confidence,\n  risk_level = EXCLUDED.risk_level,\n  requires_human_approval = EXCLUDED.requires_human_approval,\n  pm_impact = COALESCE(EXCLUDED.pm_impact, ai_decisions.pm_impact),\n  pm_next_action = COALESCE(EXCLUDED.pm_next_action, ai_decisions.pm_next_action),\n  pm_owner = COALESCE(EXCLUDED.pm_owner, ai_decisions.pm_owner),\n  pm_deadline = COALESCE(EXCLUDED.pm_deadline, ai_decisions.pm_deadline),\n  pm_risk_reason = COALESCE(EXCLUDED.pm_risk_reason, ai_decisions.pm_risk_reason),\n  status = CASE\n    WHEN ai_decisions.status IN ('approved', 'rejected', 'externally_approved', 'externally_closed') THEN ai_decisions.status\n    ELSE EXCLUDED.status\n  END\nRETURNING decision_id, correlation_id, agent_role, decision_type, recommendation, risk_level, requires_human_approval, status, pm_impact, pm_next_action, pm_owner, pm_deadline, pm_risk_reason;",
+        "options": {
+          "queryReplacement": "={{ [ $json.correlation_id, $json.agent_role, $json.decision_type, $json.input_summary || null, JSON.stringify($json.context_used || {}), JSON.stringify($json.evidence || {}), JSON.stringify($json.decision), $json.recommendation || null, $json.confidence, $json.risk_level, $json.requires_human_approval, $json.status, $json.pm_impact || null, $json.pm_next_action || null, $json.pm_owner || null, $json.pm_deadline || null, $json.pm_risk_reason || null ] }}"
+        }
+      },
+      "id": "ffedc74c-e480-4b30-be6b-63dbdecdbc9e",
+      "name": "Insert AI Decision",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -400,
+        112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.requires_human_approval }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "458c3960-ad2c-4b48-9791-597284718993",
+      "name": "Requires Approval?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -208,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const decisionId = $json.decision_id;\nconst role = $('Validate & Format').item.json.agent_role;\nconst recommendation = $('Validate & Format').item.json.recommendation;\nconst risk = $('Validate & Format').item.json.risk_level;\n\nconst content = `**Aprobación de IA Requerida**\\nEl agente **${role}** ha propuesto una acción de riesgo **${risk}**.\\n\\n**Recomendación:** ${recommendation}\\n\\nID: \\`${decisionId}\\`\\nHub: /webhook/pm-approvals`;\n\nreturn [{\n  json: {\n    outbox_target: 'discord',\n    outbox_action: 'notify',\n    outbox_payload: { content },\n    event_id: 'ai-decision:' + decisionId,\n    idempotency_key: 'ai-decision:' + decisionId,\n    correlation_id: $('Validate & Format').item.json.correlation_id\n  }\n}];"
+      },
+      "id": "030366a8-4d26-408e-b5cc-fbf6dee40c04",
+      "name": "Build Approval Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS events_outbox (\n  outbox_id bigserial PRIMARY KEY,\n  event_id text,\n  target text NOT NULL DEFAULT 'discord',\n  action text NOT NULL DEFAULT 'notify',\n  idempotency_key text,\n  payload jsonb NOT NULL DEFAULT '{}'::jsonb,\n  status text NOT NULL DEFAULT 'pending',\n  retry_count integer NOT NULL DEFAULT 0,\n  scheduled_at timestamptz NOT NULL DEFAULT NOW(),\n  sent_at timestamptz,\n  last_error text,\n  created_at timestamptz NOT NULL DEFAULT NOW()\n);\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS idempotency_key text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT NOW();\nCREATE UNIQUE INDEX IF NOT EXISTS events_outbox_idempotency_key_uq ON events_outbox (idempotency_key);\nINSERT INTO events_outbox (event_id, target, action, idempotency_key, payload) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (idempotency_key) DO NOTHING;",
+        "options": {
+          "queryReplacement": "={{ [ $json.event_id, $json.outbox_target, $json.outbox_action, $json.idempotency_key, JSON.stringify($json.outbox_payload) ] }}"
+        }
+      },
+      "id": "c92e2136-de6b-4135-9ebc-96c664164573",
+      "name": "Queue Alert in Outbox",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        208,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate & Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Format": {
+      "main": [
+        [
+          {
+            "node": "Insert AI Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert AI Decision": {
+      "main": [
+        [
+          {
+            "node": "Requires Approval?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requires Approval?": {
+      "main": [
+        [
+          {
+            "node": "Build Approval Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Approval Alert": {
+      "main": [
+        [
+          {
+            "node": "Queue Alert in Outbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "306e32dd-e187-4e80-aa7e-a933583868d3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "wcNFn0XHidnGmrHg",
+  "tags": []
+}

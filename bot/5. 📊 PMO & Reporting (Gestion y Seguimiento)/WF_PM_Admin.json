@@ -1,0 +1,87 @@
+{
+  "id": "wf-pm-admin",
+  "name": "WF_PM_Admin",
+  "active": true,
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "query-admin",
+      "name": "Query Bot Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT COUNT(*) FROM pm_tareas) AS tareas,\n  (SELECT COUNT(*) FROM pm_avances) AS avances,\n  (SELECT COUNT(*) FROM pm_bloqueos WHERE estado <> 'resuelto') AS bloqueos_activos,\n  (SELECT COUNT(*) FROM pm_riesgos WHERE estado = 'abierto') AS riesgos_abiertos,\n  (SELECT COUNT(*) FROM pm_entregables) AS entregables,\n  (SELECT COUNT(*) FROM pm_decisiones) AS decisiones,\n  (SELECT COUNT(*) FROM events_outbox WHERE status IN ('pending','sending')) AS outbox_pendiente,\n  (SELECT COUNT(*) FROM events_outbox WHERE status IN ('failed','dead')) AS outbox_fallido,\n  (SELECT COALESCE(json_agg(l), '[]'::json) FROM (SELECT id,intencion,usuario,canal,exito,fecha FROM pm_command_log ORDER BY fecha DESC LIMIT 5) l) AS ultimos_comandos;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "format-admin",
+      "name": "Format Admin Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const row = $json; const ctx = $('Execute Workflow Trigger').item.json || {};\nconst required = ['DISCORD_BOT_TOKEN','DISCORD_CHANNEL_TAREAS','DISCORD_CHANNEL_AVANCES','DISCORD_CHANNEL_BLOQUEOS','DISCORD_CHANNEL_REPORTES','DISCORD_CHANNEL_REUNIONES','DISCORD_CHANNEL_ENTREGABLES','DISCORD_CHANNEL_RIESGOS','DISCORD_CHANNEL_BOT_LOG','DISCORD_CHANNEL_ADMIN'];\nconst missing = required.filter(k => !process.env[k]);\nconst logs = typeof row.ultimos_comandos === 'string' ? JSON.parse(row.ultimos_comandos) : row.ultimos_comandos;\nconst respuesta = [\n  'Estado administrativo del PM Bot',\n  `Storage: Postgres`,\n  `Tareas: ${row.tareas} | Avances: ${row.avances} | Entregables: ${row.entregables} | Decisiones: ${row.decisiones}`,\n  `Bloqueos activos: ${row.bloqueos_activos} | Riesgos abiertos: ${row.riesgos_abiertos}`,\n  `Outbox pendiente: ${row.outbox_pendiente} | Outbox fallido: ${row.outbox_fallido}`,\n  `Variables faltantes: ${missing.length ? missing.join(', ') : 'ninguna'}`,\n  '',\n  'Ultimos comandos:',\n  ...(logs.length ? logs.map(l => `- #${l.id} ${l.intencion} por ${l.usuario} en ${l.canal}`) : ['- Sin comandos auditados.'])\n].join('\\n');\nreturn [{ json: { respuesta, canal_destino: 'DISCORD_CHANNEL_ADMIN', canal_id: process.env.DISCORD_CHANNEL_ADMIN || ctx.canal_origen, storage: 'postgres:pm_command_log/events_outbox' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Query Bot Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Bot Status": {
+      "main": [
+        [
+          {
+            "node": "Format Admin Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "wf-pm-error-handler"
+  },
+  "pinData": {},
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  }
+}

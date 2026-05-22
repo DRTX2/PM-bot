@@ -1,0 +1,621 @@
+{
+  "name": "Construir Contexto Robusto",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 60
+            }
+          ]
+        }
+      },
+      "id": "d5a0fa04-9ec2-4796-9262-99277c1a0e10",
+      "name": "Schedule Trigger1",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "w3c03",
+              "name": "TRELLO_BOARD_ID",
+              "value": "={{ $env.TRELLO_BOARD_ID }}",
+              "type": "string"
+            },
+            {
+              "id": "w3c05",
+              "name": "GITHUB_OWNER_BACKEND",
+              "value": "={{ $env.GITHUB_OWNER_BACKEND || $env.GITHUB_OWNER }}",
+              "type": "string"
+            },
+            {
+              "id": "w3c05f",
+              "name": "GITHUB_OWNER_FRONTEND",
+              "value": "={{ $env.GITHUB_OWNER_FRONTEND || $env.GITHUB_OWNER || $env.GITHUB_OWNER_BACKEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w3c06",
+              "name": "GITHUB_REPO_BACKEND",
+              "value": "={{ $env.GITHUB_REPO_BACKEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w3c07",
+              "name": "GITHUB_REPO_FRONTEND",
+              "value": "={{ $env.GITHUB_REPO_FRONTEND }}",
+              "type": "string"
+            },
+            {
+              "id": "w3c09",
+              "name": "DISCORD_WEBHOOK_URL",
+              "value": "={{ $env.DISCORD_WEBHOOK_URL }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ce18e55f-99dc-4eec-a2d6-37576ed023bd",
+      "name": "Configuración1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1984,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.trello.com/1/boards/{{ $node[\"Configuración1\"].json.TRELLO_BOARD_ID }}/cards",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "trelloApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "name,dueComplete,due,idList,dateLastActivity"
+            },
+            {
+              "name": "attachments",
+              "value": "true"
+            },
+            {
+              "name": "attachment_fields",
+              "value": "name,url,mimeType,date"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6a9ef155-ec84-4d59-8a6a-1553edf82f60",
+      "name": "Trello Cards Delta1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2224,
+        704
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuración1\"].json.GITHUB_OWNER_BACKEND }}/{{ $node[\"Configuración1\"].json.GITHUB_REPO_BACKEND }}/commits",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "sha",
+              "value": "main"
+            },
+            {
+              "name": "per_page",
+              "value": "5"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1323766d-ab34-4450-a500-9f1befa10178",
+      "name": "GitHub Back Main1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2224,
+        832
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "dkFcPmeSEHWQKN9i",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $node[\"Configuración1\"].json.GITHUB_OWNER_FRONTEND }}/{{ $node[\"Configuración1\"].json.GITHUB_REPO_FRONTEND }}/commits",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "sha",
+              "value": "main"
+            },
+            {
+              "name": "per_page",
+              "value": "5"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c5c53492-3d95-4de0-83b7-a70b53b71d8c",
+      "name": "GitHub Front Main1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2224,
+        976
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "dkFcPmeSEHWQKN9i",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS estado_conocido (\n  id integer PRIMARY KEY,\n  nombre_estado text,\n  snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,\n  actualizado timestamptz NOT NULL DEFAULT NOW()\n);\nALTER TABLE estado_conocido ADD COLUMN IF NOT EXISTS nombre_estado text;\nALTER TABLE estado_conocido ADD COLUMN IF NOT EXISTS snapshot jsonb NOT NULL DEFAULT '{}'::jsonb;\nALTER TABLE estado_conocido ADD COLUMN IF NOT EXISTS actualizado timestamptz NOT NULL DEFAULT NOW();\nINSERT INTO estado_conocido (id, nombre_estado, snapshot, actualizado)\nVALUES (1, 'contexto_robusto', '{}'::jsonb, NOW())\nON CONFLICT (id) DO NOTHING;\nSELECT snapshot FROM estado_conocido WHERE id = 1;",
+        "options": {}
+      },
+      "id": "780cd044-5def-44da-acc2-68c9339f8e07",
+      "name": "PG Estado Conocido1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2224,
+        1120
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "id": "c93ad497-a4fa-4de3-a48c-1d96361cc20d",
+      "name": "Merge Delta1",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2480,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $node['Configuración1'].json;\n\nconst parseSnapshot = (value) => {\n  try {\n    if (!value) return {};\n    if (typeof value === 'string') return JSON.parse(value);\n    if (typeof value === 'object') return value;\n    return {};\n  } catch (e) {\n    return {};\n  }\n};\n\nconst safeNodeItems = (nodeName) => {\n  try {\n    return $(nodeName).all().map((i) => i.json);\n  } catch (e) {\n    return [];\n  }\n};\n\nconst flattenItems = (arr) => {\n  const out = [];\n  for (const it of arr) {\n    if (Array.isArray(it)) out.push(...it);\n    else if (it && typeof it === 'object') out.push(it);\n  }\n  return out;\n};\n\nconst isCard = (x) =>\n  x &&\n  typeof x === 'object' &&\n  typeof x.id === 'string' &&\n  x.id.length === 24 &&\n  Object.prototype.hasOwnProperty.call(x, 'dueComplete');\n\nconst isCommit = (x) =>\n  x &&\n  typeof x === 'object' &&\n  typeof x.sha === 'string' &&\n  x.commit &&\n  typeof x.commit === 'object';\n\nlet cards = flattenItems(safeNodeItems('Trello Cards Delta1')).filter(isCard);\nlet backCommits = flattenItems(safeNodeItems('GitHub Back Main1')).filter(isCommit);\nlet frontCommits = flattenItems(safeNodeItems('GitHub Front Main1')).filter(isCommit);\n\nconst pgRows = flattenItems(safeNodeItems('PG Estado Conocido1'));\nlet prevSnapshot = parseSnapshot(pgRows[pgRows.length - 1]?.snapshot || pgRows[0]?.snapshot);\n\nif (!cards.length || !backCommits.length || !frontCommits.length || !Object.keys(prevSnapshot).length) {\n  const mergedRaw = $input.all().map((i) => i.json);\n  const mergedFlat = flattenItems(mergedRaw);\n\n  const fbCards = [];\n  const fbBack = [];\n  const fbFront = [];\n  let fbSnapshot = {};\n\n  for (const it of mergedFlat) {\n    if (it?.snapshot && !Object.keys(fbSnapshot).length) {\n      fbSnapshot = parseSnapshot(it.snapshot);\n      continue;\n    }\n\n    if (isCard(it)) {\n      fbCards.push(it);\n      continue;\n    }\n\n    if (isCommit(it)) {\n      const url = String(it.url || it.html_url || '');\n      if (url.includes(cfg.GITHUB_REPO_BACKEND)) fbBack.push(it);\n      else if (url.includes(cfg.GITHUB_REPO_FRONTEND)) fbFront.push(it);\n    }\n  }\n\n  if (!cards.length) cards = fbCards;\n  if (!backCommits.length) backCommits = fbBack;\n  if (!frontCommits.length) frontCommits = fbFront;\n  if (!Object.keys(prevSnapshot).length) prevSnapshot = fbSnapshot;\n}\n\nconst prev = {\n  main_commit_back_sha: prevSnapshot.main_commit_back_sha || null,\n  main_commit_front_sha: prevSnapshot.main_commit_front_sha || null,\n  card_states: prevSnapshot.card_states || {},\n  notified_event_ids: Array.isArray(prevSnapshot.notified_event_ids) ? prevSnapshot.notified_event_ids : [],\n};\n\nconst previousIds = new Set(prev.notified_event_ids);\nconst events = [];\nconst seenEventIds = new Set();\nconst newCardStates = {};\nconst commitKeyword = /(feat|fix|hotfix|release|breaking|security|perf|refactor)/i;\nconst throttleWindow = 200;\n\nconst makeEventId = (parts) => parts.filter(Boolean).join('|');\n\nconst addEvent = (evt) => {\n  const eventId = evt.event_id || makeEventId([\n    evt.tipo,\n    evt.detalle?.card_id,\n    evt.detalle?.sha,\n    (evt.detalle?.pdfs || []).map((p) => p.name).join(','),\n    evt.detalle?.url,\n  ]);\n\n  if (!eventId || seenEventIds.has(eventId) || previousIds.has(eventId)) return;\n  seenEventIds.add(eventId);\n  evt.event_id = eventId;\n  events.push(evt);\n};\n\nconst getCommitSubject = (commit) =>\n  String(commit?.commit?.message || '').split('\\n')[0].trim();\n\nconst isMergeCommit = (subject) => {\n  const normalized = subject.toLowerCase();\n  return normalized.startsWith('merge ') || normalized.includes('merge pull request');\n};\n\nconst isRelevantCommit = (commit) => {\n  const subject = getCommitSubject(commit);\n  if (!subject) return false;\n  if (commitKeyword.test(subject)) return true;\n  return !isMergeCommit(subject);\n};\n\nfor (const c of cards) {\n  const attCount = (c.attachments || []).length;\n  const pdfAtts = (c.attachments || []).filter((a) =>\n    (a.mimeType || '').includes('pdf') || (a.name || '').toLowerCase().endsWith('.pdf'),\n  );\n\n  newCardStates[c.id] = {\n    dueComplete: !!c.dueComplete,\n    attCount,\n    pdfCount: pdfAtts.length,\n  };\n\n  const prevCard = prev.card_states[c.id];\n  if (!prevCard) continue;\n\n  if (!prevCard.dueComplete && c.dueComplete) {\n    addEvent({\n      event_id: makeEventId(['tarea_completada', c.id, 'done']),\n      source: 'trello',\n      severidad: 'media',\n      occurred_at: c.dateLastActivity || c.due || null,\n      tipo: 'tarea_completada',\n      emoji: 'OK',\n      titulo: 'Tarea completada',\n      descripcion: 'La tarjeta \"' + c.name + '\" fue marcada como completada.',\n      detalle: {\n        card_id: c.id,\n        card_name: c.name,\n        due: c.due,\n        list_id: c.idList,\n        date_last_activity: c.dateLastActivity,\n      },\n    });\n  }\n\n  if ((prevCard.pdfCount || 0) < pdfAtts.length) {\n    const newPdfs = pdfAtts.slice(-(pdfAtts.length - (prevCard.pdfCount || 0)));\n    addEvent({\n      event_id: makeEventId(['entregable_subido', c.id, newPdfs.map((p) => p.name).join('|')]),\n      source: 'trello',\n      severidad: 'alta',\n      occurred_at: c.dateLastActivity || c.due || null,\n      tipo: 'entregable_subido',\n      emoji: 'PDF',\n      titulo: 'Nuevo entregable PDF',\n      descripcion: 'Se subio un PDF a \"' + c.name + '\": ' + newPdfs.map((p) => p.name).join(', '),\n      detalle: {\n        card_id: c.id,\n        card_name: c.name,\n        pdfs: newPdfs.map((p) => ({ name: p.name, url: p.url })),\n        list_id: c.idList,\n        date_last_activity: c.dateLastActivity,\n      },\n    });\n  }\n}\n\nconst latestBack = backCommits[0];\nif (\n  latestBack &&\n  latestBack.sha !== prev.main_commit_back_sha &&\n  prev.main_commit_back_sha &&\n  isRelevantCommit(latestBack)\n) {\n  const subject = getCommitSubject(latestBack);\n  addEvent({\n    event_id: makeEventId(['commit_main_backend', latestBack.sha]),\n    source: 'github',\n    severidad: commitKeyword.test(subject) ? 'alta' : 'media',\n    occurred_at: latestBack.commit?.author?.date || null,\n    tipo: 'commit_main_backend',\n    emoji: 'GH',\n    titulo: 'Commit a main (backend)',\n    descripcion: (latestBack.commit?.author?.name || '?') + ': ' + subject,\n    detalle: {\n      repo: 'backend',\n      sha: latestBack.sha,\n      url: latestBack.html_url,\n      autor: latestBack.commit?.author?.name,\n      mensaje: latestBack.commit?.message,\n    },\n  });\n}\n\nconst latestFront = frontCommits[0];\nif (\n  latestFront &&\n  latestFront.sha !== prev.main_commit_front_sha &&\n  prev.main_commit_front_sha &&\n  isRelevantCommit(latestFront)\n) {\n  const subject = getCommitSubject(latestFront);\n  addEvent({\n    event_id: makeEventId(['commit_main_frontend', latestFront.sha]),\n    source: 'github',\n    severidad: commitKeyword.test(subject) ? 'alta' : 'media',\n    occurred_at: latestFront.commit?.author?.date || null,\n    tipo: 'commit_main_frontend',\n    emoji: 'GH',\n    titulo: 'Commit a main (frontend)',\n    descripcion: (latestFront.commit?.author?.name || '?') + ': ' + subject,\n    detalle: {\n      repo: 'frontend',\n      sha: latestFront.sha,\n      url: latestFront.html_url,\n      autor: latestFront.commit?.author?.name,\n      mensaje: latestFront.commit?.message,\n    },\n  });\n}\n\nconst notified = [...events.map((e) => e.event_id), ...prev.notified_event_ids].filter(Boolean).slice(0, throttleWindow);\nconst newSnapshot = {\n  main_commit_back_sha: latestBack?.sha || prev.main_commit_back_sha,\n  main_commit_front_sha: latestFront?.sha || prev.main_commit_front_sha,\n  card_states: newCardStates,\n  notified_event_ids: notified,\n  last_run_at: new Date().toISOString(),\n};\n\nreturn [{\n  json: {\n    events,\n    event_count: events.length,\n    new_snapshot: newSnapshot,\n    new_snapshot_json: JSON.stringify(newSnapshot),\n  },\n}];\n"
+      },
+      "id": "1de59c18-3592-4154-9e11-5ca9917c95bc",
+      "name": "Delta Detector1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2672,
+        928
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS estado_conocido (\n  id integer PRIMARY KEY,\n  nombre_estado text,\n  snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,\n  actualizado timestamptz NOT NULL DEFAULT NOW()\n);\nALTER TABLE estado_conocido ADD COLUMN IF NOT EXISTS nombre_estado text;\nALTER TABLE estado_conocido ADD COLUMN IF NOT EXISTS snapshot jsonb NOT NULL DEFAULT '{}'::jsonb;\nALTER TABLE estado_conocido ADD COLUMN IF NOT EXISTS actualizado timestamptz NOT NULL DEFAULT NOW();\nINSERT INTO estado_conocido (id, nombre_estado, snapshot, actualizado)\nVALUES (1, 'contexto_robusto', '{}'::jsonb, NOW())\nON CONFLICT (id) DO NOTHING;\nUPDATE estado_conocido\nSET snapshot = $1::jsonb, actualizado = NOW()\nWHERE id = 1;",
+        "options": {
+          "queryReplacement": "={{ $json.new_snapshot_json }}"
+        }
+      },
+      "id": "fd206983-a588-4b76-b9b6-8653830a92dd",
+      "name": "PG Update Estado1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2896,
+        1136
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "ev-gt-0",
+              "leftValue": "={{ $json.event_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "da1179af-f00f-49f4-bf9c-6035a5ecfd0c",
+      "name": "IF Hay Eventos1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2896,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const events = $json.events || [];\nreturn events.map(e => ({ json: e }));\n"
+      },
+      "id": "9ac0450f-7484-4431-bc0d-d1d931106f91",
+      "name": "Split Events1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ev = $json;\n\nconst prompt = [\n  'Eres un PM assistant para PetSafe.',\n  'Analiza el evento y devuelve exactamente 4 lineas en espanol, texto plano, sin markdown, sin asteriscos y sin emojis.',\n  'Linea 1: Impacto: ...',\n  'Linea 2: Proxima accion: ...',\n  'Linea 3: Owner sugerido: ... | Deadline sugerido: ...',\n  'Linea 4: Riesgo: bajo|medio|alto - motivo breve',\n  '',\n  'Evento: ' + ev.titulo,\n  'Tipo: ' + ev.tipo,\n  'Severidad estimada: ' + (ev.severidad || 'media'),\n  'Fuente: ' + (ev.source || ''),\n  'Fecha: ' + (ev.occurred_at || ''),\n  'Descripcion: ' + ev.descripcion,\n  'Detalle JSON: ' + JSON.stringify(ev.detalle || {}),\n].join('\\n');\n\nreturn [{ json: { ...ev, prompt } }];\n"
+      },
+      "id": "f976fd52-c008-4c9d-938d-1f15dd8ba72a",
+      "name": "Preparar Prompt Evento1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3312,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}"
+      },
+      "id": "54ae2d91-1305-4c5e-bae9-a78f3c89b397",
+      "name": "Gemini Event Analysis1",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        3536,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ev = $node['Preparar Prompt Evento1'].json;\nconst gem = $json;\nconst analysis = gem?.text || gem?.output || gem?.response || gem?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';\n\nlet extra = '';\nif (ev.detalle?.url) extra = '\\n' + ev.detalle.url;\nif (ev.detalle?.pdfs?.length) extra = '\\n' + ev.detalle.pdfs.map((p) => p.name + ': ' + p.url).join('\\n');\n\nconst metaBits = [];\nif (ev.severidad) metaBits.push('Severidad: ' + ev.severidad);\nif (ev.source) metaBits.push('Fuente: ' + ev.source);\nif (ev.occurred_at) metaBits.push('Fecha: ' + ev.occurred_at);\nconst metaLine = metaBits.length ? '\\n' + metaBits.join(' | ') : '';\nconst fallback = 'Impacto: revisar evento.\\nProxima accion: validar seguimiento con el owner.\\nOwner sugerido: PM | Deadline sugerido: hoy.\\nRiesgo: medio - falta analisis automatico.';\nconst content = ('**' + (ev.emoji || 'PM') + ' ' + ev.titulo + '**\\n' + ev.descripcion + extra + metaLine + '\\n\\n' + (analysis || fallback)).slice(0, 1900);\n\nconst detalle = {\n  ...(ev.detalle || {}),\n  event_id: ev.event_id || null,\n  source: ev.source || null,\n  severidad: ev.severidad || null,\n  occurred_at: ev.occurred_at || null,\n};\n\nreturn [{ json: {\n  ...ev,\n  analysis,\n  content,\n  outbox_target: 'discord',\n  outbox_action: 'notify',\n  outbox_payload: { content },\n  outbox_idempotency_key: ev.event_id || null,\n  detalle_json: JSON.stringify(detalle),\n}}];\n"
+      },
+      "id": "054c1b93-418e-4ab8-b7be-37d1ca38d024",
+      "name": "Build Discord Msg1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3808,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-flash-latest",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "62c486ae-1084-40f4-a61c-c9dedfb37f2e",
+      "name": "Google Gemini Model1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        3536,
+        960
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "EcY5DyLsH2bNwVtM",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS events_outbox (\n  outbox_id bigserial PRIMARY KEY,\n  event_id text,\n  target text NOT NULL DEFAULT 'discord',\n  action text NOT NULL DEFAULT 'notify',\n  idempotency_key text,\n  payload jsonb NOT NULL DEFAULT '{}'::jsonb,\n  status text NOT NULL DEFAULT 'pending',\n  retry_count integer NOT NULL DEFAULT 0,\n  scheduled_at timestamptz NOT NULL DEFAULT NOW(),\n  sent_at timestamptz,\n  last_error text,\n  created_at timestamptz NOT NULL DEFAULT NOW()\n);\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS event_id text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS target text NOT NULL DEFAULT 'discord';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS action text NOT NULL DEFAULT 'notify';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS idempotency_key text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS payload jsonb NOT NULL DEFAULT '{}'::jsonb;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'pending';\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS retry_count integer NOT NULL DEFAULT 0;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS scheduled_at timestamptz NOT NULL DEFAULT NOW();\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS sent_at timestamptz;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS last_error text;\nALTER TABLE events_outbox ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT NOW();\nCREATE UNIQUE INDEX IF NOT EXISTS events_outbox_idempotency_key_uq ON events_outbox (idempotency_key);\nINSERT INTO events_outbox (event_id, target, action, idempotency_key, payload)\nVALUES ($1, $2, $3, $4, $5::jsonb)\nON CONFLICT (idempotency_key) DO NOTHING;",
+        "options": {
+          "queryReplacement": "={{ [ $json.event_id, $json.outbox_target || \"discord\", $json.outbox_action || \"notify\", $json.outbox_idempotency_key || $json.event_id, JSON.stringify($json.outbox_payload || { content: $json.content || $json.descripcion || \"evento sin contenido\" }) ] }}"
+        }
+      },
+      "id": "7b90e76d-8e70-4352-9724-275c976f6b13",
+      "name": "Queue Discord Outbox1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3984,
+        704
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS eventos_detectados (\n  id bigserial PRIMARY KEY,\n  fecha timestamptz NOT NULL DEFAULT NOW(),\n  tipo text,\n  descripcion text,\n  detalle jsonb NOT NULL DEFAULT '{}'::jsonb,\n  notificado boolean NOT NULL DEFAULT false\n);\nALTER TABLE eventos_detectados ADD COLUMN IF NOT EXISTS fecha timestamptz NOT NULL DEFAULT NOW();\nALTER TABLE eventos_detectados ADD COLUMN IF NOT EXISTS tipo text;\nALTER TABLE eventos_detectados ADD COLUMN IF NOT EXISTS descripcion text;\nALTER TABLE eventos_detectados ADD COLUMN IF NOT EXISTS detalle jsonb NOT NULL DEFAULT '{}'::jsonb;\nALTER TABLE eventos_detectados ADD COLUMN IF NOT EXISTS notificado boolean NOT NULL DEFAULT false;\nINSERT INTO eventos_detectados (tipo, descripcion, detalle, notificado)\nVALUES ($1, $2, $3::jsonb, FALSE);",
+        "options": {
+          "queryReplacement": "={{ [ $json.tipo, $json.descripcion, $json.detalle_json ] }}"
+        }
+      },
+      "id": "e7804dc4-f21e-47ea-b7cc-23fb01a2364c",
+      "name": "PG Insert Evento1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3984,
+        864
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger1": {
+      "main": [
+        [
+          {
+            "node": "Configuración1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuración1": {
+      "main": [
+        [
+          {
+            "node": "Trello Cards Delta1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitHub Back Main1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitHub Front Main1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Estado Conocido1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trello Cards Delta1": {
+      "main": [
+        [
+          {
+            "node": "Merge Delta1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub Back Main1": {
+      "main": [
+        [
+          {
+            "node": "Merge Delta1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "GitHub Front Main1": {
+      "main": [
+        [
+          {
+            "node": "Merge Delta1",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "PG Estado Conocido1": {
+      "main": [
+        [
+          {
+            "node": "Merge Delta1",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge Delta1": {
+      "main": [
+        [
+          {
+            "node": "Delta Detector1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delta Detector1": {
+      "main": [
+        [
+          {
+            "node": "IF Hay Eventos1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Update Estado1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Hay Eventos1": {
+      "main": [
+        [
+          {
+            "node": "Split Events1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Events1": {
+      "main": [
+        [
+          {
+            "node": "Preparar Prompt Evento1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Prompt Evento1": {
+      "main": [
+        [
+          {
+            "node": "Gemini Event Analysis1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Event Analysis1": {
+      "main": [
+        [
+          {
+            "node": "Build Discord Msg1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Gemini Event Analysis1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Discord Msg1": {
+      "main": [
+        [
+          {
+            "node": "Queue Discord Outbox1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PG Insert Evento1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "versionId": "78ffe3ca-7da0-4b03-bb0f-dc0f5cc402c9",
+  "meta": {
+    "instanceId": "2ea39fa17dcdc4ec838b704e984f07415fea66105c8eb910cc7de85c3d5eeea5"
+  },
+  "id": "Uz4N0Dnnd6xnHT6i",
+  "tags": []
+}
