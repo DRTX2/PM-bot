@@ -138,6 +138,9 @@ services:
       N8N_BLOCK_ENV_ACCESS_IN_NODE: ${N8N_BLOCK_ENV_ACCESS_IN_NODE:-false}
     volumes:
       - n8n_data:/home/node/.n8n
+      - ${N8N_WORKFLOWS_IMPORT_DIR:-./bot}:${N8N_WORKFLOWS_CONTAINER_DIR:-/workflows/import}:ro
+      - ./scripts:/workflows/scripts:ro
+      - ./scripts:/workflows/scripts:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -156,6 +159,72 @@ services:
       retries: 12
       start_period: 60s
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    networks:
+      - default
+
+  n8n-workflow-import:
+    image: n8nio/n8n:${N8N_VERSION:?Set N8N_VERSION to an exact tested release in .env}
+    container_name: n8n_workflow_import
+    profiles:
+      - tools
+    user: root
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-proyecto_db}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      DB_POSTGRESDB_SCHEMA: ${N8N_DB_SCHEMA:-n8n}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Set N8N_ENCRYPTION_KEY in .env}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-America/Guayaquil}
+      TZ: ${TZ:-America/Guayaquil}
+      N8N_WORKFLOW_GROUPING_MODE: ${N8N_WORKFLOW_GROUPING_MODE:-prefix}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ${N8N_WORKFLOWS_IMPORT_DIR:-./bot}:${N8N_WORKFLOWS_CONTAINER_DIR:-/workflows/import}:ro
+      - ./scripts:/workflows/scripts:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command:
+      - -lc
+      - |
+        set -eu
+        node /workflows/scripts/prepare_n8n_workflow_import.js "${N8N_WORKFLOWS_CONTAINER_DIR:-/workflows/import}" /tmp/n8n-workflows-import
+        n8n import:workflow --separate --input=/tmp/n8n-workflows-import
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    networks:
+      - default
+
+  n8n-workflow-organize:
+    image: postgres:18-alpine
+    container_name: n8n_workflow_organize
+    profiles:
+      - tools
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - ./scripts/organize_n8n_workflow_folders.sql:/scripts/organize_n8n_workflow_folders.sql:ro
+      - ./scripts/organize_n8n_workflow_tags.sql:/scripts/organize_n8n_workflow_tags.sql:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command:
+      - -lc
+      - |
+        psql -h postgres -U "${POSTGRES_USER:?Set POSTGRES_USER in .env}" -d "${POSTGRES_DB:-proyecto_db}" -v ON_ERROR_STOP=1 -f /scripts/organize_n8n_workflow_folders.sql
+        psql -h postgres -U "${POSTGRES_USER:?Set POSTGRES_USER in .env}" -d "${POSTGRES_DB:-proyecto_db}" -v ON_ERROR_STOP=1 -f /scripts/organize_n8n_workflow_tags.sql
+    restart: "no"
     security_opt:
       - no-new-privileges:true
     logging: *default-logging
