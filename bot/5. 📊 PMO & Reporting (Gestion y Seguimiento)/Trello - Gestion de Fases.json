@@ -5,7 +5,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "trello-fases",
-        "responseMode": "lastNode",
+        "responseMode": "responseNode",
         "options": {}
       },
       "id": "591ef384-0cc6-45a5-888b-9adddbf8d3f7",
@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $json.body || $json;\nconst raw = (body.content || body.message || '').trim();\n\n// Comandos soportados:\n// !fase listar\n// !fase add <nombre> <fecha_inicio YYYY-MM-DD> <fecha_fin YYYY-MM-DD> [responsable]\n// !fase edit <list_id> nombre=<nuevo_nombre> fin=<YYYY-MM-DD> responsable=<nombre>\n// !fase delete <list_id>\n// !fase sync   <- sincroniza listas Trello -> BD\n// !doc <card_id> <- extrae resumen del PDF adjunto a una tarjeta\n\nconst docMatch = raw.match(/^!doc\\s+(\\S+)/i);\nif (docMatch) {\n  return [{ json: { action: 'doc_summary', card_id: docMatch[1], raw } }];\n}\n\nconst match = raw.match(/^!fase\\s+(\\S+)(?:\\s+(.*))?$/i);\nif (!match) {\n  return [{ json: { action: 'unknown', raw } }];\n}\n\nconst subCmd = match[1].toLowerCase();\nconst rest = (match[2] || '').trim();\n\nif (subCmd === 'listar') {\n  return [{ json: { action: 'list', raw } }];\n}\n\nif (subCmd === 'sync') {\n  return [{ json: { action: 'sync', raw } }];\n}\n\nif (subCmd === 'add') {\n  const parts = rest.split(/\\s+/);\n  if (parts.length < 3) {\n    return [{ json: { action: 'error', message: '⚠️ Uso: `!fase add <nombre> <inicio YYYY-MM-DD> <fin YYYY-MM-DD> [responsable]`', raw } }];\n  }\n  const start_date = parts[parts.length - 2];\n  const end_date = parts[parts.length - 1];\n  const dateRe = /^\\d{4}-\\d{2}-\\d{2}$/;\n  if (!dateRe.test(start_date) || !dateRe.test(end_date)) {\n    return [{ json: { action: 'error', message: '⚠️ Fechas inválidas. Usa formato YYYY-MM-DD', raw } }];\n  }\n  const name = parts.slice(0, parts.length - 2).join(' ');\n  return [{ json: { action: 'add', name, start_date, end_date, raw } }];\n}\n\nif (subCmd === 'edit') {\n  const parts = rest.split(/\\s+/);\n  const list_id = parts[0];\n  const kvs = {};\n  parts.slice(1).forEach(p => {\n    const [k, v] = p.split('=');\n    if (k && v) kvs[k] = v;\n  });\n  return [{ json: { action: 'edit', list_id, updates: kvs, raw } }];\n}\n\nif (subCmd === 'delete') {\n  return [{ json: { action: 'delete', list_id: rest, raw } }];\n}\n\nreturn [{ json: { action: 'unknown', raw } }];"
+        "jsCode": "const body = $json.body || $json;\nconst raw = (body.content || body.message || '').trim();\n\n// Comandos soportados:\n// /fase listar\n// /fase add <nombre> <fecha_inicio YYYY-MM-DD> <fecha_fin YYYY-MM-DD> [responsable]\n// /fase edit <list_id> nombre=<nuevo_nombre> fin=<YYYY-MM-DD> responsable=<nombre>\n// /fase delete <list_id>\n// /fase sync   <- sincroniza listas Trello -> BD\n// /doc <card_id> <- extrae resumen del PDF adjunto a una tarjeta\n\nconst docMatch = raw.match(/^\\/doc\\s+(\\S+)/i);\nif (docMatch) {\n  return [{ json: { action: 'doc_summary', card_id: docMatch[1], raw } }];\n}\n\nconst match = raw.match(/^\\/fase\\s+(\\S+)(?:\\s+(.*))?$/i);\nif (!match) {\n  return [{ json: { action: 'unknown', raw } }];\n}\n\nconst subCmd = match[1].toLowerCase();\nconst rest = (match[2] || '').trim();\n\nif (subCmd === 'listar') {\n  return [{ json: { action: 'list', raw } }];\n}\n\nif (subCmd === 'sync') {\n  return [{ json: { action: 'sync', raw } }];\n}\n\nif (subCmd === 'add') {\n  const parts = rest.split(/\\s+/);\n  if (parts.length < 3) {\n    return [{ json: { action: 'error', message: '⚠️ Uso: `/fase add <nombre> <inicio YYYY-MM-DD> <fin YYYY-MM-DD> [responsable]`', raw } }];\n  }\n  const start_date = parts[parts.length - 2];\n  const end_date = parts[parts.length - 1];\n  const dateRe = /^\\d{4}-\\d{2}-\\d{2}$/;\n  if (!dateRe.test(start_date) || !dateRe.test(end_date)) {\n    return [{ json: { action: 'error', message: '⚠️ Fechas inválidas. Usa formato YYYY-MM-DD', raw } }];\n  }\n  const name = parts.slice(0, parts.length - 2).join(' ');\n  return [{ json: { action: 'add', name, start_date, end_date, raw } }];\n}\n\nif (subCmd === 'edit') {\n  const parts = rest.split(/\\s+/);\n  const list_id = parts[0];\n  const kvs = {};\n  parts.slice(1).forEach(p => {\n    const [k, v] = p.split('=');\n    if (k && v) kvs[k] = v;\n  });\n  return [{ json: { action: 'edit', list_id, updates: kvs, raw } }];\n}\n\nif (subCmd === 'delete') {\n  return [{ json: { action: 'delete', list_id: rest, raw } }];\n}\n\nreturn [{ json: { action: 'unknown', raw } }];"
       },
       "id": "66128a90-416f-4225-9391-529ea779ddbb",
       "name": "Parse Phase Command",
@@ -134,7 +134,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const phases = $input.all().map(item => item.json);\nif (phases.length === 0) {\n  return [{ json: { content: '📋 No hay fases registradas. Usa `!fase sync` para sincronizar desde Trello.' } }];\n}\n\nconst statusEmoji = { active: '🔵', completed: '✅', on_hold: '⏸️' };\nconst lines = ['📋 **Fases del Proyecto PetSafe**', ''];\n\nphases.forEach((p, i) => {\n  const pct = p.total_cards > 0 ? Math.round((p.done_cards / p.total_cards) * 100) : 0;\n  const bar = '█'.repeat(Math.floor(pct / 10)) + '░'.repeat(10 - Math.floor(pct / 10));\n  const emoji = statusEmoji[p.status] || '⚪';\n  lines.push(`${emoji} **${i + 1}. ${p.name}**`);\n  if (p.start_date && p.end_date) lines.push(`   📅 ${p.start_date} → ${p.end_date}`);\n  if (p.responsible) lines.push(`   👤 ${p.responsible}`);\n  lines.push(`   ${bar} ${pct}% (${p.done_cards}/${p.total_cards} tarjetas)`);\n  lines.push(`   ID: \\`${p.list_id}\\``);\n  lines.push('');\n});\n\nreturn [{ json: { content: lines.join('\\n').slice(0, 2000) } }];"
+        "jsCode": "const phases = $input.all().map(item => item.json);\nif (phases.length === 0) {\n  return [{ json: { content: '📋 No hay fases registradas. Usa `/fase sync` para sincronizar desde Trello.' } }];\n}\n\nconst statusEmoji = { active: '🔵', completed: '✅', on_hold: '⏸️' };\nconst lines = ['📋 **Fases del Proyecto PetSafe**', ''];\n\nphases.forEach((p, i) => {\n  const pct = p.total_cards > 0 ? Math.round((p.done_cards / p.total_cards) * 100) : 0;\n  const bar = '█'.repeat(Math.floor(pct / 10)) + '░'.repeat(10 - Math.floor(pct / 10));\n  const emoji = statusEmoji[p.status] || '⚪';\n  lines.push(`${emoji} **${i + 1}. ${p.name}**`);\n  if (p.start_date && p.end_date) lines.push(`   📅 ${p.start_date} → ${p.end_date}`);\n  if (p.responsible) lines.push(`   👤 ${p.responsible}`);\n  lines.push(`   ${bar} ${pct}% (${p.done_cards}/${p.total_cards} tarjetas)`);\n  lines.push(`   ID: \\`${p.list_id}\\``);\n  lines.push('');\n});\n\nreturn [{ json: { content: lines.join('\\n').slice(0, 2000) } }];"
       },
       "id": "b196c1af-4cf7-465f-b617-1d4a920c70ac",
       "name": "Format Phase List",
@@ -447,15 +447,33 @@
     },
     {
       "parameters": {
-        "jsCode": "const action = $('Parse Phase Command').item.json.action;\nconst phase = $json;\nlet content = '';\n\nif (action === 'add') {\n  content = `✅ **Fase creada:** \\`${phase.name}\\`\\n📅 ${phase.start_date} → ${phase.end_date}\\nID: \\`${phase.list_id}\\`\\n\\n💡 Tip: Usa \\`!fase sync\\` para vincularla con Trello si ya existe la lista.`;\n} else if (action === 'edit') {\n  content = `✏️ **Fase actualizada:** \\`${phase.name}\\`\\nID: \\`${phase.list_id}\\``;\n} else if (action === 'delete') {\n  content = `🗑️ **Fase archivada:** \\`${phase.name}\\`\\n*Las tarjetas existentes no fueron afectadas.*`;\n} else if (action === 'sync') {\n  content = `🔄 **Sincronización completada.** Las listas de Trello fueron importadas a la BD.`;\n} else {\n  content = $json.content || $json.message || 'Acción desconocida.';\n}\nreturn [{ json: { content } }];"
+        "jsCode": "const action = $('Parse Phase Command').item.json.action;\nconst phase = $json;\nlet content = '';\n\nif (action === 'add') {\n  content = `✅ **Fase creada:** \\`${phase.name}\\`\\n📅 ${phase.start_date} → ${phase.end_date}\\nID: \\`${phase.list_id}\\`\\n\\n💡 Tip: Usa \\`/fase sync\\` para vincularla con Trello si ya existe la lista.`;\n} else if (action === 'edit') {\n  content = `✏️ **Fase actualizada:** \\`${phase.name}\\`\\nID: \\`${phase.list_id}\\``;\n} else if (action === 'delete') {\n  content = `🗑️ **Fase archivada:** \\`${phase.name}\\`\\n*Las tarjetas existentes no fueron afectadas.*`;\n} else if (action === 'sync') {\n  content = `🔄 **Sincronización completada.** Las fases (listas) de Trello y Tareas fueron importadas a la BD.`;\n} else {\n  content = $json.content || $json.message || 'Acción desconocida.';\n}\nreturn [{ json: { content } }];"
       },
       "id": "2809e2c3-8b7f-4eb8-b4e4-3b57de7f1870",
       "name": "Build Success Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3792,
+        4300,
         512
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wf-trello-sync-tareas",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "sync-tareas-wf",
+      "name": "Call Sync Tareas",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        3950,
+        304
       ]
     },
     {
@@ -610,6 +628,17 @@
       ]
     },
     "Upsert Phase": {
+      "main": [
+        [
+          {
+            "node": "Call Sync Tareas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Sync Tareas": {
       "main": [
         [
           {

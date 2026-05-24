@@ -8,21 +8,21 @@ Este documento resume qué hace hoy el sistema de `bot/` y cómo probarlo en n8n
 - Recibe mensajes por webhook `POST /webhook/discord-chat`.
 - Hace deduplicación corta en Redis.
 - Interpreta comandos Discord:
-  - `!ayuda`
-  - `!kpis`
+  - `/ayuda`
+  - `/kpis`
 <!-- no esta tomando bien los datos -->
-  - `!reporte [dias]`
-  - `!riesgos`
-  - `!hitos`
+  - `/reporte [dias]`
+  - `/riesgos`
+  - `/hitos`
   <!-- estas 2 sig no jalan ni verga -->
-  - `!revisar backend`
-  - `!revisar frontend`
-  - `!estado`
-  - `!vencidas`
-  - `!miembros`
-  - `!commits`
-  - `!ci`
-  - `!progreso`
+  - `/revisar backend`
+  - `/revisar frontend`
+  - `/estado`
+  - `/vencidas`
+  - `/miembros`
+  - `/commits`
+  - `/ci`
+  - `/progreso`
 - Para consultas generales arma contexto con Trello, GitHub, Postgres y responde con Gemini.
 - Guarda preguntas y respuestas en la tabla `recomendaciones`.
 
@@ -78,18 +78,18 @@ Ejecuta `Chat Discord PetSafe` con un payload manual al webhook:
 ```json
 {
   "body": {
-    "content": "!estado",
+    "content": "/estado",
     "user": "david"
   }
 }
 ```
 
 Pruebas mínimas:
-- `!ayuda`: debe responder lista de comandos.
-- `!kpis`: debe responder desde cache o calcular KPIs.
-- `!estado`: debe devolver resumen rápido.
-- `!ci`: debe leer CI backend/frontend.
-- `!revisar backend`: debe pedir contexto GitHub y diff.
+- `/ayuda`: debe responder lista de comandos.
+- `/kpis`: debe responder desde cache o calcular KPIs.
+- `/estado`: debe devolver resumen rápido.
+- `/ci`: debe leer CI backend/frontend.
+- `/revisar backend`: debe pedir contexto GitHub y diff.
 - mensaje libre como `como vamos con el proyecto`: debe pasar por Gemini.
 
 ## B. Probar monitor principal

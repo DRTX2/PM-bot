@@ -24,7 +24,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const ctx = $json;\nconst datos = ctx.datos || {};\nconst raw = String(datos.texto || datos.texto_original || ctx.mensaje_original || '');\nconst sub = String(ctx.sub_intencion || 'listar').toLowerCase();\nconst q = (v) => v === null || v === undefined || v === '' ? 'NULL' : \"'\" + String(v).replace(/'/g, \"''\") + \"'\";\nconst id = Number(datos.id || (raw.match(/#?(\\d+)/) || [])[1] || 0);\nconst norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\nconst prio = ['baja','media','alta','critica'].includes(norm(datos.prioridad)) ? norm(datos.prioridad) : (norm(raw).match(/prioridad:?\\s*(baja|media|alta|critica)/)?.[1] || 'media');\nconst stateMap = { progreso: 'en_progreso', revision: 'en_revision', revisar: 'en_revision', terminado: 'completada', terminada: 'completada', hecho: 'completada' };\nlet estado = norm(datos.estado) || norm(raw).match(/estado:?\\s*([a-z_]+)/)?.[1] || '';\nestado = stateMap[estado] || estado;\nif (!['pendiente','en_progreso','bloqueada','en_revision','completada','cancelada'].includes(estado)) estado = 'pendiente';\nconst responsable = datos.responsable || raw.match(/responsable:?\\s*([^,;\\n]+)/i)?.[1]?.trim() || raw.match(/asigna(?:r|le)?\\s+a\\s+([^,;\\n]+)/i)?.[1]?.trim() || null;\nconst fecha = datos.fecha_limite || raw.match(/(\\d{4}-\\d{2}-\\d{2})/)?.[1] || null;\nconst entregable = raw.match(/entregable:?\\s*([^,;\\n]+)/i)?.[1]?.trim() || null;\nconst sprint = raw.match(/sprint:?\\s*([^,;\\n]+)/i)?.[1]?.trim() || null;\nconst cleaned = raw\n  .replace(/^\\/pm\\s+tarea\\s+\\w+/i, '')\n  .replace(/responsable:?\\s*[^,;\\n]+/ig, '')\n  .replace(/prioridad:?\\s*(baja|media|alta|cr[ií]tica)/ig, '')\n  .replace(/estado:?\\s*[a-z_]+/ig, '')\n  .replace(/limite:?\\s*\\d{4}-\\d{2}-\\d{2}/ig, '')\n  .replace(/l[ií]mite:?\\s*\\d{4}-\\d{2}-\\d{2}/ig, '')\n  .replace(/#?\\d+/g, '')\n  .trim();\nconst titulo = cleaned || datos.titulo || datos.texto || 'Tarea sin titulo';\n\nlet query;\nlet action = sub;\nif (['crear','nueva','registrar'].includes(sub)) {\n  query = `INSERT INTO pm_tareas (titulo, descripcion, responsable, prioridad, estado, fecha_limite, entregable, sprint, creado_por, canal_origen)\nVALUES (${q(titulo)}, ${q(raw)}, ${q(responsable)}, ${q(prio)}, 'pendiente', ${fecha ? q(fecha) + '::date' : 'NULL'}, ${q(entregable)}, ${q(sprint)}, ${q(ctx.usuario)}, ${q(ctx.canal_origen)})\nRETURNING 'created' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, entregable, sprint;`;\n} else if (['asignar','assign'].includes(sub)) {\n  if (!id || !responsable) {\n    return [{ json: { action: 'validation_error', respuesta: 'Faltan datos para asignar la tarea. Indica ID y responsable. Ejemplo: `/pm tarea asignar #12 responsable: David`', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];\n  }\n  query = `UPDATE pm_tareas SET responsable=${q(responsable)}, fecha_actualizacion=NOW() WHERE id=${id} RETURNING 'assigned' AS action, id, titulo, responsable, prioridad, estado, fecha_limite;`;\n} else if (['actualizar','update','estado'].includes(sub)) {\n  if (!id) {\n    return [{ json: { action: 'validation_error', respuesta: 'Falta el ID de la tarea para actualizar. Ejemplo: `/pm tarea actualizar #12 estado: en_revision`', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];\n  }\n  const updates = [`estado=${q(estado)}`, `prioridad=${q(prio)}`, `fecha_actualizacion=NOW()`];\n  if (responsable) updates.push(`responsable=${q(responsable)}`);\n  if (fecha) updates.push(`fecha_limite=${q(fecha)}::date`);\n  query = `UPDATE pm_tareas SET ${updates.join(', ')} WHERE id=${id} RETURNING 'updated' AS action, id, titulo, responsable, prioridad, estado, fecha_limite;`;\n} else if (['atrasos','vencidas','vencidos'].includes(sub)) {\n  query = `SELECT 'overdue' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, (CURRENT_DATE - fecha_limite::date) AS dias_atraso\nFROM pm_tareas WHERE fecha_limite < CURRENT_DATE AND estado NOT IN ('completada','cancelada')\nORDER BY dias_atraso DESC, prioridad LIMIT 20;`;\n} else {\n  action = ['pendientes','listar','lista','list'].includes(sub) ? sub : 'listar';\n  query = `SELECT 'list' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, entregable, sprint\nFROM pm_tareas WHERE estado NOT IN ('completada','cancelada')\nORDER BY CASE prioridad WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, fecha_limite NULLS LAST LIMIT 20;`;\n}\nreturn [{ json: { query, action, canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];"
+        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst ctx = $json;\nconst datos = ctx.datos || {};\nconst raw = String(datos.texto || datos.texto_original || ctx.mensaje_original || '');\nconst sub = String(ctx.sub_intencion || 'listar').toLowerCase();\nconst q = (v) => v === null || v === undefined || v === '' ? 'NULL' : \"'\" + String(v).replace(/'/g, \"''\") + \"'\";\nconst id = Number(datos.id || (raw.match(/#?(\\d+)/) || [])[1] || 0);\nconst norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\nconst VALID_PRIORITIES = ['baja','media','alta','critica'];\nconst VALID_STATES = ['pendiente','en_progreso','bloqueada','en_revision','completada','cancelada'];\nconst TEAM = [\n  'David Manjarres',\n  'David Josue Barragan Pozo',\n  'Josue Joel Garcia Abata',\n  'Fernando Joel Bonilla Guerrero',\n  'Joel Bonilla'\n];\nfunction cleanField(value) {\n  return String(value || '').replace(/\\s+(responsable|prioridad|estado|limite|l[ií]mite|fase|hito|lista|inicio|desde):?.*$/i, '').trim();\n}\nfunction parseField(name) {\n  const rx = new RegExp('(?:' + name + '):?\\\\s*([^,;\\\\n]+?)(?=\\\\s+(?:responsable|prioridad|estado|limite|l[ií]mite|fase|hito|lista|inicio|desde):?\\\\s|$)', 'i');\n  return raw.match(rx)?.[1]?.trim() || null;\n}\nfunction normalizeState(value) {\n  const v = norm(value).replace(/\\s+/g, '_');\n  const map = { progreso: 'en_progreso', revision: 'en_revision', revisar: 'en_revision', hecho: 'completada', terminado: 'completada', terminada: 'completada' };\n  return VALID_STATES.includes(v) ? v : (map[v] || null);\n}\nfunction resolvePerson(value) {\n  const input = cleanField(value);\n  if (!input) return { status: 'empty', value: null, matches: [] };\n  const wanted = norm(input).split(/\\s+/).filter(Boolean);\n  const matches = TEAM.filter((name) => wanted.every((part) => norm(name).includes(part)));\n  if (matches.length === 1) return { status: 'ok', value: matches[0], matches };\n  if (matches.length > 1) return { status: 'ambiguous', value: input, matches };\n  return { status: 'unknown', value: input, matches: [] };\n}\n\nconst priorityText = datos.prioridad || raw.match(/prioridad:?\\s*([^,;\\n]+?)(?=\\s+(?:responsable|estado|limite|l[ií]mite|fase|hito|lista|inicio|desde):?\\s|$)/i)?.[1]?.trim();\nconst stateText = datos.estado || raw.match(/estado:?\\s*([^,;\\n]+?)(?=\\s+(?:responsable|prioridad|limite|l[ií]mite|fase|hito|lista|inicio|desde):?\\s|$)/i)?.[1]?.trim();\nconst prio = priorityText ? norm(priorityText) : 'media';\nif (priorityText && !VALID_PRIORITIES.includes(prio)) {\n  return [{ json: { action: 'validation_error', respuesta: 'Prioridad no valida. Usa una de estas: baja, media, alta, critica.', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];\n}\nlet estado = stateText ? normalizeState(stateText) : null;\nif (stateText && !estado) {\n  return [{ json: { action: 'validation_error', respuesta: 'Estado no valido. Usa uno de estos: pendiente, en_progreso, bloqueada, en_revision, completada, cancelada.', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];\n}\nconst colonResponsible = ['crear','nueva','registrar','asignar','assign'].includes(sub)\n  ? raw.match(/:\\s*([A-ZÁÉÍÓÚÑa-záéíóúñ]+(?:\\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+){0,3})(?=\\s+(?:limite|l[ií]mite|prioridad|estado|fase|hito|lista|inicio|desde)\\b|$)/)?.[1]?.trim()\n  : null;\nconst responsableInput = datos.responsable || parseField('responsable') || raw.match(/asigna(?:r|le)?\\s+a\\s+([^,;\\n]+)/i)?.[1]?.trim() || colonResponsible || null;\nconst resolved = resolvePerson(responsableInput);\nif (responsableInput && resolved.status === 'ambiguous') {\n  return [{ json: { action: 'validation_error', respuesta: `Responsable ambiguo: \"${resolved.value}\". Coincide con: ${resolved.matches.join(', ')}. Especifica nombre y apellido, por ejemplo responsable: Barragan o responsable: Fernando Bonilla.`, canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];\n}\nif (responsableInput && resolved.status === 'unknown') {\n  return [{ json: { action: 'validation_error', respuesta: `No pude identificar al responsable \"${resolved.value}\". Usa un nombre claro del equipo: ${TEAM.join(', ')}.`, canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];\n}\nconst responsable = resolved.status === 'ok' ? resolved.value : null;\nconst fecha = datos.fecha_limite || raw.match(/(?:limite|l[ií]mite|vence|fecha):?\\s*(\\d{4}-\\d{2}-\\d{2})/i)?.[1] || raw.match(/(\\d{4}-\\d{2}-\\d{2})/)?.[1] || null;\nconst fechaInicio = datos.fecha_inicio || raw.match(/(?:inicio|desde):?\\s*(\\d{4}-\\d{2}-\\d{2})/i)?.[1] || null;\nconst entregable = raw.match(/entregable:?\\s*([^,;\\n]+)/i)?.[1]?.trim() || null;\nconst fase = cleanField(datos.fase || parseField('fase|hito|lista') || raw.match(/sprint:?\\s*([^,;\\n]+)/i)?.[1]?.trim() || '');\nconst cleaned = raw\n  .replace(/^\\/pm\\s+tarea\\s+\\w+/i, '')\n  .replace(/^\\/tarea\\s+\\w+/i, '')\n  .replace(/responsable:?\\s*[^,;\\n]+/ig, '')\n  .replace(/prioridad:?\\s*(baja|media|alta|cr[ií]tica)/ig, '')\n  .replace(/estado:?\\s*[^,;\\n]+/ig, '')\n  .replace(/(?:fase|hito|lista|sprint):?\\s*[^,;\\n]+/ig, '')\n  .replace(/(?:inicio|desde):?\\s*\\d{4}-\\d{2}-\\d{2}/ig, '')\n  .replace(/limite:?\\s*\\d{4}-\\d{2}-\\d{2}/ig, '')\n  .replace(/l[ií]mite:?\\s*\\d{4}-\\d{2}-\\d{2}/ig, '')\n  .replace(/:\\s*[A-ZÁÉÍÓÚÑa-záéíóúñ]+(?:\\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+){0,3}\\s*$/i, '')\n  .replace(/#\\d+/g, '')\n  .trim();\nconst titulo = cleaned || datos.titulo || datos.texto || 'Tarea sin titulo';\n\nlet query;\nlet action = sub;\nif (['crear','nueva','registrar'].includes(sub)) {\n  query = `WITH ins AS (\n  INSERT INTO pm_tareas (titulo, descripcion, responsable, prioridad, estado, fecha_inicio, fecha_limite, entregable, sprint, creado_por, canal_origen)\n  VALUES (${q(titulo)}, ${q(raw)}, ${q(responsable)}, ${q(prio)}, 'pendiente', ${fechaInicio ? q(fechaInicio) + '::date' : 'NULL'}, ${fecha ? q(fecha) + '::date' : 'NULL'}, ${q(entregable)}, COALESCE(${q(fase)}, (SELECT name FROM project_phases WHERE status='active' ORDER BY position DESC LIMIT 1), 'Sin fase'), ${q(ctx.usuario)}, ${q(ctx.canal_origen)})\n  RETURNING *\n)\nSELECT 'created' AS action, ins.id, ins.titulo, ins.descripcion, ins.responsable, ins.prioridad, ins.estado, ins.fecha_inicio, ins.fecha_limite, ins.entregable, ins.sprint, ins.trello_card_id,\n  (SELECT list_id FROM project_phases p WHERE p.name = ins.sprint ORDER BY p.position DESC LIMIT 1) AS trello_list_id\nFROM ins;`;\n} else if (['asignar','assign'].includes(sub)) {\n  if (!id || !responsable) {\n    return [{ json: { action: 'validation_error', respuesta: 'Faltan datos para asignar la tarea. Indica ID y responsable. Ejemplo: `/pm tarea asignar #12 responsable: David`', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];\n  }\n  query = `WITH upd AS (\n  UPDATE pm_tareas SET responsable=${q(responsable)}, fecha_actualizacion=NOW() WHERE id=${id} RETURNING *\n)\nSELECT 'assigned' AS action, upd.id, upd.titulo, upd.descripcion, upd.responsable, upd.prioridad, upd.estado, upd.fecha_inicio, upd.fecha_limite, upd.entregable, upd.sprint, upd.trello_card_id,\n  (SELECT list_id FROM project_phases p WHERE p.name = upd.sprint ORDER BY p.position DESC LIMIT 1) AS trello_list_id\nFROM upd;`;\n} else if (['actualizar','update','estado'].includes(sub)) {\n  if (!id) {\n    return [{ json: { action: 'validation_error', respuesta: 'Falta el ID de la tarea para actualizar. Ejemplo: `/pm tarea actualizar #12 estado: en_revision`', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];\n  }\n  const updates = [`fecha_actualizacion=NOW()`];\n  if (estado) updates.push(`estado=${q(estado)}`);\n  if (priorityText) updates.push(`prioridad=${q(prio)}`);\n  if (responsable) updates.push(`responsable=${q(responsable)}`);\n  if (fecha) updates.push(`fecha_limite=${q(fecha)}::date`);\n  if (fechaInicio) updates.push(`fecha_inicio=${q(fechaInicio)}::date`);\n  if (fase) updates.push(`sprint=${q(fase)}`);\n  if (updates.length === 1) {\n    return [{ json: { action: 'validation_error', respuesta: 'No encontre campos para actualizar. Puedes usar estado, prioridad, responsable, fase, inicio o limite. Estados: pendiente, en_progreso, bloqueada, en_revision, completada, cancelada. Prioridades: baja, media, alta, critica.', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];\n  }\n  query = `WITH upd AS (\n  UPDATE pm_tareas SET ${updates.join(', ')} WHERE id=${id} RETURNING *\n)\nSELECT 'updated' AS action, upd.id, upd.titulo, upd.descripcion, upd.responsable, upd.prioridad, upd.estado, upd.fecha_inicio, upd.fecha_limite, upd.entregable, upd.sprint, upd.trello_card_id,\n  (SELECT list_id FROM project_phases p WHERE p.name = upd.sprint ORDER BY p.position DESC LIMIT 1) AS trello_list_id\nFROM upd;`;\n} else if (['atrasos','vencidas','vencidos'].includes(sub)) {\n  query = `SELECT 'overdue' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, (CURRENT_DATE - fecha_limite::date) AS dias_atraso\nFROM pm_tareas WHERE fecha_limite < CURRENT_DATE AND estado NOT IN ('completada','cancelada')\nORDER BY dias_atraso DESC, prioridad LIMIT 20;`;\n} else {\n  action = ['pendientes','listar','lista','list'].includes(sub) ? sub : 'listar';\n  if (action === 'pendientes') {\n    query = `SELECT 'pending' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, entregable, sprint,\nCASE WHEN fecha_limite < CURRENT_DATE THEN 'atrasada' WHEN fecha_limite <= CURRENT_DATE + INTERVAL '3 days' THEN 'proxima' ELSE 'normal' END AS urgencia\nFROM pm_tareas WHERE estado NOT IN ('completada','cancelada')\nORDER BY CASE WHEN fecha_limite < CURRENT_DATE THEN 0 WHEN fecha_limite <= CURRENT_DATE + INTERVAL '3 days' THEN 1 ELSE 2 END,\nCASE prioridad WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, fecha_limite NULLS LAST LIMIT 25;`;\n  } else {\n    query = `SELECT 'list_by_phase' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, entregable, COALESCE(sprint, entregable, 'Sin fase') AS sprint\nFROM pm_tareas WHERE estado NOT IN ('completada','cancelada')\nORDER BY COALESCE(sprint, entregable, 'Sin fase'), fecha_limite NULLS LAST, CASE prioridad WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END LIMIT 30;`;\n  }\n}\nreturn [{ json: { query, action, canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];"
       }
     },
     {
@@ -81,16 +81,107 @@
       }
     },
     {
+      "id": "build-trello-sync",
+      "name": "Build Trello Sync",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        120
+      ],
+      "parameters": {
+        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst rows = $('Run Task Query').all().map(i => i.json);\nconst task = rows[0] || {};\nconst syncable = ['created','assigned','updated'].includes(task.action);\nif (!syncable) {\n  return [{ json: { needs_sync: false, trello_sync: { status: 'no_aplica' } } }];\n}\n\nconst defaultListId = process.env.TRELLO_DEFAULT_LIST_ID || process.env.TRELLO_TASKS_LIST_ID || '';\nconst listId = task.trello_list_id || defaultListId;\nif (!task.trello_card_id && !listId) {\n  return [{ json: { needs_sync: false, trello_sync: { status: 'omitido', detalle: 'falta TRELLO_DEFAULT_LIST_ID o una fase vinculada a lista Trello' }, task_id: task.id } }];\n}\n\nfunction memberMap() {\n  try { return JSON.parse(process.env.TRELLO_MEMBER_MAP_JSON || '{}'); } catch (e) { return {}; }\n}\nfunction norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, ''); }\nfunction memberIdFor(name) {\n  const map = memberMap();\n  const direct = map[name] || map[norm(name)];\n  if (direct) return direct;\n  const hit = Object.entries(map).find(([k]) => norm(k) === norm(name));\n  return hit ? hit[1] : '';\n}\n\nconst params = new URLSearchParams();\nparams.set('name', `#${task.id} ${task.titulo}`.slice(0, 160));\nparams.set('desc', String(task.descripcion || task.titulo || '').slice(0, 1500));\nif (!task.trello_card_id) params.set('idList', listId);\nif (task.fecha_limite) params.set('due', task.fecha_limite);\nif (task.fecha_inicio) params.set('start', task.fecha_inicio);\nif (task.estado === 'completada') params.set('dueComplete', 'true');\nif (task.responsable) {\n  const memberId = memberIdFor(task.responsable);\n  if (memberId) params.set('idMembers', memberId);\n}\n\nconst method = task.trello_card_id ? 'PUT' : 'POST';\nconst path = task.trello_card_id ? `/cards/${task.trello_card_id}` : '/cards';\nreturn [{ json: {\n  needs_sync: true,\n  method,\n  url: `https://api.trello.com/1${path}?${params.toString()}`,\n  task_id: task.id,\n  existing_card_id: task.trello_card_id || '',\n  trello_sync: { status: 'pendiente' }\n}}];"
+      }
+    },
+    {
+      "id": "need-trello-sync?",
+      "name": "Need Trello Sync?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1220,
+        120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "needs-sync",
+              "leftValue": "={{ $json.needs_sync ? 1 : 0 }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "trello-upsert-card",
+      "name": "Trello Upsert Card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1460,
+        40
+      ],
+      "parameters": {
+        "method": "={{ $json.method }}",
+        "url": "={{ $json.url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "trelloApi",
+        "options": {}
+      },
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "store-trello-card",
+      "name": "Store Trello Card Id",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1680,
+        40
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH upd AS (\n  UPDATE pm_tareas\n  SET trello_card_id = COALESCE(trello_card_id, $1), fecha_actualizacion = NOW()\n  WHERE id = $2 AND $1 IS NOT NULL\n  RETURNING trello_card_id\n)\nSELECT COALESCE((SELECT trello_card_id FROM upd), $1) AS trello_card_id;",
+        "options": {
+          "queryReplacement": "={{ [ $json.id || $(\"Build Trello Sync\").item.json.existing_card_id || null, $(\"Build Trello Sync\").item.json.task_id ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
       "id": "format-task",
       "name": "Format Task Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1000,
-        0
+        1900,
+        120
       ],
       "parameters": {
-        "jsCode": "const rows = $input.all().map(i => i.json);\nconst ctx = $('Build Task Query').item.json;\nif (ctx.respuesta) return [{ json: ctx }];\nconst action = rows[0]?.action || ctx.action;\nconst lineTask = (t) => `#${t.id} ${t.prioridad ? '[' + t.prioridad + '] ' : ''}${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - vence ' + t.fecha_limite : ''}`;\nlet respuesta;\nif (!rows.length) {\n  respuesta = action === 'overdue' ? 'No hay tareas atrasadas. El proyecto va en tiempo.' : 'No hay tareas activas registradas.';\n} else if (action === 'created') {\n  const t = rows[0];\n  respuesta = `Tarea registrada.\\nID: #${t.id}\\nTitulo: ${t.titulo}\\nResponsable: ${t.responsable || 'sin asignar'}\\nFecha limite: ${t.fecha_limite || 'sin fecha'}\\nPrioridad: ${t.prioridad}\\nProximo paso: validar avance antes de la siguiente reunion de seguimiento.`;\n} else if (action === 'assigned') {\n  const t = rows[0];\n  respuesta = `Tarea asignada.\\nID: #${t.id}\\nTitulo: ${t.titulo}\\nResponsable: ${t.responsable}\\nProximo paso: registrar avance con /pm avance registrar #${t.id}.`;\n} else if (action === 'updated') {\n  const t = rows[0];\n  respuesta = `Tarea actualizada.\\nID: #${t.id}\\nEstado: ${t.estado}\\nPrioridad: ${t.prioridad}\\nResponsable: ${t.responsable || 'sin asignar'}\\nProximo paso: revisar si requiere bloqueo, entregable o evidencia.`;\n} else if (action === 'overdue') {\n  respuesta = `Tareas atrasadas (${rows.length}):\\n` + rows.map(t => `- ${lineTask(t)} - atraso: ${t.dias_atraso} dia(s)`).join('\\n') + '\\nRecomendacion PM: revisar responsables y bloqueos activos hoy.';\n} else {\n  respuesta = `Tareas activas (${rows.length}):\\n` + rows.map(t => `- ${lineTask(t)}`).join('\\n');\n}\nreturn [{ json: { respuesta, canal_destino: ctx.canal_destino, canal_id: ctx.canal_id, storage: 'postgres:pm_tareas' } }];"
+        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst ctx = $('Build Task Query').item.json;\nif (ctx.respuesta) return [{ json: ctx }];\nlet rows = [];\ntry { rows = $('Run Task Query').all().map(i => i.json); } catch (e) { rows = $input.all().map(i => i.json); }\nconst action = rows[0]?.action || ctx.action;\nlet trello = { status: 'no_aplica' };\ntry { trello = $('Build Trello Sync').item.json.trello_sync || trello; } catch (e) {}\ntry {\n  const card = $('Trello Upsert Card').item.json;\n  if (card?.id) trello = { status: 'sincronizado', card_id: card.id, url: card.shortUrl || card.url || '' };\n  else if (trello.status === 'pendiente') trello = { status: 'fallo', detalle: 'Trello no devolvio id de tarjeta.' };\n} catch (e) {}\nconst lineTask = (t) => `#${t.id} [${t.estado || 'sin_estado'}/${t.prioridad || 'media'}] ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - vence ' + t.fecha_limite : ''}`;\nfunction groupBy(items, keyFn) {\n  return items.reduce((acc, item) => {\n    const key = keyFn(item);\n    acc[key] = acc[key] || [];\n    acc[key].push(item);\n    return acc;\n  }, {});\n}\nfunction trelloLine() {\n  if (trello.status === 'sincronizado') return `\\nTrello: sincronizado${trello.card_id ? ' (' + trello.card_id + ')' : ''}${trello.url ? ' - ' + trello.url : ''}.`;\n  if (trello.status === 'omitido') return `\\nTrello: no sincronizado (${trello.detalle}).`;\n  if (trello.status === 'fallo') return `\\nTrello: pendiente de revisar (${trello.detalle}).`;\n  return '';\n}\nlet respuesta;\nif (!rows.length) {\n  respuesta = action === 'overdue' ? 'No hay tareas atrasadas. El proyecto va en tiempo.' : 'No hay tareas activas registradas.';\n} else if (action === 'created') {\n  const t = rows[0];\n  respuesta = `Tarea registrada.\\nID: #${t.id}\\nTitulo: ${t.titulo}\\nFase/hito: ${t.sprint || 'Sin fase'}\\nResponsable: ${t.responsable || 'sin asignar'}\\nInicio: ${t.fecha_inicio || 'sin fecha'}\\nFecha limite: ${t.fecha_limite || 'sin fecha'}\\nPrioridad: ${t.prioridad}${trelloLine()}\\nProximo paso: registrar avance con /pm avance registrar #${t.id}.`;\n} else if (action === 'assigned') {\n  const t = rows[0];\n  respuesta = `Tarea asignada.\\nID: #${t.id}\\nTitulo: ${t.titulo}\\nResponsable: ${t.responsable}${trelloLine()}\\nProximo paso: registrar avance con /pm avance registrar #${t.id}.`;\n} else if (action === 'updated') {\n  const t = rows[0];\n  respuesta = `Tarea actualizada.\\nID: #${t.id}\\nEstado: ${t.estado}\\nPrioridad: ${t.prioridad}\\nFase/hito: ${t.sprint || 'Sin fase'}\\nResponsable: ${t.responsable || 'sin asignar'}${trelloLine()}\\nValores permitidos: estados pendiente, en_progreso, bloqueada, en_revision, completada, cancelada; prioridades baja, media, alta, critica.`;\n} else if (action === 'overdue') {\n  respuesta = `Tareas atrasadas (${rows.length}):\\n` + rows.map(t => `- ${lineTask(t)} - atraso: ${t.dias_atraso} dia(s)`).join('\\n') + '\\nRecomendacion PM: revisar responsables y bloqueos activos hoy.';\n} else if (action === 'pending') {\n  const labels = { atrasada: 'Atrasadas', proxima: 'Vencen pronto', normal: 'En curso sin urgencia inmediata' };\n  const groups = groupBy(rows, t => t.urgencia || 'normal');\n  const lines = [`Pendientes accionables (${rows.length}):`];\n  ['atrasada','proxima','normal'].forEach((key) => {\n    if (groups[key]?.length) {\n      lines.push('', labels[key] + ':', ...groups[key].map(t => `- ${lineTask(t)}`));\n    }\n  });\n  respuesta = lines.join('\\n');\n} else {\n  const groups = groupBy(rows, t => t.sprint || t.entregable || 'Sin fase');\n  const lines = [`Tareas por fase/hito (${rows.length}):`];\n  Object.keys(groups).forEach((fase) => {\n    lines.push('', fase + ':', ...groups[fase].map(t => `- ${lineTask(t)}`));\n  });\n  respuesta = lines.join('\\n');\n}\nreturn [{ json: { respuesta, canal_destino: ctx.canal_destino, canal_id: ctx.canal_id, storage: 'postgres:pm_tareas' } }];"
       }
     }
   ],
@@ -136,6 +227,57 @@
       ]
     },
     "Run Task Query": {
+      "main": [
+        [
+          {
+            "node": "Build Trello Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Trello Sync": {
+      "main": [
+        [
+          {
+            "node": "Need Trello Sync?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Need Trello Sync?": {
+      "main": [
+        [
+          {
+            "node": "Trello Upsert Card",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Task Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trello Upsert Card": {
+      "main": [
+        [
+          {
+            "node": "Store Trello Card Id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Trello Card Id": {
       "main": [
         [
           {

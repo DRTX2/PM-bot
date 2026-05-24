@@ -93,11 +93,11 @@ El bot PetSafe PM AI busca resolver la **brecha de visibilidad y coordinación**
 
 ### 💬 2. Chat Discord Interactivo
 - Interfaz conversacional que permite al equipo consultar el estado del proyecto en lenguaje natural.
-- **15+ comandos** disponibles: `!estado`, `!kpis`, `!reporte`, `!riesgos`, `!hitos`, `!commits`, `!ci`, `!vencidas`, `!miembros`, `!progreso`, `!fase`, `!doc`, `!acciones`, `!raid`, `!logs`, `!agenda`, `!reunion`.
+- **15+ comandos** disponibles: `/estado`, `/kpis`, `/reporte`, `/riesgos`, `/hitos`, `/commits`, `/ci`, `/vencidas`, `/miembros`, `/progreso`, `/fase`, `/doc`, `/acciones`, `/raid`, `/logs`, `/agenda`, `/reunion`.
 - Respuestas enriquecidas generadas por Gemini con contexto real del proyecto.
 
 ### 📊 3. Reportes PDF Ejecutivos
-- Generación semanal automática (viernes 18:00) y on-demand desde Discord (`!reporte [días]`).
+- Generación semanal automática (viernes 18:00) y on-demand desde Discord (`/reporte [días]`).
 - Contenido: resumen ejecutivo, KPIs, progreso, logros, riesgos, análisis técnico de commits/PRs, deuda técnica, participantes destacados, hitos y cierre formal.
 - Envío automático por Discord y correo electrónico SMTP.
 
@@ -288,17 +288,17 @@ docker compose down
 
 | Comando | Descripción | Ejemplo de respuesta |
 |---|---|---|
-| `!ayuda` | Lista todos los comandos disponibles | Menú con descripción de cada comando |
-| `!estado` | Resumen rápido del proyecto | `Progreso: 71% · 3 vencidas · 45 tareas` |
-| `!kpis` | Indicadores clave del periodo | Velocidad, % a tiempo, commits/día, PR merge ratio |
-| `!reporte 15` | Genera PDF de los últimos 15 días | PDF adjunto + resumen en Discord |
-| `!riesgos` | Lista riesgos activos | RAID actualizado con severidad |
-| `!hitos` | Próximos hitos del proyecto | Tabla con fechas y responsables |
-| `!commits` | Actividad reciente de código | Últimos commits backend/frontend |
-| `!ci` | Estado del CI/CD | Último run de GitHub Actions |
-| `!vencidas` | Tareas vencidas sin completar | Lista con responsable y días de atraso |
-| `!progreso` | Porcentaje de avance general | Barra visual de progreso |
-| `!fase listar` | Fases del tablero Trello | Completitud por columna |
+| `/ayuda` | Lista todos los comandos disponibles | Menú con descripción de cada comando |
+| `/estado` | Resumen rápido del proyecto | `Progreso: 71% · 3 vencidas · 45 tareas` |
+| `/kpis` | Indicadores clave del periodo | Velocidad, % a tiempo, commits/día, PR merge ratio |
+| `/reporte 15` | Genera PDF de los últimos 15 días | PDF adjunto + resumen en Discord |
+| `/riesgos` | Lista riesgos activos | RAID actualizado con severidad |
+| `/hitos` | Próximos hitos del proyecto | Tabla con fechas y responsables |
+| `/commits` | Actividad reciente de código | Últimos commits backend/frontend |
+| `/ci` | Estado del CI/CD | Último run de GitHub Actions |
+| `/vencidas` | Tareas vencidas sin completar | Lista con responsable y días de atraso |
+| `/progreso` | Porcentaje de avance general | Barra visual de progreso |
+| `/fase listar` | Fases del tablero Trello | Completitud por columna |
 
 ### Consulta en lenguaje natural
 

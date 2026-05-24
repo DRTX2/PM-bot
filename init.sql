@@ -421,3 +421,284 @@ CREATE TABLE IF NOT EXISTS card_attachments (
 
 CREATE INDEX IF NOT EXISTS idx_card_attachments_card ON card_attachments (card_id);
 CREATE INDEX IF NOT EXISTS idx_card_attachments_list ON card_attachments (list_id);
+
+-- ============================================================
+-- PM BOT TABLES (new PM system - created automatically)
+-- ============================================================
+
+-- 1. PM Tareas
+CREATE TABLE IF NOT EXISTS pm_tareas (
+  id BIGSERIAL PRIMARY KEY,
+  titulo TEXT NOT NULL,
+  descripcion TEXT,
+  responsable TEXT,
+  prioridad TEXT NOT NULL DEFAULT 'media' CHECK (prioridad IN ('baja','media','alta','critica')),
+  estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','en_progreso','bloqueada','en_revision','completada','cancelada')),
+  fecha_inicio DATE,
+  fecha_limite DATE,
+  entregable TEXT,
+  sprint TEXT,
+  canal_origen TEXT,
+  creado_por TEXT NOT NULL DEFAULT 'system',
+  trello_card_id TEXT,
+  github_issue_id TEXT,
+  fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  fecha_actualizacion TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pm_tareas_estado ON pm_tareas (estado);
+CREATE INDEX IF NOT EXISTS idx_pm_tareas_responsable ON pm_tareas (responsable);
+CREATE INDEX IF NOT EXISTS idx_pm_tareas_prioridad ON pm_tareas (prioridad);
+CREATE INDEX IF NOT EXISTS idx_pm_tareas_fecha_limite ON pm_tareas (fecha_limite, estado);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pm_tareas_trello_card_id_unique ON pm_tareas (trello_card_id) WHERE trello_card_id IS NOT NULL;
+
+-- 2. PM Avances
+CREATE TABLE IF NOT EXISTS pm_avances (
+  id BIGSERIAL PRIMARY KEY,
+  tarea_id BIGINT REFERENCES pm_tareas(id) ON DELETE SET NULL,
+  responsable TEXT NOT NULL,
+  descripcion TEXT NOT NULL,
+  porcentaje INTEGER DEFAULT 0 CHECK (porcentaje >= 0 AND porcentaje <= 100),
+  bloqueos_reportados TEXT,
+  fecha TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pm_avances_fecha ON pm_avances (fecha);
+CREATE INDEX IF NOT EXISTS idx_pm_avances_tarea ON pm_avances (tarea_id);
+
+-- 3. PM Bloqueos
+CREATE TABLE IF NOT EXISTS pm_bloqueos (
+  id BIGSERIAL PRIMARY KEY,
+  descripcion TEXT NOT NULL,
+  responsable_afectado TEXT,
+  tarea_id BIGINT REFERENCES pm_tareas(id) ON DELETE SET NULL,
+  severidad TEXT NOT NULL DEFAULT 'media' CHECK (severidad IN ('baja','media','alta','critica')),
+  estado TEXT NOT NULL DEFAULT 'abierto' CHECK (estado IN ('abierto','en_proceso','resuelto')),
+  accion_recomendada TEXT,
+  resolucion TEXT,
+  creado_por TEXT,
+  fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  fecha_resolucion TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_pm_bloqueos_estado ON pm_bloqueos (estado);
+
+-- 4. PM Riesgos
+CREATE TABLE IF NOT EXISTS pm_riesgos (
+  id BIGSERIAL PRIMARY KEY,
+  descripcion TEXT NOT NULL,
+  probabilidad TEXT NOT NULL DEFAULT 'media' CHECK (probabilidad IN ('baja','media','alta')),
+  impacto TEXT NOT NULL DEFAULT 'medio' CHECK (impacto IN ('bajo','medio','alto','critico')),
+  prioridad_calculada TEXT,
+  mitigacion TEXT,
+  estado TEXT NOT NULL DEFAULT 'abierto' CHECK (estado IN ('abierto','mitigado','cerrado')),
+  responsable TEXT,
+  creado_por TEXT,
+  fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  fecha_actualizacion TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pm_riesgos_estado ON pm_riesgos (estado);
+
+-- 5. PM Decisiones
+CREATE TABLE IF NOT EXISTS pm_decisiones (
+  id BIGSERIAL PRIMARY KEY,
+  decision TEXT NOT NULL,
+  contexto TEXT,
+  justificacion TEXT,
+  responsable TEXT NOT NULL,
+  impacto TEXT,
+  creado_por TEXT,
+  fecha TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pm_decisiones_fecha ON pm_decisiones (fecha DESC);
+
+-- 6. PM Entregables
+CREATE TABLE IF NOT EXISTS pm_entregables (
+  id BIGSERIAL PRIMARY KEY,
+  nombre TEXT NOT NULL,
+  responsable TEXT,
+  estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','en_progreso','en_revision','entregado','aprobado')),
+  fecha_limite DATE,
+  version TEXT DEFAULT '1.0',
+  enlace TEXT,
+  observaciones TEXT,
+  tipo TEXT DEFAULT 'tecnico' CHECK (tipo IN ('tecnico','academico','documentacion','prototipo','informe')),
+  trello_card_id TEXT,
+  creado_por TEXT,
+  fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  fecha_actualizacion TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pm_entregables_estado ON pm_entregables (estado);
+CREATE INDEX IF NOT EXISTS idx_pm_entregables_fecha ON pm_entregables (fecha_limite, estado);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pm_entregables_trello_card_id_unique ON pm_entregables (trello_card_id) WHERE trello_card_id IS NOT NULL;
+
+-- 7. PM Retrospectivas
+CREATE TABLE IF NOT EXISTS pm_retrospectivas (
+  id BIGSERIAL PRIMARY KEY,
+  sprint TEXT,
+  tipo TEXT NOT NULL CHECK (tipo IN ('bien','mejorar','accion')),
+  descripcion TEXT NOT NULL,
+  responsable TEXT,
+  estado TEXT DEFAULT 'pendiente',
+  creado_por TEXT,
+  fecha TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pm_retrospectivas_fecha ON pm_retrospectivas (fecha DESC);
+
+-- 8. PM Reuniones
+CREATE TABLE IF NOT EXISTS pm_reuniones (
+  id BIGSERIAL PRIMARY KEY,
+  titulo TEXT NOT NULL,
+  tipo TEXT DEFAULT 'seguimiento',
+  fecha_reunion TIMESTAMPTZ,
+  duracion_minutos INTEGER NOT NULL DEFAULT 45,
+  lugar TEXT,
+  participantes TEXT[],
+  agenda TEXT,
+  acuerdos TEXT,
+  compromisos TEXT,
+  decisiones TEXT,
+  acta TEXT,
+  discord_event_id TEXT,
+  discord_event_url TEXT,
+  discord_event_status TEXT,
+  estado TEXT DEFAULT 'programada' CHECK (estado IN ('programada','en_curso','completada','cancelada')),
+  creado_por TEXT,
+  fecha_creacion TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pm_reuniones_fecha ON pm_reuniones (fecha_reunion, estado);
+CREATE INDEX IF NOT EXISTS idx_pm_reuniones_discord_event ON pm_reuniones (discord_event_id);
+
+-- 9. PM Command Log (audit trail de todas las interacciones del bot)
+CREATE TABLE IF NOT EXISTS pm_command_log (
+  id BIGSERIAL PRIMARY KEY,
+  comando TEXT,
+  intencion TEXT,
+  usuario TEXT,
+  canal TEXT,
+  datos_extraidos JSONB,
+  respuesta_bot TEXT,
+  exito BOOLEAN DEFAULT TRUE,
+  fecha TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pm_command_log_fecha ON pm_command_log (fecha DESC);
+CREATE INDEX IF NOT EXISTS idx_pm_command_log_usuario ON pm_command_log (usuario, fecha DESC);
+
+-- 10. PM Bot Errors
+CREATE TABLE IF NOT EXISTS pm_bot_errors (
+  id BIGSERIAL PRIMARY KEY,
+  workflow_name TEXT,
+  node_name TEXT,
+  error_message TEXT,
+  execution_id TEXT,
+  payload JSONB,
+  fecha TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pm_bot_errors_fecha ON pm_bot_errors (fecha DESC);
+
+-- 11. FinOps / Capacity tables
+CREATE TABLE IF NOT EXISTS finops_budget_snapshots (
+  id BIGSERIAL PRIMARY KEY,
+  fecha TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  presupuesto_total NUMERIC(10,2),
+  gastado_total NUMERIC(10,2),
+  semaforo TEXT,
+  detalle JSONB
+);
+CREATE TABLE IF NOT EXISTS finops_team_rates (
+  id BIGSERIAL PRIMARY KEY,
+  miembro TEXT NOT NULL UNIQUE,
+  rol TEXT NOT NULL,
+  tarifa_hora NUMERIC(6,2) NOT NULL,
+  horas_semana NUMERIC(4,1) NOT NULL DEFAULT 8,
+  activo BOOLEAN NOT NULL DEFAULT TRUE
+);
+CREATE TABLE IF NOT EXISTS team_pto (
+  id BIGSERIAL PRIMARY KEY,
+  miembro TEXT NOT NULL,
+  fecha_inicio DATE NOT NULL,
+  fecha_fin DATE NOT NULL,
+  motivo TEXT DEFAULT 'PTO',
+  registrado_por TEXT DEFAULT 'system',
+  registrado_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS capacity_forecasts (
+  id BIGSERIAL PRIMARY KEY,
+  fecha TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  velocidad_actual NUMERIC(5,2),
+  capacidad_pct NUMERIC(5,2),
+  tareas_pendientes INTEGER,
+  dias_estimados_cierre INTEGER,
+  riesgo_fecha TEXT,
+  ia_diagnostico TEXT
+);
+CREATE TABLE IF NOT EXISTS qa_quality_snapshots (
+  id BIGSERIAL PRIMARY KEY,
+  fecha TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  bugs_abiertos INTEGER,
+  semaforo TEXT,
+  deuda_tecnica_score NUMERIC(5,2),
+  kpis JSONB
+);
+
+-- 11. PM Project Phases
+CREATE TABLE IF NOT EXISTS project_phases (
+  phase_id BIGSERIAL PRIMARY KEY,
+  list_id TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0,
+  start_date DATE,
+  end_date DATE,
+  status TEXT NOT NULL DEFAULT 'active',
+  responsible TEXT,
+  description TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 12. PM Task States (Trello sync tracking)
+CREATE TABLE IF NOT EXISTS estado_tareas (
+  id BIGSERIAL PRIMARY KEY,
+  analisis_id BIGINT,
+  fecha TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  card_id TEXT UNIQUE,
+  card_nombre TEXT,
+  lista_nombre TEXT,
+  miembro_id TEXT,
+  miembro_nombre TEXT,
+  fecha_vencimiento TIMESTAMP WITH TIME ZONE,
+  completada BOOLEAN NOT NULL DEFAULT FALSE,
+  tiene_adjuntos BOOLEAN NOT NULL DEFAULT FALSE,
+  adjuntos_count INTEGER NOT NULL DEFAULT 0
+);
+
+
+
+-- ============================================================
+-- SEED DATA: Entregables reales del proyecto PetSafe
+-- Solo inserta si la tabla está vacía para no duplicar
+-- ============================================================
+INSERT INTO pm_entregables (nombre, responsable, estado, fecha_limite, tipo, observaciones)
+SELECT nombre, responsable, estado, fecha_limite::DATE, tipo, observaciones FROM (VALUES
+  ('Project Charter', 'Bonilla Joel', 'entregado', '2026-02-14', 'documentacion', 'Documento base del proyecto'),
+  ('Planificación del Cronograma', 'Bonilla Joel', 'entregado', '2026-02-21', 'documentacion', 'Cronograma de 16 semanas'),
+  ('Matriz de Proveedores', 'Bonilla Joel', 'entregado', '2026-02-28', 'documentacion', 'Evaluación y adjudicación de VPS'),
+  ('Contrato VPS Contabo', 'Bonilla Joel', 'entregado', '2026-03-07', 'documentacion', 'Contrato de servicios cloud'),
+  ('Documentación Técnica Backend', 'García Josué', 'en_progreso', '2026-05-30', 'tecnico', 'API docs, arquitectura NestJS'),
+  ('Documentación Técnica Frontend', 'Barragán David', 'en_progreso', '2026-05-30', 'tecnico', 'Componentes Angular, guía UI'),
+  ('Prototipo Funcional Backend', 'García Josué', 'en_revision', '2026-05-23', 'prototipo', 'API REST completa con tests'),
+  ('Prototipo Funcional Frontend', 'Manjarres David', 'en_revision', '2026-05-23', 'prototipo', 'UI completa con integración API'),
+  ('Pruebas de Integración', 'García Josué', 'en_progreso', '2026-06-01', 'tecnico', 'E2E tests y validación'),
+  ('Manual de Usuario', 'Manjarres David', 'pendiente', '2026-06-05', 'documentacion', 'Guía para el cliente'),
+  ('Informe Final del Proyecto', 'Bonilla Joel', 'pendiente', '2026-06-10', 'informe', 'Informe final académico')
+) AS v(nombre, responsable, estado, fecha_limite, tipo, observaciones)
+WHERE NOT EXISTS (SELECT 1 FROM pm_entregables LIMIT 1);
+
+-- SEED DATA: Tareas activas del proyecto PetSafe (basadas en el tablero Trello)
+INSERT INTO pm_tareas (titulo, responsable, prioridad, estado, fecha_limite, entregable, creado_por)
+SELECT titulo, responsable, prioridad, estado, fecha_limite::DATE, entregable, 'init.sql' FROM (VALUES
+  ('Pruebas de integración', 'Barragán David', 'alta', 'en_revision', '2026-05-26', 'Pruebas de integración'),
+  ('Pruebas del sistema', 'García Josué', 'alta', 'en_revision', '2026-06-01', 'Pruebas del sistema'),
+  ('Pruebas de aceptación de Usuario', 'Bonilla Fernando', 'alta', 'en_revision', '2026-06-02', 'Pruebas de aceptación'),
+  ('Implantación', 'Manjarres David', 'critica', 'pendiente', '2026-06-04', 'Implantación'),
+  ('Desarrollo y entrega de manual de usuario', 'Bonilla Fernando', 'media', 'pendiente', '2026-06-09', 'Manual de Usuario'),
+  ('Capacitaciones', 'Bonilla Fernando', 'media', 'pendiente', '2026-06-11', 'Capacitaciones')
+) AS v(titulo, responsable, prioridad, estado, fecha_limite, entregable)
+WHERE NOT EXISTS (SELECT 1 FROM pm_tareas LIMIT 1);

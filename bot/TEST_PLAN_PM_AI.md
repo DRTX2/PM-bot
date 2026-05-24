@@ -28,19 +28,19 @@ Este documento detalla el plan de pruebas *End-to-End* para asegurar que todos l
 
 ## 2. Pruebas de Integración con Discord (Chat Bot)
 
-### Prueba 2.1: Comandos de Fase (`!fase`)
-- **Acción:** En el canal de Discord, escribe `!fase sync`.
+### Prueba 2.1: Comandos de Fase (`/fase`)
+- **Acción:** En el canal de Discord, escribe `/fase sync`.
 - **Validación Esperada:** El bot debe importar todas tus listas de Trello a la base de datos PostgreSQL en la tabla `project_phases` y responder: "🔄 Sincronización completada...".
 
-### Prueba 2.2: Listado de Fases (`!fase listar`)
-- **Acción:** Escribe `!fase listar`.
+### Prueba 2.2: Listado de Fases (`/fase listar`)
+- **Acción:** Escribe `/fase listar`.
 - **Validación Esperada:** El bot debe responder con un listado limpio de tus fases/listas de Trello y mostrar un porcentaje de completitud basado en las tarjetas de `estado_tareas`.
 
-### Prueba 2.3: Extracción de Resúmenes (`!doc`)
+### Prueba 2.3: Extracción de Resúmenes (`/doc`)
 - **Acción:**
   1. Sube un PDF a una tarjeta activa en Trello.
   2. Espera que pase el job (o ejecuta manualmente el trigger del workflow `Trello - Sync Attachments`).
-  3. Escribe en Discord `!doc <ID_DE_LA_TARJETA>`.
+  3. Escribe en Discord `/doc <ID_DE_LA_TARJETA>`.
 - **Validación Esperada:** El bot consultará la BD, pedirá el resumen a Gemini y responderá con el análisis ejecutivo del documento PDF y los metadatos generados. 
 
 ---

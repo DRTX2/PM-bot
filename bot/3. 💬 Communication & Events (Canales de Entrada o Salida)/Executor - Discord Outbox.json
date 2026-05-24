@@ -6,7 +6,8 @@
         "rule": {
           "interval": [
             {
-              "field": "minutes"
+              "field": "hours",
+              "hoursInterval": 2
             }
           ]
         }

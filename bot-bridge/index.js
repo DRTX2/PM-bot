@@ -16,7 +16,7 @@ const N8N_PM_WEBHOOK = process.env.N8N_PM_WEBHOOK || "http://localhost:5678/webh
 const PM_FAST_PATH_ENABLED = process.env.PM_FAST_PATH_ENABLED !== 'false';
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379/0";
 const PORT = process.env.PORT || 3000;
-const PM_FAST_TIMEOUT_MS = Number(process.env.PM_FAST_TIMEOUT_MS || 10000);
+const PM_FAST_TIMEOUT_MS = Number(process.env.PM_FAST_TIMEOUT_MS || 30000);
 
 // Logging
 const logger = winston.createLogger({
@@ -37,6 +37,7 @@ const n8n = axios.create({
 });
 
 const pmChannelIds = new Set([
+  process.env.DISCORD_CHANNEL_PM,
   process.env.DISCORD_CHANNEL_TAREAS,
   process.env.DISCORD_CHANNEL_AVANCES,
   process.env.DISCORD_CHANNEL_BLOQUEOS,
@@ -49,7 +50,9 @@ const pmChannelIds = new Set([
 ].filter(Boolean).map((value) => String(value).trim()));
 
 function isPmMessage({ content, channelId }) {
-  return /^\/pm(\s|$)/i.test(content || '') || pmChannelIds.has(String(channelId || ''));
+  const text = String(content || '').trim();
+  const slashCommand = /^\/(?:pm|ayuda|estado|reporte|kpis|pendientes|atrasos|tarea|avance|bloqueo|bloqueos|impedimento|impedimentos|riesgo|riesgos|decision|decisiones|entregable|entregables|retrospectiva|retrospectivas|reunion|reuniones|recordatorio|admin)(\s|$)/i.test(text);
+  return slashCommand || pmChannelIds.has(String(channelId || ''));
 }
 
 function buildPayload({ content, user, userId, channelId, channelName, messageId, isDm }) {
@@ -76,9 +79,21 @@ async function sendReply({ channelId, messageId, content }) {
   await channel.send({ content: String(content).slice(0, 2000), reply: { messageReference: messageId } });
 }
 
+async function sendMessage({ channelId, content }) {
+  const channel = await client.channels.fetch(channelId);
+  if (!channel) return;
+  await channel.send({ content: String(content).slice(0, 2000) });
+}
+
 async function callN8nAndReply({ webhookUrl, payload, channelId, messageId, timeout }) {
   const res = await n8n.post(webhookUrl, payload, { timeout });
-  await sendReply({ channelId, messageId, content: extractReply(res.data) });
+  const targetChannelId = String(res.data?.canal_id || channelId || '').trim();
+  const content = extractReply(res.data);
+  if (targetChannelId && targetChannelId !== String(channelId || '')) {
+    await sendMessage({ channelId: targetChannelId, content });
+    return;
+  }
+  await sendReply({ channelId, messageId, content });
 }
 
 // Setup Discord Client
@@ -113,7 +128,6 @@ const worker = new Worker('discord-messages', async job => {
       status: error.response?.status,
       data: error.response?.data
     });
-    await sendReply({ channelId, messageId, content: 'Error conectando con n8n' });
     throw error;
   }
 }, { 
@@ -163,10 +177,12 @@ client.on('messageCreate', async (message) => {
       });
       return;
     } catch (error) {
-      logger.warn('Fast PM path failed, falling back to queue', {
+      logger.error('Fast PM path failed', {
         error: error.message,
         status: error.response?.status,
+        data: error.response?.data,
       });
+      return;
     }
   }
 

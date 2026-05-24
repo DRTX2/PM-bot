@@ -634,8 +634,8 @@ Debe coordinar:
 ### Funcionalidades ya implementadas
 
 - Chat Discord con comandos.
-- Comando `!kpis`.
-- Comando `!reporte`.
+- Comando `/kpis`.
+- Comando `/reporte`.
 - Comandos rapidos de estado, vencidas, miembros, commits, CI y progreso.
 - Monitor programado.
 - Recoleccion de Trello cards/lists/members/checklists.
@@ -1084,7 +1084,7 @@ Metricas:
 9. `PARTIAL` Agregar `correlation_id` a todos los eventos y logs.
 10. `DONE` Cambiar credenciales por defecto en `docker-compose.yml`.
 11. `DONE` Resolver montaje de `init.sql`.
-12. `DONE` Actualizar `!ayuda` para quitar referencias a webhooks manuales cuando los triggers nativos entren en produccion.
+12. `DONE` Actualizar `/ayuda` para quitar referencias a webhooks manuales cuando los triggers nativos entren en produccion.
 
 ### Mediano plazo
 

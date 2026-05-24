@@ -81,7 +81,7 @@ El sistema cubre íntegramente la capa de recolección de eventos desde Trello y
 
 \textbf{El alcance implementado incluye:}
 \begin{itemize}
-    \item Una interfaz conversacional en Discord que soporta comandos predefinidos (ej. \texttt{!kpis}, \texttt{!reporte}) y consultas complejas en lenguaje natural.
+    \item Una interfaz conversacional en Discord que soporta comandos predefinidos (ej. \texttt{/kpis}, \texttt{/reporte}) y consultas complejas en lenguaje natural.
     \item Orquestación de seis sub-agentes expertos: \textit{PM Orchestrator, Code Review Scout, Context Guardian, Risk Analyst, Release Guard y Sync Bidireccional}.
     \item Pipeline de generación de documentos ejecutivos de alta fidelidad.
     \item Dashboard interactivo y seguro para el flujo \textit{Human-in-the-Loop}.
@@ -239,7 +239,7 @@ Para garantizar un entorno productivo tolerante a fallos, se ejecutó una agresi
 \addlinespace
 \textbf{CP-02} & Orquestación de Agentes & Generación de un falso *Pull Request*. & El enrutador invoca al \textit{Scout}, emite la decisión técnica y la despacha al Outbox. \textbf{(\checkmark)} \\
 \addlinespace
-\textbf{CP-03} & Pipeline de Reportería & Ejecución del trigger \texttt{!reporte 15} desde Discord. & Consolidación de datos, renderizado con Gotenberg y entrega de PDF en menos de 15 segundos. \textbf{(\checkmark)} \\
+\textbf{CP-03} & Pipeline de Reportería & Ejecución del trigger \texttt{/reporte 15} desde Discord. & Consolidación de datos, renderizado con Gotenberg y entrega de PDF en menos de 15 segundos. \textbf{(\checkmark)} \\
 \addlinespace
 \textbf{CP-04} & Dead Letter Queue (DLQ) & Modificación temporal maliciosa del Webhook de Discord. & Tras 5 fallos iterativos, el outbox etiqueta la tupla como \texttt{dead} y dispara un correo de alerta de fiabilidad. \textbf{(\checkmark)} \\
 \addlinespace
@@ -256,11 +256,11 @@ Para garantizar un entorno productivo tolerante a fallos, se ejecutó una agresi
 El punto de contacto humano principal es el servidor de Discord. El sistema soporta consultas naturalizadas (\textit{"¿Gemini, qué tan atrasados estamos hoy?"}) que disparan el motor LLM, y comandos estrictos para tareas deterministas:
 
 \begin{itemize}
-    \item \texttt{!estado} / \texttt{!progreso} / \texttt{!kpis}: Solicitud instantánea de series de tiempo y completitud.
-    \item \texttt{!ci} / \texttt{!commits}: Recuperación inmediata de los artefactos de la API de GitHub.
-    \item \texttt{!fase sync} / \texttt{!fase listar}: Conciliación forzada de columnas desde la API de Trello al motor Postgres local.
-    \item \texttt{!raid}: Recuperación de la matriz de Riesgos, Suposiciones, Incidencias y Dependencias.
-    \item \texttt{!reunion [tema]}: Invocación de un sub-agente de coordinación para emparejar calendarios del equipo y emitir convocatorias sin dependencia de Google Calendar.
+    \item \texttt{/estado} / \texttt{/progreso} / \texttt{/kpis}: Solicitud instantánea de series de tiempo y completitud.
+    \item \texttt{/ci} / \texttt{/commits}: Recuperación inmediata de los artefactos de la API de GitHub.
+    \item \texttt{/fase sync} / \texttt{/fase listar}: Conciliación forzada de columnas desde la API de Trello al motor Postgres local.
+    \item \texttt{/raid}: Recuperación de la matriz de Riesgos, Suposiciones, Incidencias y Dependencias.
+    \item \texttt{/reunion [tema]}: Invocación de un sub-agente de coordinación para emparejar calendarios del equipo y emitir convocatorias sin dependencia de Google Calendar.
 \end{itemize}
 
 \subsection{Evolutividad y Mantenimiento de Flujos}
@@ -269,7 +269,7 @@ El enfoque modular permite escalar el sistema sin impacto transversal:
 \begin{enumerate}
     \item \textbf{Adición de Agentes:} Requiere crear un nuevo workflow independiente, conectarlo como sub-nodo (\textit{Execute Workflow Node}) en el \texttt{PM Orchestrator} y definir su condicional en el enrutador JSON.
     \item \textbf{Mantenimiento de Prompts:} Modificar la lógica cognitiva no requiere programación (despliegues de código base), bastando con ajustar los nodos de Prompt en el lienzo de n8n, lo cual aplica de forma instantánea.
-    \item \textbf{Monitoreo de Salud:} El administrador de infraestructura debe inspeccionar esporádicamente la tabla \texttt{workflow\_runs\_audit} o teclear \texttt{!logs} en Discord para evaluar latencias, \textit{timeouts} y salud del caché en Redis.
+    \item \textbf{Monitoreo de Salud:} El administrador de infraestructura debe inspeccionar esporádicamente la tabla \texttt{workflow\_runs\_audit} o teclear \texttt{/logs} en Discord para evaluar latencias, \textit{timeouts} y salud del caché en Redis.
 \end{enumerate}
 
 \section{CONCLUSIONES FINALES}

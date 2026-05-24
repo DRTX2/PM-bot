@@ -45,11 +45,11 @@ La entrada PM puede usar dos rutas. La rapida recomendada es `bot-bridge -> /web
 
 Comandos PMO disponibles desde Discord:
 
-- `!acciones`: lista acciones PMO abiertas con owner, prioridad y deadline.
-- `!raid`: lista riesgos, issues, assumptions y dependencias abiertas.
-- `!logs`: muestra salud del bot, errores recientes, inbox/outbox y ruta del panel de logs.
-- `!agenda`: muestra las proximas reuniones del calendario PMO interno.
-- `!reunion [tema]`: agenda reunion PMO sin Google/Outlook, sugiere invitados, evita choques y registra logs.
+- `/acciones`: lista acciones PMO abiertas con owner, prioridad y deadline.
+- `/raid`: lista riesgos, issues, assumptions y dependencias abiertas.
+- `/logs`: muestra salud del bot, errores recientes, inbox/outbox y ruta del panel de logs.
+- `/agenda`: muestra las proximas reuniones del calendario PMO interno.
+- `/reunion [tema]`: agenda reunion PMO sin Google/Outlook, sugiere invitados, evita choques y registra logs.
 
 ## 4. Monitoring & Reliability (Salud del Sistema)
 

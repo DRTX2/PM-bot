@@ -162,7 +162,7 @@ La configuración del sistema se centraliza en:
 Se definió un plan de pruebas end-to-end documentado en `TEST_PLAN_PM_AI.md` que cubre:
 
 1. **Flujos de eventos:** Validación del pipeline completo desde la ingesta de un evento GitHub/Trello hasta la notificación en Discord.
-2. **Integración con Discord:** Pruebas de cada comando disponible (`!estado`, `!kpis`, `!reporte`, etc.).
+2. **Integración con Discord:** Pruebas de cada comando disponible (`/estado`, `/kpis`, `/reporte`, etc.).
 3. **Human-in-the-Loop:** Inyección de decisiones bloqueadas y aprobación desde el dashboard web.
 4. **Reporte semanal:** Generación on-demand y validación del PDF generado.
 5. **Tolerancia a fallos:** Simulación de fallos de envío y validación del comportamiento de DLQ y replay.
@@ -186,24 +186,24 @@ El bot PetSafe PM AI se utiliza exclusivamente a través de Discord. El equipo e
 
 | Comando | Descripción |
 |---|---|
-| `!ayuda` | Muestra la lista completa de comandos disponibles |
-| `!estado` | Resumen rápido del proyecto: progreso, tareas vencidas, total de tareas |
-| `!kpis` | Indicadores clave de desempeño del periodo actual |
-| `!reporte [días]` | Genera un PDF ejecutivo del periodo indicado (default: 7 días) |
-| `!riesgos` | Lista de riesgos activos con severidad |
-| `!hitos` | Próximos hitos del proyecto con fechas y responsables |
-| `!commits` | Actividad reciente de commits en backend y frontend |
-| `!ci` | Estado de los últimos runs de CI/CD en GitHub Actions |
-| `!vencidas` | Tareas vencidas sin completar |
-| `!miembros` | Lista de miembros del equipo con roles |
-| `!progreso` | Porcentaje de avance general del proyecto |
-| `!fase listar` | Fases del tablero Trello con completitud |
-| `!fase sync` | Sincroniza fases de Trello a la base de datos |
-| `!acciones` | Lista acciones PMO abiertas con owner y deadline |
-| `!raid` | Registro RAID: riesgos, acciones, issues y dependencias |
-| `!logs` | Salud del bot, errores recientes e info del sistema |
-| `!agenda` | Próximas reuniones del calendario PMO |
-| `!reunion [tema]` | Agenda una nueva reunión PMO |
+| `/ayuda` | Muestra la lista completa de comandos disponibles |
+| `/estado` | Resumen rápido del proyecto: progreso, tareas vencidas, total de tareas |
+| `/kpis` | Indicadores clave de desempeño del periodo actual |
+| `/reporte [días]` | Genera un PDF ejecutivo del periodo indicado (default: 7 días) |
+| `/riesgos` | Lista de riesgos activos con severidad |
+| `/hitos` | Próximos hitos del proyecto con fechas y responsables |
+| `/commits` | Actividad reciente de commits en backend y frontend |
+| `/ci` | Estado de los últimos runs de CI/CD en GitHub Actions |
+| `/vencidas` | Tareas vencidas sin completar |
+| `/miembros` | Lista de miembros del equipo con roles |
+| `/progreso` | Porcentaje de avance general del proyecto |
+| `/fase listar` | Fases del tablero Trello con completitud |
+| `/fase sync` | Sincroniza fases de Trello a la base de datos |
+| `/acciones` | Lista acciones PMO abiertas con owner y deadline |
+| `/raid` | Registro RAID: riesgos, acciones, issues y dependencias |
+| `/logs` | Salud del bot, errores recientes e info del sistema |
+| `/agenda` | Próximas reuniones del calendario PMO |
+| `/reunion [tema]` | Agenda una nueva reunión PMO |
 
 ### 8.3 Flujo de interacción
 
@@ -511,9 +511,9 @@ Las pruebas se ejecutan directamente desde la interfaz de n8n:
 
 | ID | Caso de prueba | Entrada | Resultado esperado | Estado |
 |---|---|---|---|---|
-| CP-001 | Chat: comando ayuda | `!ayuda` | Lista completa de comandos | ✅ Correcto |
-| CP-002 | Chat: estado del proyecto | `!estado` | Resumen con progreso, tareas y vencidas | ✅ Correcto |
-| CP-003 | Chat: generar reporte | `!reporte 15` | PDF adjunto en Discord | ✅ Correcto |
+| CP-001 | Chat: comando ayuda | `/ayuda` | Lista completa de comandos | ✅ Correcto |
+| CP-002 | Chat: estado del proyecto | `/estado` | Resumen con progreso, tareas y vencidas | ✅ Correcto |
+| CP-003 | Chat: generar reporte | `/reporte 15` | PDF adjunto en Discord | ✅ Correcto |
 | CP-004 | Chat: consulta libre | `¿cómo vamos?` | Respuesta IA con contexto real | ✅ Correcto |
 | CP-005 | Monitor: ejecución programada | Schedule trigger | KPIs calculados, snapshot guardado | ✅ Correcto |
 | CP-006 | Monitor: detección de alerta | Problema detectado | Diagnóstico IA + alerta Discord | ✅ Correcto |
@@ -522,7 +522,7 @@ Las pruebas se ejecutan directamente desde la interfaz de n8n:
 | CP-009 | Reporte PDF semanal | On-demand trigger | PDF con resumen ejecutivo y análisis técnico | ✅ Correcto |
 | CP-010 | Dashboard: aprobar decisión | POST con token válido | Estado actualizado + notificación Discord | ✅ Correcto |
 | CP-011 | DLQ: fallo de envío | Webhook URL inválida | Reintentos + marcado como dead | ✅ Correcto |
-| CP-012 | Chat: KPIs | `!kpis` | Indicadores de desempeño actualizados | ✅ Correcto |
+| CP-012 | Chat: KPIs | `/kpis` | Indicadores de desempeño actualizados | ✅ Correcto |
 
 ### 11.3 Pruebas manuales realizadas
 
@@ -567,7 +567,7 @@ Todos los servicios están configurados con `restart: unless-stopped` en Docker 
 
 - **Healthchecks:** Configurados en Docker Compose para PostgreSQL y Redis.
 - **Error Handler:** Workflow dedicado que notifica fallos en Discord.
-- **Comando `!logs`:** Permite consultar la salud del bot desde Discord.
+- **Comando `/logs`:** Permite consultar la salud del bot desde Discord.
 - **Logs Docker:** `docker compose logs -f [servicio]`
 
 ---

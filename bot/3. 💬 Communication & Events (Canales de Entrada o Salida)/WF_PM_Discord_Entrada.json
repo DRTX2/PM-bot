@@ -54,7 +54,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { \"respuesta\": $json.respuesta || $json.response || \"Accion PM procesada.\", \"canal_destino\": $json.canal_destino, \"canal_id\": $json.canal_id, \"storage\": $json.storage } }}",
+        "responseBody": "={{ { \"respuesta\": $json.respuesta || $json.response || $json.text || $json.message || $json.mensaje || \"Accion PM procesada.\", \"canal_destino\": $json.canal_destino, \"canal_id\": $json.canal_id, \"storage\": $json.storage } }}",
         "options": {}
       },
       "id": "respond-fast-pm",
@@ -65,6 +65,19 @@
         760,
         0
       ]
+    },
+    {
+      "id": "ensure-fast-pm-response",
+      "name": "Ensure Fast PM Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        650,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const item = $json || {};\nlet respuesta = item.respuesta || item.response || item.text || item.message || item.mensaje;\nif (!respuesta) respuesta = 'Comando PM procesado.';\nreturn [{ json: { ...item, respuesta } }];"
+      }
     }
   ],
   "connections": {
@@ -91,6 +104,17 @@
       ]
     },
     "Execute PM Router": {
+      "main": [
+        [
+          {
+            "node": "Ensure Fast PM Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure Fast PM Response": {
       "main": [
         [
           {

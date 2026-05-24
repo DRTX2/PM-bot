@@ -37,7 +37,7 @@ Validar todo el sistema: 30 workflows, entradas/salidas, DB, dashboards, colas y
 ```bash
 curl -sS -X POST "$WEBHOOK_URL/webhook/discord-chat-v2" \
   -H 'Content-Type: application/json' \
-  -d '{"body":{"content":"!estado","user":"david"}}'
+  -d '{"body":{"content":"/estado","user":"david"}}'
 ```
 
 ### PMO meeting webhook
@@ -56,7 +56,7 @@ curl -sS -X POST "$WEBHOOK_URL/webhook/discord-chat-v2" \
 ```json
 {
   "body": {
-    "content": "!fase sync",
+    "content": "/fase sync",
     "user": "david"
   }
 }
@@ -72,7 +72,7 @@ curl -sS -X POST "$WEBHOOK_URL/webhook/pm-approve" \
 
 ## Pruebas funcionales (todo)
 ### Chat Discord y comandos
-- Comandos: `!ayuda`, `!kpis`, `!reporte [dias]`, `!riesgos`, `!hitos`, `!revisar backend`, `!revisar frontend`, `!estado`, `!vencidas`, `!miembros`, `!commits`, `!ci`, `!progreso`, `!acciones`, `!raid`, `!logs`, `!agenda`, `!reunion [tema]`, `!fase sync`, `!fase listar`, `!doc <card_id>`.
+- Comandos: `/ayuda`, `/kpis`, `/reporte [dias]`, `/riesgos`, `/hitos`, `/revisar backend`, `/revisar frontend`, `/estado`, `/vencidas`, `/miembros`, `/commits`, `/ci`, `/progreso`, `/acciones`, `/raid`, `/logs`, `/agenda`, `/reunion [tema]`, `/fase sync`, `/fase listar`, `/doc <card_id>`.
 - Esperado: respuesta en Discord, registro en `recomendaciones`, lectura de Trello/GitHub/DB y, si aplica, ejecucion de subworkflow (reporte o meeting).
 
 ### bot-bridge (Discord -> n8n)
@@ -107,9 +107,9 @@ curl -sS -X POST "$WEBHOOK_URL/webhook/pm-approve" \
 - Esperado: filas en `pmo_meetings`, `pmo_meeting_invitees`, `pmo_meeting_logs`, `pmo_meeting_reminders` y outbox de notificacion.
 
 ### Fases Trello y adjuntos
-- POST `/webhook/trello-fases` con `!fase sync` y `!fase listar`.
+- POST `/webhook/trello-fases` con `/fase sync` y `/fase listar`.
 - Ejecutar [bot/5. 📊 PMO & Reporting (Gestion y Seguimiento)/Trello - Sync Attachments.json](bot/5.%20📊%20PMO%20&%20Reporting%20(Gestion%20y%20Seguimiento)/Trello%20-%20Sync%20Attachments.json).
-- Usar `!doc <card_id>` para resumen de PDF.
+- Usar `/doc <card_id>` para resumen de PDF.
 
 ### DLQ y tolerancia a fallos
 - Configurar `DISCORD_WEBHOOK_URL` a un endpoint invalido y ejecutar outbox.

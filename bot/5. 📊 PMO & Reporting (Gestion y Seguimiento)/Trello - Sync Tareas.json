@@ -1,0 +1,349 @@
+{
+  "id": "wf-trello-sync-tareas",
+  "name": "Trello - Sync Tareas",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e3fe31a0-388a-4db3-aeaa-cd253c5f2122",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 4
+            }
+          ]
+        }
+      },
+      "id": "a90b6c6b-cb70-42ce-b778-d15f778393c5",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "ALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS fecha_inicio DATE;\nALTER TABLE pm_entregables ADD COLUMN IF NOT EXISTS trello_card_id TEXT;\nCREATE UNIQUE INDEX IF NOT EXISTS idx_pm_tareas_trello_card_id_unique ON pm_tareas (trello_card_id) WHERE trello_card_id IS NOT NULL;\nCREATE UNIQUE INDEX IF NOT EXISTS idx_pm_entregables_trello_card_id_unique ON pm_entregables (trello_card_id) WHERE trello_card_id IS NOT NULL;\nDO $$ BEGIN\n  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'estado_tareas_card_id_key') THEN\n    ALTER TABLE estado_tareas ADD CONSTRAINT estado_tareas_card_id_key UNIQUE (card_id);\n  END IF;\nEND $$;",
+        "options": {}
+      },
+      "id": "d0408544-77e8-46cb-8344-9f2010cf085b",
+      "name": "Ensure Unique Constraints",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.trello.com/1/boards/{{ $env.TRELLO_BOARD_ID }}/lists?fields=id,name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "trelloApi",
+        "options": {}
+      },
+      "id": "184b2af8-fbcf-4a41-b845-9856f6c9d09c",
+      "name": "Trello Lists",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        420,
+        300
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.trello.com/1/boards/{{ $env.TRELLO_BOARD_ID }}/members?fields=id,fullName",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "trelloApi",
+        "options": {}
+      },
+      "id": "bfd65053-ec4b-4b13-b26a-93aebfa190a0",
+      "name": "Trello Members",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        620,
+        300
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.trello.com/1/boards/{{ $env.TRELLO_BOARD_ID }}/cards?fields=id,name,desc,idList,idMembers,start,due,dueComplete,badges",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "trelloApi",
+        "options": {}
+      },
+      "id": "1d86d635-c052-47ff-b830-588ce2876615",
+      "name": "Trello Cards",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        820,
+        300
+      ],
+      "credentials": {
+        "trelloApi": {
+          "id": "FWpamR2TOOuzCYJv",
+          "name": "Trello account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const listsData = $('Trello Lists').item.json || [];\nconst membersData = $('Trello Members').item.json || [];\nconst cardsData = $('Trello Cards').item.json || [];\n\nconst lists = {};\nObject.values(listsData).forEach(l => { if (l.id) lists[l.id] = l.name; });\n\nconst members = {};\nObject.values(membersData).forEach(m => { if (m.id) members[m.id] = m.fullName; });\n\nconst mapEstado = (listName, dueComplete) => {\n  if (dueComplete) return 'completada';\n  const l = listName.toLowerCase();\n  if (l.includes('done') || l.includes('completad')) return 'completada';\n  if (l.includes('doing') || l.includes('progress') || l.includes('curso') || l.includes('desarrollo')) return 'en_progreso';\n  if (l.includes('review') || l.includes('revisión') || l.includes('seguimiento')) return 'en_revision';\n  if (l.includes('blocked') || l.includes('bloquead')) return 'bloqueada';\n  return 'pendiente';\n};\n\nconst MAPPING = {\n  \"Levantamiento de requerimientos\": { nombre: \"Project Charter\", tipo: \"documentacion\" },\n  \"Cronograma\": { nombre: \"Planificación del Cronograma\", tipo: \"documentacion\" },\n  \"Diseño de la base de datos\": { nombre: \"Documentación Técnica Backend\", tipo: \"tecnico\" },\n  \"Diseño de la arquitectura del sistema\": { nombre: \"Documentación Técnica Frontend\", tipo: \"tecnico\" },\n  \"Agenda y Flujo de Atención\": { nombre: \"Prototipo Funcional Backend\", tipo: \"prototipo\" },\n  \"Desarrollo del aplicativo móvil\": { nombre: \"Prototipo Funcional Frontend\", tipo: \"prototipo\" },\n  \"Pruebas de integración\": { nombre: \"Pruebas de Integración\", tipo: \"tecnico\" },\n  \"Desarrollo y entrega de manual de usuario\": { nombre: \"Manual de Usuario\", tipo: \"documentacion\" }\n};\n\nconst result = Object.values(cardsData).map(c => {\n  const listName = lists[c.idList] || 'Desconocido';\n  const memberName = c.idMembers && c.idMembers.length > 0 ? members[c.idMembers[0]] || 'Sin Asignar' : 'Sin Asignar';\n  const memberId = c.idMembers && c.idMembers.length > 0 ? c.idMembers[0] : null;\n  \n  const mappedDev = MAPPING[c.name];\n  const is_deliverable = !!mappedDev;\n  const deliverable_name = mappedDev ? mappedDev.nombre : null;\n  const deliverable_tipo = mappedDev ? mappedDev.tipo : null;\n  \n  const estado = mapEstado(listName, c.dueComplete || (is_deliverable && c.dueComplete));\n  \n  const mapDeliverableEstado = (est) => {\n    if (est === 'completada') return 'entregado';\n    if (est === 'en_revision') return 'en_revision';\n    if (est === 'en_progreso') return 'en_progreso';\n    return 'pendiente';\n  };\n  const deliverable_estado = mapDeliverableEstado(estado);\n  \n  return {\n    card_id: c.id,\n    name: c.name,\n    desc: c.desc ? c.desc.slice(0, 1000) : '',\n    list_name: listName,\n    member_id: memberId,\n    member_name: memberName,\n    start: c.start,\n    due: c.due,\n    completed: c.dueComplete || estado === 'completada',\n    estado: estado,\n    attachments_count: c.badges ? c.badges.attachments : 0,\n    has_attachments: c.badges ? c.badges.attachments > 0 : false,\n    is_deliverable,\n    deliverable_name,\n    deliverable_tipo,\n    deliverable_estado\n  };\n});\n\nreturn result.map(r => ({ json: r }));"
+      },
+      "id": "f516dc06-d08b-4b24-9b59-9f7959ca963c",
+      "name": "Map Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO pm_tareas (titulo, descripcion, responsable, estado, fecha_inicio, fecha_limite, sprint, creado_por, trello_card_id, fecha_actualizacion)\nVALUES ($1, $2, $3, $4, $5, $6, $7, 'trello_sync', $8, NOW())\nON CONFLICT (trello_card_id) WHERE trello_card_id IS NOT NULL DO UPDATE SET\n  titulo = EXCLUDED.titulo,\n  descripcion = EXCLUDED.descripcion,\n  responsable = EXCLUDED.responsable,\n  estado = EXCLUDED.estado,\n  fecha_inicio = EXCLUDED.fecha_inicio,\n  fecha_limite = EXCLUDED.fecha_limite,\n  sprint = EXCLUDED.sprint,\n  fecha_actualizacion = NOW();",
+        "options": {
+          "queryReplacement": "={{ [$json.name, $json.desc, $json.member_name, $json.estado, $json.start, $json.due, $json.list_name, $json.card_id] }}"
+        }
+      },
+      "id": "e30e9989-1fc5-4bb8-8d05-4c4f90ed9d7e",
+      "name": "Upsert pm_tareas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1220,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO estado_tareas (card_id, card_nombre, lista_nombre, miembro_id, miembro_nombre, fecha_vencimiento, completada, tiene_adjuntos, adjuntos_count, fecha)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())\nON CONFLICT (card_id) DO UPDATE SET\n  card_nombre = EXCLUDED.card_nombre,\n  lista_nombre = EXCLUDED.lista_nombre,\n  miembro_id = EXCLUDED.miembro_id,\n  miembro_nombre = EXCLUDED.miembro_nombre,\n  fecha_vencimiento = EXCLUDED.fecha_vencimiento,\n  completada = EXCLUDED.completada,\n  tiene_adjuntos = EXCLUDED.tiene_adjuntos,\n  adjuntos_count = EXCLUDED.adjuntos_count,\n  fecha = NOW();",
+        "options": {
+          "queryReplacement": "={{ [$json.card_id, $json.name, $json.list_name, $json.member_id, $json.member_name, $json.due, $json.completed, $json.has_attachments, $json.attachments_count] }}"
+        }
+      },
+      "id": "e2ba96b0-7c22-4876-b636-f3ccb940e53f",
+      "name": "Upsert estado_tareas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1220,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO pm_entregables (nombre, responsable, estado, fecha_limite, tipo, trello_card_id, creado_por, fecha_actualizacion)\nSELECT $1, $2, $3, $4, $5, $6, 'trello_sync', NOW()\nWHERE $7 = true\nON CONFLICT (trello_card_id) DO UPDATE SET\n  nombre = EXCLUDED.nombre,\n  responsable = EXCLUDED.responsable,\n  estado = EXCLUDED.estado,\n  fecha_limite = EXCLUDED.fecha_limite,\n  tipo = EXCLUDED.tipo,\n  fecha_actualizacion = NOW();",
+        "options": {
+          "queryReplacement": "={{ [$json.deliverable_name, $json.member_name, $json.deliverable_estado, $json.due, $json.deliverable_tipo, $json.card_id, $json.is_deliverable] }}"
+        }
+      },
+      "id": "upsert-pm-entregables-node-id",
+      "name": "Upsert pm_entregables",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1220,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "upx1y0H6Nw7XOqLJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { status: 'success', synced_cards: $('Map Data').all().length, message: `Sincronizadas ${$('Map Data').all().length} tarjetas desde Trello.` } }];"
+      },
+      "id": "e5b88f34-1c05-4fcd-ba5e-a61f2e1a3d3c",
+      "name": "Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Ensure Unique Constraints",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Ensure Unique Constraints",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure Unique Constraints": {
+      "main": [
+        [
+          {
+            "node": "Trello Lists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trello Lists": {
+      "main": [
+        [
+          {
+            "node": "Trello Members",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trello Members": {
+      "main": [
+        [
+          {
+            "node": "Trello Cards",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trello Cards": {
+      "main": [
+        [
+          {
+            "node": "Map Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Data": {
+      "main": [
+        [
+          {
+            "node": "Upsert pm_tareas",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Upsert estado_tareas",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Upsert pm_entregables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert pm_tareas": {
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert estado_tareas": {
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert pm_entregables": {
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "O4qJYNx2qDrWB3wt"
+  },
+  "tags": []
+}

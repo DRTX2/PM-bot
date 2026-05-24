@@ -17,7 +17,8 @@ function code(fn) {
   const start = source.indexOf('{');
   const end = source.lastIndexOf('}');
   if (start === -1 || end === -1 || end <= start) throw new Error('Missing embedded code body');
-  return source.slice(start + 1, end).replace(/^\n/, '').replace(/\n$/, '');
+  const body = source.slice(start + 1, end).replace(/^\n/, '').replace(/\n$/, '');
+  return `const process = { env: typeof $env !== 'undefined' ? $env : {} };\n${body}`;
 }
 
 const settings = {
@@ -73,6 +74,33 @@ const execNode = (id, name, pos, workflowId, cachedResultName) =>
 const mergeNode = (id, name, pos, numberInputs) =>
   node(id, name, 'n8n-nodes-base.merge', 3, pos, { numberInputs });
 
+function switchEqualsRule(intent, outputKey) {
+  return {
+    conditions: {
+      options: {
+        caseSensitive: true,
+        leftValue: '',
+        typeValidation: 'strict',
+        version: 3,
+      },
+      conditions: [
+        {
+          id: `pm-intent-${outputKey}`,
+          leftValue: '={{ $json.intencion }}',
+          rightValue: intent,
+          operator: {
+            type: 'string',
+            operation: 'equals',
+          },
+        },
+      ],
+      combinator: 'and',
+    },
+    renameOutput: true,
+    outputKey,
+  };
+}
+
 const trigger = node('trigger', 'Execute Workflow Trigger', 'n8n-nodes-base.executeWorkflowTrigger', 1, [0, 0]);
 
 const classifyIntentCode = code(function(){
@@ -98,9 +126,21 @@ const channelVars = {
 };
 const missing_config = Object.values(channelVars).filter((key) => !env[key]);
 const channels = Object.fromEntries(Object.entries(channelVars).map(([k, v]) => [k, env[v] || '']));
+const channelRole = Object.entries(channels).find(([, id]) => id && String(id) === channel)?.[0] || null;
 
-const isCommand = /^\/pm(\s|$)/i.test(msg);
-const cmdText = isCommand ? msg.replace(/^\/pm\s*/i, '').trim() : '';
+const slashAlias = msg.match(/^\/(ayuda|estado|reporte|kpis|pendientes|atrasos|tarea|avance|bloqueo|bloqueos|impedimento|impedimentos|riesgo|riesgos|decision|decisiones|entregable|entregables|retrospectiva|retrospectivas|reunion|reuniones|recordatorio|admin)(?:\s+(.*))?$/i);
+const legacyBang = msg.match(/^!(\w+)(?:\s+(.*))?$/i);
+const isCommand = /^\/pm(\s|$)/i.test(msg) || !!slashAlias || !!legacyBang;
+let cmdText = '';
+let legacyCommand = false;
+if (/^\/pm(\s|$)/i.test(msg)) {
+  cmdText = msg.replace(/^\/pm\s*/i, '').trim();
+} else if (slashAlias) {
+  cmdText = `${slashAlias[1].toLowerCase()} ${slashAlias[2] || ''}`.trim();
+} else if (legacyBang) {
+  legacyCommand = true;
+  cmdText = `${legacyBang[1].toLowerCase()} ${legacyBang[2] || ''}`.trim();
+}
 const cmdParts = cmdText.split(/\s+/).filter(Boolean);
 const cmd = (cmdParts[0] || '').toLowerCase();
 const sub = (cmdParts[1] || '').toLowerCase();
@@ -136,11 +176,57 @@ function parseDate(value) {
   }
   return null;
 }
+function clampDays(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.max(1, Math.min(90, Math.floor(n)));
+}
+function actionOrDefault(value, allowed, fallback) {
+  return allowed.includes(value) ? value : fallback;
+}
 
 let intencion = 'desconocido';
 let sub_intencion = null;
 let datos = {};
 let canal_destino = 'DISCORD_CHANNEL_REPORTES';
+
+function applyChannelDefault() {
+  if (!channelRole || intencion !== 'desconocido') return;
+  if (channelRole === 'tareas') {
+    intencion = 'tarea';
+    sub_intencion = /atrasad|vencid|atrasos/i.test(low) ? 'atrasos' : (/pendiente/i.test(low) ? 'pendientes' : (/listar|lista|ver|mostrar/i.test(low) ? 'listar' : 'crear'));
+    canal_destino = 'DISCORD_CHANNEL_TAREAS';
+  } else if (channelRole === 'avances') {
+    intencion = 'avance';
+    sub_intencion = /resumen|listar|lista|ver|diario/i.test(low) ? 'resumen' : 'registrar';
+    canal_destino = 'DISCORD_CHANNEL_AVANCES';
+  } else if (channelRole === 'bloqueos') {
+    intencion = 'bloqueo';
+    sub_intencion = /listar|lista|ver|mostrar|consultar/i.test(low) ? 'listar' : 'registrar';
+    canal_destino = 'DISCORD_CHANNEL_BLOQUEOS';
+  } else if (channelRole === 'riesgos') {
+    intencion = 'riesgo';
+    sub_intencion = /listar|lista|ver|mostrar|consultar/i.test(low) ? 'listar' : 'registrar';
+    canal_destino = 'DISCORD_CHANNEL_RIESGOS';
+  } else if (channelRole === 'reportes') {
+    intencion = /kpis?|indicadores/i.test(low) ? 'reporte' : 'estado_proyecto';
+    sub_intencion = /kpis?|indicadores/i.test(low) ? 'kpis' : (/semanal|semana/i.test(low) ? 'semanal' : 'general');
+    canal_destino = 'DISCORD_CHANNEL_REPORTES';
+  } else if (channelRole === 'reuniones') {
+    intencion = 'reunion';
+    sub_intencion = /listar|lista|ver|mostrar/i.test(low) ? 'listar' : 'agendar';
+    canal_destino = 'DISCORD_CHANNEL_REUNIONES';
+  } else if (channelRole === 'entregables') {
+    intencion = 'entregable';
+    sub_intencion = /registr|crear|agregar/i.test(low) ? 'registrar' : 'pendientes';
+    canal_destino = 'DISCORD_CHANNEL_ENTREGABLES';
+  } else if (channelRole === 'admin') {
+    intencion = 'administracion';
+    sub_intencion = 'estado';
+    canal_destino = 'DISCORD_CHANNEL_ADMIN';
+  }
+  if (intencion !== 'desconocido') datos.texto = msg;
+}
 
 if (isCommand) {
   switch (cmd) {
@@ -148,6 +234,7 @@ if (isCommand) {
     case 'ayuda':
     case 'help':
       intencion = 'ayuda';
+      sub_intencion = sub || channelRole || 'general';
       break;
     case 'estado':
       intencion = 'estado_proyecto';
@@ -166,40 +253,52 @@ if (isCommand) {
       canal_destino = 'DISCORD_CHANNEL_AVANCES';
       break;
     case 'bloqueo':
+    case 'bloqueos':
+    case 'impedimento':
+    case 'impedimentos':
       intencion = 'bloqueo';
-      sub_intencion = sub || 'registrar';
-      datos.texto = rest;
+      sub_intencion = actionOrDefault(sub, ['registrar','crear','agregar','listar','lista','ver','resolver','cerrar'], 'registrar');
+      datos.texto = sub_intencion === sub ? rest : cmdParts.slice(1).join(' ');
       canal_destino = 'DISCORD_CHANNEL_BLOQUEOS';
       break;
     case 'riesgo':
+    case 'riesgos':
       intencion = 'riesgo';
-      sub_intencion = sub || 'registrar';
-      datos.texto = rest;
+      sub_intencion = actionOrDefault(sub, ['registrar','crear','agregar','listar','lista','ver','mitigar','cerrar'], 'registrar');
+      datos.texto = sub_intencion === sub ? rest : cmdParts.slice(1).join(' ');
       canal_destino = 'DISCORD_CHANNEL_RIESGOS';
       break;
     case 'reporte':
       intencion = 'reporte';
-      sub_intencion = sub || 'diario';
+      sub_intencion = /^\d+$/.test(sub) ? 'rango' : (sub || 'diario');
+      canal_destino = 'DISCORD_CHANNEL_REPORTES';
+      break;
+    case 'kpis':
+      intencion = 'reporte';
+      sub_intencion = 'kpis';
       canal_destino = 'DISCORD_CHANNEL_REPORTES';
       break;
     case 'reunion':
     case 'reunión':
+    case 'reuniones':
       intencion = 'reunion';
-      sub_intencion = sub || 'preparar';
-      datos.texto = rest || cmdParts.slice(1).join(' ');
+      sub_intencion = actionOrDefault(sub, ['preparar','agendar','programar','listar','lista','ver','acta','registrar_acta'], 'agendar');
+      datos.texto = sub_intencion === sub ? rest : cmdParts.slice(1).join(' ');
       canal_destino = 'DISCORD_CHANNEL_REUNIONES';
       break;
     case 'decision':
     case 'decisión':
+    case 'decisiones':
       intencion = 'decision';
-      sub_intencion = sub || 'registrar';
-      datos.texto = rest || cmdParts.slice(1).join(' ');
+      sub_intencion = actionOrDefault(sub, ['registrar','crear','agregar','listar','lista','ver'], 'registrar');
+      datos.texto = sub_intencion === sub ? rest : cmdParts.slice(1).join(' ');
       canal_destino = 'DISCORD_CHANNEL_REUNIONES';
       break;
     case 'entregable':
+    case 'entregables':
       intencion = 'entregable';
-      sub_intencion = sub || 'listar';
-      datos.texto = rest || cmdParts.slice(1).join(' ');
+      sub_intencion = actionOrDefault(sub, ['registrar','crear','agregar','listar','lista','ver','pendientes'], 'listar');
+      datos.texto = sub_intencion === sub ? rest : cmdParts.slice(1).join(' ');
       canal_destino = 'DISCORD_CHANNEL_ENTREGABLES';
       break;
     case 'pendientes':
@@ -218,9 +317,10 @@ if (isCommand) {
       break;
     case 'retrospectiva':
     case 'retro':
+    case 'retrospectivas':
       intencion = 'retrospectiva';
-      sub_intencion = sub || 'registrar';
-      datos.texto = rest || cmdParts.slice(1).join(' ');
+      sub_intencion = actionOrDefault(sub, ['registrar','crear','agregar','listar','lista','ver','bien','mejorar','accion'], 'registrar');
+      datos.texto = sub_intencion === sub ? rest : cmdParts.slice(1).join(' ');
       break;
     case 'recordatorio':
     case 'recordatorios':
@@ -245,24 +345,26 @@ if (isCommand) {
 } else if (/registr(ar|a) avance|termin[eé]|complet[eé]|avance diario|progreso/i.test(low)) {
   intencion = 'avance'; sub_intencion = 'registrar'; canal_destino = 'DISCORD_CHANNEL_AVANCES';
 } else if (/bloque(o|ado)|impedimento|no puedo avanzar|detenid|trabado|atascado/i.test(low)) {
-  intencion = 'bloqueo'; sub_intencion = 'registrar'; canal_destino = 'DISCORD_CHANNEL_BLOQUEOS';
+  intencion = 'bloqueo'; sub_intencion = /listar|lista|ver|mostrar|consultar/i.test(low) ? 'listar' : 'registrar'; canal_destino = 'DISCORD_CHANNEL_BLOQUEOS';
 } else if (/riesgo|peligro|amenaza|podr[ií]a fallar/i.test(low)) {
-  intencion = 'riesgo'; sub_intencion = 'registrar'; canal_destino = 'DISCORD_CHANNEL_RIESGOS';
-} else if (/reporte (diario|semanal)|genera(r)? reporte|resumen (del|de la) semana|estado (del|general)/i.test(low)) {
-  intencion = 'reporte'; sub_intencion = /semanal|semana/i.test(low) ? 'semanal' : 'diario'; canal_destino = 'DISCORD_CHANNEL_REPORTES';
+  intencion = 'riesgo'; sub_intencion = /listar|lista|ver|mostrar|consultar/i.test(low) ? 'listar' : 'registrar'; canal_destino = 'DISCORD_CHANNEL_RIESGOS';
+} else if (/kpis?|indicadores|reporte (diario|semanal)|genera(r)? reporte|resumen (del|de la) semana|estado (del|general)/i.test(low)) {
+  intencion = 'reporte'; sub_intencion = /kpis?|indicadores/i.test(low) ? 'kpis' : (/semanal|semana/i.test(low) ? 'semanal' : 'diario'); canal_destino = 'DISCORD_CHANNEL_REPORTES';
 } else if (/reuni[oó]n|prepara(r)? la reuni|agenda|acta|acuerdo|compromiso/i.test(low)) {
-  intencion = 'reunion'; sub_intencion = /acta|acuerdo|compromiso/i.test(low) ? 'registrar_acta' : 'preparar'; canal_destino = 'DISCORD_CHANNEL_REUNIONES';
+  intencion = 'reunion'; sub_intencion = /listar|lista|ver|mostrar/i.test(low) ? 'listar' : (/acta|acuerdo|compromiso/i.test(low) ? 'registrar_acta' : 'agendar'); canal_destino = 'DISCORD_CHANNEL_REUNIONES';
 } else if (/decisi[oó]n|decidimos|usaremos|registra(r)? esta decisi/i.test(low)) {
-  intencion = 'decision'; sub_intencion = 'registrar'; canal_destino = 'DISCORD_CHANNEL_REUNIONES';
+  intencion = 'decision'; sub_intencion = /listar|lista|ver|historial|mostrar/i.test(low) ? 'listar' : 'registrar'; canal_destino = 'DISCORD_CHANNEL_REUNIONES';
 } else if (/entregable|document(o|aci)|versi[oó]n|informe|prototipo|entregables falt/i.test(low)) {
   intencion = 'entregable'; sub_intencion = /registr|crear|agregar/i.test(low) ? 'registrar' : 'pendientes'; canal_destino = 'DISCORD_CHANNEL_ENTREGABLES';
 } else if (/retrospectiva|retro|qu[eé] sali[oó] bien|qu[eé] mejorar|lecciones aprendidas/i.test(low)) {
-  intencion = 'retrospectiva'; sub_intencion = 'registrar';
+  intencion = 'retrospectiva'; sub_intencion = /listar|lista|ver|resumen|mostrar/i.test(low) ? 'listar' : 'registrar';
 } else if (/estado (actual|del proyecto|de petsafe)|resume(n|me)|c[oó]mo va(mos)?|overview/i.test(low)) {
   intencion = 'estado_proyecto'; sub_intencion = 'general';
 } else if (/ayuda|help|c[oó]mo (te uso|funciona)/i.test(low)) {
   intencion = 'ayuda';
 }
+
+applyChannelDefault();
 
 datos.responsable = match(/(?:asigna(?:r|le)?\s+a\s+|responsable:?\s*|para\s+)(@[^\s]+|[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)?)/);
 datos.fecha_limite = parseDate(match(/(?:para|antes del?|fecha:?|limite:?|l[ií]mite:?)\s+(\d{4}-\d{2}-\d{2}|ma[nñ]ana|hoy|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)/i));
@@ -272,8 +374,29 @@ datos.id = Number(match(/#?(\d+)/)) || null;
 datos.porcentaje = Number(match(/(\d{1,3})\s*%/)) || null;
 datos.probabilidad = match(/probabilidad:?\s*(baja|media|alta)/i);
 datos.impacto = match(/impacto:?\s*(bajo|medio|alto|cr[ií]tico)/i);
+datos.dias = clampDays(
+  cmdParts.find((p, idx) => idx > 0 && /^\d{1,3}$/.test(p)) ||
+  msg.match(/(?:u[uú]ltimos?|rango|dias|d[ií]as)\D{0,12}(\d{1,3})/i)?.[1]
+);
+datos.fase = match(/(?:fase|hito|lista):?\s*([^,;\n]+)/i);
+datos.fecha_inicio = parseDate(match(/(?:inicio|desde):?\s+(\d{4}-\d{2}-\d{2}|ma[nñ]ana|hoy|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)/i));
+datos.fecha_reunion = parseDate(match(/(?:cuando|cu[aá]ndo|fecha|para):?\s+(\d{4}-\d{2}-\d{2}|ma[nñ]ana|hoy|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)/i));
+datos.hora_reunion = match(/(?:hora|a las|desde las)\s*([01]?\d|2[0-3])(?::([0-5]\d))?/i);
+datos.lugar = match(/(?:donde|d[oó]nde|lugar|ubicacion|ubicaci[oó]n):?\s*([^,;\n]+?)(?=\s+(?:participantes|asistentes|con|duracion|duraci[oó]n|minutos|cuando|cu[aá]ndo|fecha|hora):?\s|$)/i);
+datos.participantes = match(/(?:con|participan|participantes|asistentes):?\s*([^;\n]+)/i);
+datos.legacy_command = legacyCommand;
+datos.channel_role = channelRole;
 datos.texto_original = msg;
 datos.texto = datos.texto || msg;
+
+if (['bloqueos','impedimentos','riesgos','decisiones','retrospectivas','reuniones','entregables'].includes(cmd) && !sub) {
+  sub_intencion = 'listar';
+}
+
+if (legacyCommand) {
+  intencion = 'desconocido';
+  sub_intencion = 'legacy_prefix';
+}
 
 if (intencion === 'administracion' && channels.admin && channel && channel !== channels.admin) {
   return [{ json: {
@@ -286,6 +409,7 @@ if (intencion === 'administracion' && channels.admin && channel && channel !== c
     user_id: userId,
     canal_origen: channel,
     canal_nombre: channelName,
+    channel_role: channelRole,
     mensaje_original: msg,
     datos,
     missing_config,
@@ -304,6 +428,7 @@ return [{ json: {
   user_id: userId,
   canal_origen: channel,
   canal_nombre: channelName,
+  channel_role: channelRole,
   mensaje_original: msg,
   es_comando: isCommand,
   missing_config,
@@ -313,32 +438,125 @@ return [{ json: {
 });
 
 const helpCode = code(function(){
-const text = [
-  '**PetSafe PM Bot - comandos disponibles**',
-  '`/pm ayuda`',
-  '`/pm estado`',
-  '`/pm tarea crear [titulo] responsable: David limite: 2026-05-30 prioridad: alta`',
-  '`/pm tarea listar`, `/pm pendientes`, `/pm atrasos`',
-  '`/pm tarea actualizar #12 estado: en_progreso`',
-  '`/pm tarea asignar #12 responsable: David`',
-  '`/pm avance registrar #12 40% descripcion del avance`',
-  '`/pm bloqueo registrar descripcion prioridad: alta`',
-  '`/pm riesgo registrar descripcion probabilidad: alta impacto: critico`',
-  '`/pm reporte diario`, `/pm reporte semanal`',
-  '`/pm reunion preparar seguimiento sprint`',
-  '`/pm decision registrar usaremos Contabo como VPS`',
-  '`/pm entregable registrar Project Charter responsable: Joel limite: 2026-06-01`',
-  '`/pm retrospectiva bien|mejorar|accion texto`',
-  '`/pm admin estado` solo en #admin-bot',
-  '',
-  'Tambien entiendo lenguaje natural para crear tareas, registrar avances, bloqueos, riesgos, decisiones y reportes.'
-].join('\n');
-return [{ json: { respuesta: text, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || $json.canal_origen } }];
+const topic = String($json.sub_intencion || $json.channel_role || 'general').toLowerCase();
+const role = ['tareas','avances','bloqueos','riesgos','reportes','reuniones','entregables','admin','general'].includes(topic)
+  ? topic
+  : ($json.channel_role || 'general');
+const sections = {
+  tareas: [
+    '**Ayuda PM - tareas**',
+    'Este canal es para crear, asignar, listar y actualizar tareas. Si escribes una tarea sin comando, la interpreto como tarea nueva.',
+    '`/pm tarea crear [titulo] fase: Pruebas responsable: Barragan limite: 2026-05-30 prioridad: alta`',
+    '`/pm tarea listar` muestra tareas por fase/hito',
+    '`/pm pendientes` muestra pendientes accionables por urgencia',
+    '`/pm atrasos` muestra vencidas',
+    '`/pm tarea actualizar #12 estado: en_progreso prioridad: alta`',
+    '`/pm tarea asignar #12 responsable: Barragan`',
+    'Estados: pendiente, en_progreso, bloqueada, en_revision, completada, cancelada. Prioridades: baja, media, alta, critica.'
+  ],
+  avances: [
+    '**Ayuda PM - avances**',
+    'Este canal es para registrar progreso real del equipo. Si escribes sin comando, lo interpreto como avance.',
+    '`/pm avance registrar #12 40% descripcion del avance`',
+    '`/pm avance resumen` muestra avances de hoy',
+    'Incluye ID de tarea y porcentaje cuando aplique para que el seguimiento sea util.'
+  ],
+  bloqueos: [
+    '**Ayuda PM - bloqueos e impedimentos**',
+    'Este canal es para impedimentos que detienen trabajo. Si escribes sin comando, lo registro como bloqueo.',
+    '`/pm bloqueo registrar descripcion prioridad: alta tarea: #12 responsable: Manjarres`',
+    '`/pm bloqueo listar`',
+    '`/pm bloqueo cerrar #3`',
+    'El bot clasifica area de aplicacion y propone accion de desbloqueo.'
+  ],
+  riesgos: [
+    '**Ayuda PM - riesgos**',
+    'Este canal es para amenazas potenciales. Si escribes sin comando, lo registro como riesgo.',
+    '`/pm riesgo registrar descripcion probabilidad: alta impacto: critico mitigacion: plan`',
+    '`/pm riesgo listar`',
+    '`/pm riesgo mitigar #2`',
+    'La prioridad se calcula con probabilidad e impacto.'
+  ],
+  reportes: [
+    '**Ayuda PM - reportes y KPIs**',
+    'Este canal concentra estado ejecutivo, reportes y lectura PM del proyecto.',
+    '`/pm estado` o `/estado`',
+    '`/pm reporte diario`, `/pm reporte semanal`, `/pm reporte 14`, `/reporte 7`',
+    '`/pm kpis 7` o `/kpis 7`',
+    'Usa rangos de 1 a 90 dias.'
+  ],
+  reuniones: [
+    '**Ayuda PM - reuniones, decisiones y acuerdos**',
+    'Este canal es para preparar/agendar reuniones y dejar trazabilidad de decisiones.',
+    '`/pm reunion agendar tema cuando: 2026-05-27 hora: 10:00 donde: videollamada participantes: todos`',
+    '`/pm reunion listar`',
+    '`/pm decision registrar usaremos Contabo como VPS`',
+    '`/pm decision listar`',
+    '`/pm retrospectiva accion mejorar evidencias responsable: David`'
+  ],
+  entregables: [
+    '**Ayuda PM - entregables**',
+    'Este canal es para entregables, evidencias, documentos, versiones y fechas limite.',
+    '`/pm entregable registrar Project Charter responsable: Joel limite: 2026-06-01`',
+    '`/pm entregable listar`',
+    'Incluye responsable, fecha limite y enlace/evidencia cuando exista.'
+  ],
+  admin: [
+    '**Ayuda PM - admin**',
+    'Este canal es solo para salud del bot, variables, auditoria y outbox.',
+    '`/pm admin estado`',
+    'Si se ejecuta fuera de #admin-bot, el bot lo bloquea.'
+  ],
+  general: [
+    '**PetSafe PM Bot - organizacion por canales**',
+    'Prefijo unico: `/`. Puedes escribir comandos desde cualquier canal PM, pero la respuesta se publica en el canal propietario del tema.',
+    '#tareas: tareas, pendientes y atrasos.',
+    '#avances: progreso diario y porcentajes.',
+    '#bloqueos: impedimentos que frenan trabajo.',
+    '#riesgos: amenazas potenciales y mitigaciones.',
+    '#reportes: estado, reportes y KPIs.',
+    '#reuniones: reuniones, decisiones y acuerdos.',
+    '#entregables: evidencias/documentos/versiones.',
+    '#admin-bot: salud/configuracion/outbox.',
+    '',
+    'Pide `/ayuda` dentro de un canal para ver ayuda contextual o usa `/pm ayuda general` para esta vista.'
+  ]
+};
+const text = (sections[role] || sections.general).join('\n');
+return [{ json: { respuesta: text, canal_destino: $json.canal_destino || 'DISCORD_CHANNEL_REPORTES', canal_id: $json.canal_origen || process.env.DISCORD_CHANNEL_REPORTES } }];
 });
 
 const fallbackCode = code(function(){
+const datos = $json.datos || {};
+if (datos.legacy_command) {
+  return [{ json: {
+    respuesta: 'Los comandos del bot quedaron estandarizados con `/`. Prueba `/pm ayuda`, `/kpis 7` o `/reporte 7`.',
+    canal_destino: 'DISCORD_CHANNEL_REPORTES',
+    canal_id: process.env.DISCORD_CHANNEL_REPORTES || $json.canal_origen,
+    intencion: 'legacy_prefix'
+  }}];
+}
+const role = $json.channel_role || datos.channel_role || '';
+const hints = {
+  tareas: 'Este es el canal de tareas. Puedes usar `/pm tarea crear ...`, `/pm tarea listar`, `/pm pendientes` o escribir una tarea con responsable/fecha.',
+  avances: 'Este es el canal de avances. Puedes usar `/pm avance registrar #12 40% descripcion` o escribir el avance directamente.',
+  bloqueos: 'Este es el canal de bloqueos. Puedes usar `/pm bloqueo registrar ...` o `/pm bloqueo listar`.',
+  riesgos: 'Este es el canal de riesgos. Puedes usar `/pm riesgo registrar ...` o `/pm riesgo listar`.',
+  reportes: 'Este es el canal de reportes. Puedes usar `/reporte 7`, `/kpis 7` o `/estado`.',
+  reuniones: 'Este es el canal de reuniones. Puedes usar `/pm reunion agendar ... cuando: YYYY-MM-DD hora: HH:mm` o `/pm decision listar`.',
+  entregables: 'Este es el canal de entregables. Puedes usar `/pm entregable registrar ...` o `/pm entregable listar`.',
+  admin: 'Este es el canal admin. Puedes usar `/pm admin estado`.'
+};
+if (hints[role]) {
+  return [{ json: {
+    respuesta: hints[role],
+    canal_destino: $json.canal_destino || 'DISCORD_CHANNEL_BOT_LOG',
+    canal_id: $json.canal_origen || process.env.DISCORD_CHANNEL_BOT_LOG,
+    intencion: 'ayuda_contextual'
+  }}];
+}
 return [{ json: {
-  respuesta: 'No pude identificar completamente la accion. Puedes pedirme crear una tarea, registrar avance, reportar bloqueo, generar reporte o consultar pendientes.',
+  respuesta: 'No pude identificar completamente la accion. Puedes pedirme crear una tarea, registrar avance, listar bloqueos/riesgos/decisiones, generar `/reporte 7`, consultar `/kpis 7` o revisar pendientes.',
   canal_destino: 'DISCORD_CHANNEL_BOT_LOG',
   canal_id: process.env.DISCORD_CHANNEL_BOT_LOG || $json.canal_origen,
   intencion: $json.intencion || 'desconocido'
@@ -368,20 +586,20 @@ const routerNodes = [
   node('classify', 'Classify Intent', 'n8n-nodes-base.code', 2, [240, 0], { jsCode: classifyIntentCode }),
   node('route', 'Route by Intent', 'n8n-nodes-base.switch', 3, [500, 0], {
     rules: { values: [
-      { conditions: [{ value1: '={{ $json.intencion }}', operation: 'equal', value2: 'tarea' }], renameOutput: true, outputKey: 'tarea' },
-      { conditions: [{ value1: '={{ $json.intencion }}', operation: 'equal', value2: 'avance' }], renameOutput: true, outputKey: 'avance' },
-      { conditions: [{ value1: '={{ $json.intencion }}', operation: 'equal', value2: 'bloqueo' }], renameOutput: true, outputKey: 'bloqueo' },
-      { conditions: [{ value1: '={{ $json.intencion }}', operation: 'equal', value2: 'riesgo' }], renameOutput: true, outputKey: 'riesgo' },
-      { conditions: [{ value1: '={{ $json.intencion }}', operation: 'equal', value2: 'reporte' }], renameOutput: true, outputKey: 'reporte' },
-      { conditions: [{ value1: '={{ $json.intencion }}', operation: 'equal', value2: 'reunion' }], renameOutput: true, outputKey: 'reunion' },
-      { conditions: [{ value1: '={{ $json.intencion }}', operation: 'equal', value2: 'decision' }], renameOutput: true, outputKey: 'decision' },
-      { conditions: [{ value1: '={{ $json.intencion }}', operation: 'equal', value2: 'entregable' }], renameOutput: true, outputKey: 'entregable' },
-      { conditions: [{ value1: '={{ $json.intencion }}', operation: 'equal', value2: 'retrospectiva' }], renameOutput: true, outputKey: 'retrospectiva' },
-      { conditions: [{ value1: '={{ $json.intencion }}', operation: 'equal', value2: 'estado_proyecto' }], renameOutput: true, outputKey: 'estado' },
-      { conditions: [{ value1: '={{ $json.intencion }}', operation: 'equal', value2: 'recordatorio' }], renameOutput: true, outputKey: 'recordatorio' },
-      { conditions: [{ value1: '={{ $json.intencion }}', operation: 'equal', value2: 'ayuda' }], renameOutput: true, outputKey: 'ayuda' },
-      { conditions: [{ value1: '={{ $json.intencion }}', operation: 'equal', value2: 'administracion' }], renameOutput: true, outputKey: 'admin' },
-      { conditions: [{ value1: '={{ $json.intencion }}', operation: 'equal', value2: 'administracion_denegada' }], renameOutput: true, outputKey: 'admin_denegada' },
+      switchEqualsRule('tarea', 'tarea'),
+      switchEqualsRule('avance', 'avance'),
+      switchEqualsRule('bloqueo', 'bloqueo'),
+      switchEqualsRule('riesgo', 'riesgo'),
+      switchEqualsRule('reporte', 'reporte'),
+      switchEqualsRule('reunion', 'reunion'),
+      switchEqualsRule('decision', 'decision'),
+      switchEqualsRule('entregable', 'entregable'),
+      switchEqualsRule('retrospectiva', 'retrospectiva'),
+      switchEqualsRule('estado_proyecto', 'estado'),
+      switchEqualsRule('recordatorio', 'recordatorio'),
+      switchEqualsRule('ayuda', 'ayuda'),
+      switchEqualsRule('administracion', 'admin'),
+      switchEqualsRule('administracion_denegada', 'admin_denegada'),
     ] },
     options: { fallbackOutput: 'extra' },
   }),
@@ -401,9 +619,9 @@ const routerNodes = [
   node('admin-denied', 'Admin Denied Response', 'n8n-nodes-base.code', 2, [820, 1140], { jsCode: passDeniedCode }),
   node('fallback', 'Unknown Intent Response', 'n8n-nodes-base.code', 2, [820, 1260], { jsCode: fallbackCode }),
   mergeNode('merge-results', 'Merge PM Results', [1120, 360], 15),
-  pgNode('audit-router', 'Audit PM Command', [1360, 360], auditRouterQuery, {
+  { ...pgNode('audit-router', 'Audit PM Command', [1360, 360], auditRouterQuery, {
     queryReplacement: '={{ [ $("Classify Intent").item.json.mensaje_original, $("Classify Intent").item.json.intencion, $("Classify Intent").item.json.usuario, $("Classify Intent").item.json.canal_origen, JSON.stringify($("Classify Intent").item.json.datos || {}), $("Merge PM Results").item.json.respuesta || "" ] }}',
-  }),
+  }), continueOnFail: true },
   node('return-response', 'Return PM Response', 'n8n-nodes-base.code', 2, [1580, 360], { jsCode: returnRouterCode }),
 ];
 
@@ -451,82 +669,251 @@ const sub = String(ctx.sub_intencion || 'listar').toLowerCase();
 const q = (v) => v === null || v === undefined || v === '' ? 'NULL' : "'" + String(v).replace(/'/g, "''") + "'";
 const id = Number(datos.id || (raw.match(/#?(\d+)/) || [])[1] || 0);
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-const prio = ['baja','media','alta','critica'].includes(norm(datos.prioridad)) ? norm(datos.prioridad) : (norm(raw).match(/prioridad:?\s*(baja|media|alta|critica)/)?.[1] || 'media');
-const stateMap = { progreso: 'en_progreso', revision: 'en_revision', revisar: 'en_revision', terminado: 'completada', terminada: 'completada', hecho: 'completada' };
-let estado = norm(datos.estado) || norm(raw).match(/estado:?\s*([a-z_]+)/)?.[1] || '';
-estado = stateMap[estado] || estado;
-if (!['pendiente','en_progreso','bloqueada','en_revision','completada','cancelada'].includes(estado)) estado = 'pendiente';
-const responsable = datos.responsable || raw.match(/responsable:?\s*([^,;\n]+)/i)?.[1]?.trim() || raw.match(/asigna(?:r|le)?\s+a\s+([^,;\n]+)/i)?.[1]?.trim() || null;
-const fecha = datos.fecha_limite || raw.match(/(\d{4}-\d{2}-\d{2})/)?.[1] || null;
+const VALID_PRIORITIES = ['baja','media','alta','critica'];
+const VALID_STATES = ['pendiente','en_progreso','bloqueada','en_revision','completada','cancelada'];
+const TEAM = [
+  'David Manjarres',
+  'David Josue Barragan Pozo',
+  'Josue Joel Garcia Abata',
+  'Fernando Joel Bonilla Guerrero',
+  'Joel Bonilla'
+];
+function cleanField(value) {
+  return String(value || '').replace(/\s+(responsable|prioridad|estado|limite|l[ií]mite|fase|hito|lista|inicio|desde):?.*$/i, '').trim();
+}
+function parseField(name) {
+  const rx = new RegExp('(?:' + name + '):?\\s*([^,;\\n]+?)(?=\\s+(?:responsable|prioridad|estado|limite|l[ií]mite|fase|hito|lista|inicio|desde):?\\s|$)', 'i');
+  return raw.match(rx)?.[1]?.trim() || null;
+}
+function normalizeState(value) {
+  const v = norm(value).replace(/\s+/g, '_');
+  const map = { progreso: 'en_progreso', revision: 'en_revision', revisar: 'en_revision', hecho: 'completada', terminado: 'completada', terminada: 'completada' };
+  return VALID_STATES.includes(v) ? v : (map[v] || null);
+}
+function resolvePerson(value) {
+  const input = cleanField(value);
+  if (!input) return { status: 'empty', value: null, matches: [] };
+  const wanted = norm(input).split(/\s+/).filter(Boolean);
+  const matches = TEAM.filter((name) => wanted.every((part) => norm(name).includes(part)));
+  if (matches.length === 1) return { status: 'ok', value: matches[0], matches };
+  if (matches.length > 1) return { status: 'ambiguous', value: input, matches };
+  return { status: 'unknown', value: input, matches: [] };
+}
+
+const priorityText = datos.prioridad || raw.match(/prioridad:?\s*([^,;\n]+?)(?=\s+(?:responsable|estado|limite|l[ií]mite|fase|hito|lista|inicio|desde):?\s|$)/i)?.[1]?.trim();
+const stateText = datos.estado || raw.match(/estado:?\s*([^,;\n]+?)(?=\s+(?:responsable|prioridad|limite|l[ií]mite|fase|hito|lista|inicio|desde):?\s|$)/i)?.[1]?.trim();
+const prio = priorityText ? norm(priorityText) : 'media';
+if (priorityText && !VALID_PRIORITIES.includes(prio)) {
+  return [{ json: { action: 'validation_error', respuesta: 'Prioridad no valida. Usa una de estas: baja, media, alta, critica.', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];
+}
+let estado = stateText ? normalizeState(stateText) : null;
+if (stateText && !estado) {
+  return [{ json: { action: 'validation_error', respuesta: 'Estado no valido. Usa uno de estos: pendiente, en_progreso, bloqueada, en_revision, completada, cancelada.', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];
+}
+const colonResponsible = ['crear','nueva','registrar','asignar','assign'].includes(sub)
+  ? raw.match(/:\s*([A-ZÁÉÍÓÚÑa-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+){0,3})(?=\s+(?:limite|l[ií]mite|prioridad|estado|fase|hito|lista|inicio|desde)\b|$)/)?.[1]?.trim()
+  : null;
+const responsableInput = datos.responsable || parseField('responsable') || raw.match(/asigna(?:r|le)?\s+a\s+([^,;\n]+)/i)?.[1]?.trim() || colonResponsible || null;
+const resolved = resolvePerson(responsableInput);
+if (responsableInput && resolved.status === 'ambiguous') {
+  return [{ json: { action: 'validation_error', respuesta: `Responsable ambiguo: "${resolved.value}". Coincide con: ${resolved.matches.join(', ')}. Especifica nombre y apellido, por ejemplo responsable: Barragan o responsable: Fernando Bonilla.`, canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];
+}
+if (responsableInput && resolved.status === 'unknown') {
+  return [{ json: { action: 'validation_error', respuesta: `No pude identificar al responsable "${resolved.value}". Usa un nombre claro del equipo: ${TEAM.join(', ')}.`, canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];
+}
+const responsable = resolved.status === 'ok' ? resolved.value : null;
+const fecha = datos.fecha_limite || raw.match(/(?:limite|l[ií]mite|vence|fecha):?\s*(\d{4}-\d{2}-\d{2})/i)?.[1] || raw.match(/(\d{4}-\d{2}-\d{2})/)?.[1] || null;
+const fechaInicio = datos.fecha_inicio || raw.match(/(?:inicio|desde):?\s*(\d{4}-\d{2}-\d{2})/i)?.[1] || null;
 const entregable = raw.match(/entregable:?\s*([^,;\n]+)/i)?.[1]?.trim() || null;
-const sprint = raw.match(/sprint:?\s*([^,;\n]+)/i)?.[1]?.trim() || null;
+const fase = cleanField(datos.fase || parseField('fase|hito|lista') || raw.match(/sprint:?\s*([^,;\n]+)/i)?.[1]?.trim() || '');
 const cleaned = raw
   .replace(/^\/pm\s+tarea\s+\w+/i, '')
+  .replace(/^\/tarea\s+\w+/i, '')
   .replace(/responsable:?\s*[^,;\n]+/ig, '')
   .replace(/prioridad:?\s*(baja|media|alta|cr[ií]tica)/ig, '')
-  .replace(/estado:?\s*[a-z_]+/ig, '')
+  .replace(/estado:?\s*[^,;\n]+/ig, '')
+  .replace(/(?:fase|hito|lista|sprint):?\s*[^,;\n]+/ig, '')
+  .replace(/(?:inicio|desde):?\s*\d{4}-\d{2}-\d{2}/ig, '')
   .replace(/limite:?\s*\d{4}-\d{2}-\d{2}/ig, '')
   .replace(/l[ií]mite:?\s*\d{4}-\d{2}-\d{2}/ig, '')
-  .replace(/#?\d+/g, '')
+  .replace(/:\s*[A-ZÁÉÍÓÚÑa-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+){0,3}\s*$/i, '')
+  .replace(/#\d+/g, '')
   .trim();
 const titulo = cleaned || datos.titulo || datos.texto || 'Tarea sin titulo';
 
 let query;
 let action = sub;
 if (['crear','nueva','registrar'].includes(sub)) {
-  query = `INSERT INTO pm_tareas (titulo, descripcion, responsable, prioridad, estado, fecha_limite, entregable, sprint, creado_por, canal_origen)
-VALUES (${q(titulo)}, ${q(raw)}, ${q(responsable)}, ${q(prio)}, 'pendiente', ${fecha ? q(fecha) + '::date' : 'NULL'}, ${q(entregable)}, ${q(sprint)}, ${q(ctx.usuario)}, ${q(ctx.canal_origen)})
-RETURNING 'created' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, entregable, sprint;`;
+  query = `WITH ins AS (
+  INSERT INTO pm_tareas (titulo, descripcion, responsable, prioridad, estado, fecha_inicio, fecha_limite, entregable, sprint, creado_por, canal_origen)
+  VALUES (${q(titulo)}, ${q(raw)}, ${q(responsable)}, ${q(prio)}, 'pendiente', ${fechaInicio ? q(fechaInicio) + '::date' : 'NULL'}, ${fecha ? q(fecha) + '::date' : 'NULL'}, ${q(entregable)}, COALESCE(${q(fase)}, (SELECT name FROM project_phases WHERE status='active' ORDER BY position DESC LIMIT 1), 'Sin fase'), ${q(ctx.usuario)}, ${q(ctx.canal_origen)})
+  RETURNING *
+)
+SELECT 'created' AS action, ins.id, ins.titulo, ins.descripcion, ins.responsable, ins.prioridad, ins.estado, ins.fecha_inicio, ins.fecha_limite, ins.entregable, ins.sprint, ins.trello_card_id,
+  (SELECT list_id FROM project_phases p WHERE p.name = ins.sprint ORDER BY p.position DESC LIMIT 1) AS trello_list_id
+FROM ins;`;
 } else if (['asignar','assign'].includes(sub)) {
   if (!id || !responsable) {
     return [{ json: { action: 'validation_error', respuesta: 'Faltan datos para asignar la tarea. Indica ID y responsable. Ejemplo: `/pm tarea asignar #12 responsable: David`', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];
   }
-  query = `UPDATE pm_tareas SET responsable=${q(responsable)}, fecha_actualizacion=NOW() WHERE id=${id} RETURNING 'assigned' AS action, id, titulo, responsable, prioridad, estado, fecha_limite;`;
+  query = `WITH upd AS (
+  UPDATE pm_tareas SET responsable=${q(responsable)}, fecha_actualizacion=NOW() WHERE id=${id} RETURNING *
+)
+SELECT 'assigned' AS action, upd.id, upd.titulo, upd.descripcion, upd.responsable, upd.prioridad, upd.estado, upd.fecha_inicio, upd.fecha_limite, upd.entregable, upd.sprint, upd.trello_card_id,
+  (SELECT list_id FROM project_phases p WHERE p.name = upd.sprint ORDER BY p.position DESC LIMIT 1) AS trello_list_id
+FROM upd;`;
 } else if (['actualizar','update','estado'].includes(sub)) {
   if (!id) {
     return [{ json: { action: 'validation_error', respuesta: 'Falta el ID de la tarea para actualizar. Ejemplo: `/pm tarea actualizar #12 estado: en_revision`', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];
   }
-  const updates = [`estado=${q(estado)}`, `prioridad=${q(prio)}`, `fecha_actualizacion=NOW()`];
+  const updates = [`fecha_actualizacion=NOW()`];
+  if (estado) updates.push(`estado=${q(estado)}`);
+  if (priorityText) updates.push(`prioridad=${q(prio)}`);
   if (responsable) updates.push(`responsable=${q(responsable)}`);
   if (fecha) updates.push(`fecha_limite=${q(fecha)}::date`);
-  query = `UPDATE pm_tareas SET ${updates.join(', ')} WHERE id=${id} RETURNING 'updated' AS action, id, titulo, responsable, prioridad, estado, fecha_limite;`;
+  if (fechaInicio) updates.push(`fecha_inicio=${q(fechaInicio)}::date`);
+  if (fase) updates.push(`sprint=${q(fase)}`);
+  if (updates.length === 1) {
+    return [{ json: { action: 'validation_error', respuesta: 'No encontre campos para actualizar. Puedes usar estado, prioridad, responsable, fase, inicio o limite. Estados: pendiente, en_progreso, bloqueada, en_revision, completada, cancelada. Prioridades: baja, media, alta, critica.', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];
+  }
+  query = `WITH upd AS (
+  UPDATE pm_tareas SET ${updates.join(', ')} WHERE id=${id} RETURNING *
+)
+SELECT 'updated' AS action, upd.id, upd.titulo, upd.descripcion, upd.responsable, upd.prioridad, upd.estado, upd.fecha_inicio, upd.fecha_limite, upd.entregable, upd.sprint, upd.trello_card_id,
+  (SELECT list_id FROM project_phases p WHERE p.name = upd.sprint ORDER BY p.position DESC LIMIT 1) AS trello_list_id
+FROM upd;`;
 } else if (['atrasos','vencidas','vencidos'].includes(sub)) {
   query = `SELECT 'overdue' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, (CURRENT_DATE - fecha_limite::date) AS dias_atraso
 FROM pm_tareas WHERE fecha_limite < CURRENT_DATE AND estado NOT IN ('completada','cancelada')
 ORDER BY dias_atraso DESC, prioridad LIMIT 20;`;
 } else {
   action = ['pendientes','listar','lista','list'].includes(sub) ? sub : 'listar';
-  query = `SELECT 'list' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, entregable, sprint
+  if (action === 'pendientes') {
+    query = `SELECT 'pending' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, entregable, sprint,
+CASE WHEN fecha_limite < CURRENT_DATE THEN 'atrasada' WHEN fecha_limite <= CURRENT_DATE + INTERVAL '3 days' THEN 'proxima' ELSE 'normal' END AS urgencia
 FROM pm_tareas WHERE estado NOT IN ('completada','cancelada')
-ORDER BY CASE prioridad WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, fecha_limite NULLS LAST LIMIT 20;`;
+ORDER BY CASE WHEN fecha_limite < CURRENT_DATE THEN 0 WHEN fecha_limite <= CURRENT_DATE + INTERVAL '3 days' THEN 1 ELSE 2 END,
+CASE prioridad WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, fecha_limite NULLS LAST LIMIT 25;`;
+  } else {
+    query = `SELECT 'list_by_phase' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, entregable, COALESCE(sprint, entregable, 'Sin fase') AS sprint
+FROM pm_tareas WHERE estado NOT IN ('completada','cancelada')
+ORDER BY COALESCE(sprint, entregable, 'Sin fase'), fecha_limite NULLS LAST, CASE prioridad WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END LIMIT 30;`;
+  }
 }
 return [{ json: { query, action, canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];
 });
 
 const taskFormatCode = code(function(){
-const rows = $input.all().map(i => i.json);
 const ctx = $('Build Task Query').item.json;
 if (ctx.respuesta) return [{ json: ctx }];
+let rows = [];
+try { rows = $('Run Task Query').all().map(i => i.json); } catch (e) { rows = $input.all().map(i => i.json); }
 const action = rows[0]?.action || ctx.action;
-const lineTask = (t) => `#${t.id} ${t.prioridad ? '[' + t.prioridad + '] ' : ''}${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - vence ' + t.fecha_limite : ''}`;
+let trello = { status: 'no_aplica' };
+try { trello = $('Build Trello Sync').item.json.trello_sync || trello; } catch (e) {}
+try {
+  const card = $('Trello Upsert Card').item.json;
+  if (card?.id) trello = { status: 'sincronizado', card_id: card.id, url: card.shortUrl || card.url || '' };
+  else if (trello.status === 'pendiente') trello = { status: 'fallo', detalle: 'Trello no devolvio id de tarjeta.' };
+} catch (e) {}
+const lineTask = (t) => `#${t.id} [${t.estado || 'sin_estado'}/${t.prioridad || 'media'}] ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - vence ' + t.fecha_limite : ''}`;
+function groupBy(items, keyFn) {
+  return items.reduce((acc, item) => {
+    const key = keyFn(item);
+    acc[key] = acc[key] || [];
+    acc[key].push(item);
+    return acc;
+  }, {});
+}
+function trelloLine() {
+  if (trello.status === 'sincronizado') return `\nTrello: sincronizado${trello.card_id ? ' (' + trello.card_id + ')' : ''}${trello.url ? ' - ' + trello.url : ''}.`;
+  if (trello.status === 'omitido') return `\nTrello: no sincronizado (${trello.detalle}).`;
+  if (trello.status === 'fallo') return `\nTrello: pendiente de revisar (${trello.detalle}).`;
+  return '';
+}
 let respuesta;
 if (!rows.length) {
   respuesta = action === 'overdue' ? 'No hay tareas atrasadas. El proyecto va en tiempo.' : 'No hay tareas activas registradas.';
 } else if (action === 'created') {
   const t = rows[0];
-  respuesta = `Tarea registrada.\nID: #${t.id}\nTitulo: ${t.titulo}\nResponsable: ${t.responsable || 'sin asignar'}\nFecha limite: ${t.fecha_limite || 'sin fecha'}\nPrioridad: ${t.prioridad}\nProximo paso: validar avance antes de la siguiente reunion de seguimiento.`;
+  respuesta = `Tarea registrada.\nID: #${t.id}\nTitulo: ${t.titulo}\nFase/hito: ${t.sprint || 'Sin fase'}\nResponsable: ${t.responsable || 'sin asignar'}\nInicio: ${t.fecha_inicio || 'sin fecha'}\nFecha limite: ${t.fecha_limite || 'sin fecha'}\nPrioridad: ${t.prioridad}${trelloLine()}\nProximo paso: registrar avance con /pm avance registrar #${t.id}.`;
 } else if (action === 'assigned') {
   const t = rows[0];
-  respuesta = `Tarea asignada.\nID: #${t.id}\nTitulo: ${t.titulo}\nResponsable: ${t.responsable}\nProximo paso: registrar avance con /pm avance registrar #${t.id}.`;
+  respuesta = `Tarea asignada.\nID: #${t.id}\nTitulo: ${t.titulo}\nResponsable: ${t.responsable}${trelloLine()}\nProximo paso: registrar avance con /pm avance registrar #${t.id}.`;
 } else if (action === 'updated') {
   const t = rows[0];
-  respuesta = `Tarea actualizada.\nID: #${t.id}\nEstado: ${t.estado}\nPrioridad: ${t.prioridad}\nResponsable: ${t.responsable || 'sin asignar'}\nProximo paso: revisar si requiere bloqueo, entregable o evidencia.`;
+  respuesta = `Tarea actualizada.\nID: #${t.id}\nEstado: ${t.estado}\nPrioridad: ${t.prioridad}\nFase/hito: ${t.sprint || 'Sin fase'}\nResponsable: ${t.responsable || 'sin asignar'}${trelloLine()}\nValores permitidos: estados pendiente, en_progreso, bloqueada, en_revision, completada, cancelada; prioridades baja, media, alta, critica.`;
 } else if (action === 'overdue') {
   respuesta = `Tareas atrasadas (${rows.length}):\n` + rows.map(t => `- ${lineTask(t)} - atraso: ${t.dias_atraso} dia(s)`).join('\n') + '\nRecomendacion PM: revisar responsables y bloqueos activos hoy.';
+} else if (action === 'pending') {
+  const labels = { atrasada: 'Atrasadas', proxima: 'Vencen pronto', normal: 'En curso sin urgencia inmediata' };
+  const groups = groupBy(rows, t => t.urgencia || 'normal');
+  const lines = [`Pendientes accionables (${rows.length}):`];
+  ['atrasada','proxima','normal'].forEach((key) => {
+    if (groups[key]?.length) {
+      lines.push('', labels[key] + ':', ...groups[key].map(t => `- ${lineTask(t)}`));
+    }
+  });
+  respuesta = lines.join('\n');
 } else {
-  respuesta = `Tareas activas (${rows.length}):\n` + rows.map(t => `- ${lineTask(t)}`).join('\n');
+  const groups = groupBy(rows, t => t.sprint || t.entregable || 'Sin fase');
+  const lines = [`Tareas por fase/hito (${rows.length}):`];
+  Object.keys(groups).forEach((fase) => {
+    lines.push('', fase + ':', ...groups[fase].map(t => `- ${lineTask(t)}`));
+  });
+  respuesta = lines.join('\n');
 }
 return [{ json: { respuesta, canal_destino: ctx.canal_destino, canal_id: ctx.canal_id, storage: 'postgres:pm_tareas' } }];
+});
+
+const taskTrelloSyncCode = code(function(){
+const rows = $('Run Task Query').all().map(i => i.json);
+const task = rows[0] || {};
+const syncable = ['created','assigned','updated'].includes(task.action);
+if (!syncable) {
+  return [{ json: { needs_sync: false, trello_sync: { status: 'no_aplica' } } }];
+}
+
+const defaultListId = process.env.TRELLO_DEFAULT_LIST_ID || process.env.TRELLO_TASKS_LIST_ID || '';
+const listId = task.trello_list_id || defaultListId;
+if (!task.trello_card_id && !listId) {
+  return [{ json: { needs_sync: false, trello_sync: { status: 'omitido', detalle: 'falta TRELLO_DEFAULT_LIST_ID o una fase vinculada a lista Trello' }, task_id: task.id } }];
+}
+
+function memberMap() {
+  try { return JSON.parse(process.env.TRELLO_MEMBER_MAP_JSON || '{}'); } catch (e) { return {}; }
+}
+function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+function memberIdFor(name) {
+  const map = memberMap();
+  const direct = map[name] || map[norm(name)];
+  if (direct) return direct;
+  const hit = Object.entries(map).find(([k]) => norm(k) === norm(name));
+  return hit ? hit[1] : '';
+}
+
+const params = new URLSearchParams();
+params.set('name', `#${task.id} ${task.titulo}`.slice(0, 160));
+params.set('desc', String(task.descripcion || task.titulo || '').slice(0, 1500));
+if (!task.trello_card_id) params.set('idList', listId);
+if (task.fecha_limite) params.set('due', task.fecha_limite);
+if (task.fecha_inicio) params.set('start', task.fecha_inicio);
+if (task.estado === 'completada') params.set('dueComplete', 'true');
+if (task.responsable) {
+  const memberId = memberIdFor(task.responsable);
+  if (memberId) params.set('idMembers', memberId);
+}
+
+const method = task.trello_card_id ? 'PUT' : 'POST';
+const path = task.trello_card_id ? `/cards/${task.trello_card_id}` : '/cards';
+return [{ json: {
+  needs_sync: true,
+  method,
+  url: `https://api.trello.com/1${path}?${params.toString()}`,
+  task_id: task.id,
+  existing_card_id: task.trello_card_id || '',
+  trello_sync: { status: 'pendiente' }
+}}];
 });
 
 writeWorkflow(path.join(pmoDir, 'WF_PM_Tareas.json'), workflow('wf-pm-tareas', 'WF_PM_Tareas', [
@@ -537,12 +924,45 @@ writeWorkflow(path.join(pmoDir, 'WF_PM_Tareas.json'), workflow('wf-pm-tareas', '
     options: {},
   }),
   pgNode('run-task', 'Run Task Query', [760, 120], '={{ $json.query }}'),
-  node('format-task', 'Format Task Response', 'n8n-nodes-base.code', 2, [1000, 0], { jsCode: taskFormatCode }),
+  node('build-trello-sync', 'Build Trello Sync', 'n8n-nodes-base.code', 2, [1000, 120], { jsCode: taskTrelloSyncCode }),
+  node('need-trello-sync?', 'Need Trello Sync?', 'n8n-nodes-base.if', 2.2, [1220, 120], {
+    conditions: { options: { caseSensitive: true, typeValidation: 'loose' }, conditions: [{ id: 'needs-sync', leftValue: '={{ $json.needs_sync ? 1 : 0 }}', rightValue: 1, operator: { type: 'number', operation: 'equals' } }], combinator: 'and' },
+    options: {},
+  }),
+  node('trello-upsert-card', 'Trello Upsert Card', 'n8n-nodes-base.httpRequest', 4.2, [1460, 40], {
+    method: '={{ $json.method }}',
+    url: '={{ $json.url }}',
+    authentication: 'predefinedCredentialType',
+    nodeCredentialType: 'trelloApi',
+    options: {},
+  }, {
+    credentials: {
+      trelloApi: {
+        id: 'FWpamR2TOOuzCYJv',
+        name: 'Trello account',
+      },
+    },
+    continueOnFail: true,
+  }),
+  pgNode('store-trello-card', 'Store Trello Card Id', [1680, 40], `WITH upd AS (
+  UPDATE pm_tareas
+  SET trello_card_id = COALESCE(trello_card_id, $1), fecha_actualizacion = NOW()
+  WHERE id = $2 AND $1 IS NOT NULL
+  RETURNING trello_card_id
+)
+SELECT COALESCE((SELECT trello_card_id FROM upd), $1) AS trello_card_id;`, {
+    queryReplacement: '={{ [ $json.id || $("Build Trello Sync").item.json.existing_card_id || null, $("Build Trello Sync").item.json.task_id ] }}',
+  }),
+  node('format-task', 'Format Task Response', 'n8n-nodes-base.code', 2, [1900, 120], { jsCode: taskFormatCode }),
 ], {
   'Execute Workflow Trigger': { main: [[{ node: 'Build Task Query', type: 'main', index: 0 }]] },
   'Build Task Query': { main: [[{ node: 'Task Validation Error?', type: 'main', index: 0 }]] },
   'Task Validation Error?': { main: [[{ node: 'Format Task Response', type: 'main', index: 0 }], [{ node: 'Run Task Query', type: 'main', index: 0 }]] },
-  'Run Task Query': { main: [[{ node: 'Format Task Response', type: 'main', index: 0 }]] },
+  'Run Task Query': { main: [[{ node: 'Build Trello Sync', type: 'main', index: 0 }]] },
+  'Build Trello Sync': { main: [[{ node: 'Need Trello Sync?', type: 'main', index: 0 }]] },
+  'Need Trello Sync?': { main: [[{ node: 'Trello Upsert Card', type: 'main', index: 0 }], [{ node: 'Format Task Response', type: 'main', index: 0 }]] },
+  'Trello Upsert Card': { main: [[{ node: 'Store Trello Card Id', type: 'main', index: 0 }]] },
+  'Store Trello Card Id': { main: [[{ node: 'Format Task Response', type: 'main', index: 0 }]] },
 }));
 
 const avancesBuildCode = code(function(){
@@ -597,45 +1017,85 @@ const bloqueoRiesgoBuildCode = code(function(){
 const ctx = $json;
 const datos = ctx.datos || {};
 const raw = String(datos.texto || datos.texto_original || ctx.mensaje_original || '');
+const sub = String(ctx.sub_intencion || 'registrar').toLowerCase();
 const q = (v) => v === null || v === undefined || v === '' ? 'NULL' : "'" + String(v).replace(/'/g, "''") + "'";
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const intencion = ctx.intencion;
 const taskId = Number(datos.id || raw.match(/#?(\d+)/)?.[1] || 0) || null;
+if (['listar','lista','ver'].includes(sub)) {
+  const query = intencion === 'riesgo'
+    ? `SELECT 'risk_list' AS action, id, descripcion, probabilidad, impacto, prioridad_calculada, mitigacion, responsable, estado, fecha_creacion FROM pm_riesgos WHERE estado = 'abierto' ORDER BY CASE prioridad_calculada WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, fecha_creacion DESC LIMIT 15;`
+    : `SELECT 'blocker_list' AS action, id, descripcion, responsable_afectado, tarea_id, severidad, accion_recomendada, estado, fecha_creacion FROM pm_bloqueos WHERE estado <> 'resuelto' ORDER BY CASE severidad WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, fecha_creacion DESC LIMIT 15;`;
+  return [{ json: { query, mode: 'list', canal_destino: intencion === 'riesgo' ? 'DISCORD_CHANNEL_RIESGOS' : 'DISCORD_CHANNEL_BLOQUEOS', canal_id: process.env[intencion === 'riesgo' ? 'DISCORD_CHANNEL_RIESGOS' : 'DISCORD_CHANNEL_BLOQUEOS'] || ctx.canal_origen } }];
+}
+if (['cerrar','resolver','mitigar'].includes(sub) && taskId) {
+  const query = intencion === 'riesgo'
+    ? `UPDATE pm_riesgos SET estado='mitigado', fecha_actualizacion=NOW() WHERE id=${taskId} RETURNING 'risk_closed' AS action, id, descripcion, estado;`
+    : `UPDATE pm_bloqueos SET estado='resuelto', fecha_resolucion=NOW() WHERE id=${taskId} RETURNING 'blocker_closed' AS action, id, descripcion, estado;`;
+  return [{ json: { query, mode: 'close', canal_destino: intencion === 'riesgo' ? 'DISCORD_CHANNEL_RIESGOS' : 'DISCORD_CHANNEL_BLOQUEOS', canal_id: process.env[intencion === 'riesgo' ? 'DISCORD_CHANNEL_RIESGOS' : 'DISCORD_CHANNEL_BLOQUEOS'] || ctx.canal_origen } }];
+}
 const sev = ['baja','media','alta','critica'].includes(norm(datos.prioridad)) ? norm(datos.prioridad) : (/crit|urg/i.test(raw) ? 'critica' : /alta|bloquea/i.test(raw) ? 'alta' : 'media');
 const prob = ['baja','media','alta'].includes(norm(datos.probabilidad)) ? norm(datos.probabilidad) : (/probabilidad alta|muy probable/i.test(raw) ? 'alta' : 'media');
 const impactoRaw = norm(datos.impacto || '');
 const impacto = ['bajo','medio','alto','critico'].includes(impactoRaw) ? impactoRaw : (/crit|grave/i.test(raw) ? 'critico' : /alto/i.test(raw) ? 'alto' : 'medio');
 const prioMap = { 'baja-bajo': 'baja', 'baja-medio': 'baja', 'baja-alto': 'media', 'baja-critico': 'alta', 'media-bajo': 'baja', 'media-medio': 'media', 'media-alto': 'alta', 'media-critico': 'critica', 'alta-bajo': 'media', 'alta-medio': 'alta', 'alta-alto': 'critica', 'alta-critico': 'critica' };
-const desc = raw.replace(/^\/pm\s+(bloqueo|riesgo)\s+\w+/i, '').trim() || raw;
+function areaFrom(text) {
+  if (/backend|api|servidor|base de datos|db/i.test(text)) return 'backend/datos';
+  if (/frontend|interfaz|ui|pantalla|angular/i.test(text)) return 'frontend';
+  if (/testing|prueba|qa|test/i.test(text)) return 'testing/QA';
+  if (/deploy|despliegue|vps|contabo|infra|servidor/i.test(text)) return 'infraestructura/despliegue';
+  if (/cliente|usuario|firma|consentimiento|reunion/i.test(text)) return 'stakeholders';
+  return 'gestion del proyecto';
+}
+function cleanDesc(text) {
+  return String(text || '')
+    .replace(/^\/pm\s+(bloqueo|bloqueos|impedimento|impedimentos|riesgo|riesgos)\s+\w+/i, '')
+    .replace(/^\/(bloqueo|bloqueos|impedimento|impedimentos|riesgo|riesgos)\s*/i, '')
+    .replace(/prioridad:?\s*(baja|media|alta|cr[ií]tica)/ig, '')
+    .replace(/probabilidad:?\s*(baja|media|alta)/ig, '')
+    .replace(/impacto:?\s*(bajo|medio|alto|cr[ií]tico)/ig, '')
+    .replace(/responsable:?\s*[^,;\n]+/ig, '')
+    .replace(/tarea:?\s*#?\d+/ig, '')
+    .trim();
+}
+const area = areaFrom(raw);
+const descBase = cleanDesc(raw) || raw;
+const desc = `[${area}] ${descBase}`;
 let query;
 let target;
 if (intencion === 'riesgo') {
   target = 'DISCORD_CHANNEL_RIESGOS';
   const prioridad = prioMap[`${prob}-${impacto}`] || 'media';
-  const mitigacion = raw.match(/mitigaci[oó]n:?\s*([^;\n]+)/i)?.[1]?.trim() || 'Definir mitigacion, responsable y fecha de revision.';
+  const mitigacion = raw.match(/mitigaci[oó]n:?\s*([^;\n]+)/i)?.[1]?.trim() || (area === 'infraestructura/despliegue' ? 'Definir contingencia tecnica, responsable y fecha de revision.' : area === 'stakeholders' ? 'Alinear expectativa con el cliente y dejar acuerdo registrado.' : 'Definir mitigacion, responsable y fecha de revision.');
   query = `INSERT INTO pm_riesgos (descripcion, probabilidad, impacto, prioridad_calculada, mitigacion, estado, responsable, creado_por)
 VALUES (${q(desc)}, ${q(prob)}, ${q(impacto)}, ${q(prioridad)}, ${q(mitigacion)}, 'abierto', ${q(datos.responsable || ctx.usuario)}, ${q(ctx.usuario)})
-RETURNING 'risk' AS action, id, descripcion, probabilidad, impacto, prioridad_calculada, mitigacion, responsable;`;
+RETURNING 'risk' AS action, id, descripcion, probabilidad, impacto, prioridad_calculada, mitigacion, responsable, ${q(area)} AS area_aplicacion;`;
 } else {
   target = 'DISCORD_CHANNEL_BLOQUEOS';
-  const action = raw.match(/accion:?\s*([^;\n]+)/i)?.[1]?.trim() || 'Asignar responsable de resolucion y revisar impacto en el plan.';
+  const action = raw.match(/accion:?\s*([^;\n]+)/i)?.[1]?.trim() || (taskId ? 'Acordar desbloqueo con responsable de la tarea y actualizar fecha si cambia el plan.' : 'Asignar responsable de resolucion, vincular tarea afectada y revisar impacto en el plan.');
   query = `INSERT INTO pm_bloqueos (descripcion, responsable_afectado, tarea_id, severidad, estado, accion_recomendada, creado_por)
 VALUES (${q(desc)}, ${q(datos.responsable || ctx.usuario)}, ${taskId || 'NULL'}, ${q(sev)}, 'abierto', ${q(action)}, ${q(ctx.usuario)})
-RETURNING 'blocker' AS action, id, descripcion, responsable_afectado, tarea_id, severidad, accion_recomendada;`;
+RETURNING 'blocker' AS action, id, descripcion, responsable_afectado, tarea_id, severidad, accion_recomendada, ${q(area)} AS area_aplicacion;`;
 }
 return [{ json: { query, canal_destino: target, canal_id: process.env[target] || ctx.canal_origen } }];
 });
 
 const bloqueoRiesgoFormatCode = code(function(){
-const r = $json;
+const rows = $input.all().map(i => i.json);
+const r = rows[0] || {};
 const ctx = $('Build Bloqueo/Riesgo Query').item.json;
 let respuesta;
 if (r.action === 'risk') {
-  respuesta = `Riesgo registrado.\nID: #${r.id}\nDescripcion: ${r.descripcion}\nProbabilidad: ${r.probabilidad}\nImpacto: ${r.impacto}\nPrioridad calculada: ${r.prioridad_calculada}\nMitigacion sugerida: ${r.mitigacion}\nProximo paso: revisar el riesgo en el siguiente reporte PM.`;
+  respuesta = `Riesgo registrado.\nID: #${r.id}\nAplicacion: ${r.area_aplicacion}\nDescripcion: ${r.descripcion}\nProbabilidad: ${r.probabilidad}\nImpacto: ${r.impacto}\nPrioridad calculada: ${r.prioridad_calculada}\nMitigacion sugerida: ${r.mitigacion}\nProximo paso: asignar responsable de mitigacion y fecha de revision.`;
 } else {
-  respuesta = `Detecte y registre un bloqueo.\nID: #${r.id}\nAfectado: ${r.responsable_afectado}\nSeveridad: ${r.severidad}\nTarea: ${r.tarea_id ? '#' + r.tarea_id : 'sin tarea asociada'}\nAccion recomendada: ${r.accion_recomendada}`;
+  if (!rows.length && ctx.mode === 'list') respuesta = ctx.canal_destino === 'DISCORD_CHANNEL_RIESGOS' ? 'No hay riesgos abiertos registrados.' : 'No hay bloqueos activos registrados.';
+  else if (r.action === 'risk_list') respuesta = 'Riesgos abiertos:\n' + rows.map(x => `- #${x.id} [${x.prioridad_calculada}] ${x.descripcion} | mitigacion: ${x.mitigacion || 'sin definir'} | responsable: ${x.responsable || 'sin asignar'}`).join('\n');
+  else if (r.action === 'blocker_list') respuesta = 'Bloqueos activos:\n' + rows.map(x => `- #${x.id} [${x.severidad}] ${x.descripcion} | tarea: ${x.tarea_id ? '#' + x.tarea_id : 'sin asociar'} | accion: ${x.accion_recomendada || 'sin definir'}`).join('\n');
+  else if (r.action === 'risk_closed' || r.action === 'blocker_closed') respuesta = `Elemento actualizado.\nID: #${r.id}\nEstado: ${r.estado}\nDescripcion: ${r.descripcion}`;
+  else respuesta = `Detecte y registre un bloqueo.\nID: #${r.id}\nAplicacion: ${r.area_aplicacion}\nAfectado: ${r.responsable_afectado}\nSeveridad: ${r.severidad}\nTarea: ${r.tarea_id ? '#' + r.tarea_id : 'sin tarea asociada'}\nAccion recomendada: ${r.accion_recomendada}\nProximo paso: cerrar con /pm bloqueo cerrar #${r.id} cuando quede resuelto.`;
 }
-return [{ json: { respuesta, canal_destino: ctx.canal_destino, canal_id: ctx.canal_id, storage: r.action === 'risk' ? 'postgres:pm_riesgos' : 'postgres:pm_bloqueos' } }];
+const storage = String(r.action || '').startsWith('risk') ? 'postgres:pm_riesgos' : 'postgres:pm_bloqueos';
+return [{ json: { respuesta, canal_destino: ctx.canal_destino, canal_id: ctx.canal_id, storage } }];
 });
 
 writeWorkflow(path.join(pmoDir, 'WF_PM_Bloqueos_Riesgos.json'), workflow('wf-pm-bloqueos-riesgos', 'WF_PM_Bloqueos_Riesgos', [
@@ -649,22 +1109,33 @@ writeWorkflow(path.join(pmoDir, 'WF_PM_Bloqueos_Riesgos.json'), workflow('wf-pm-
   'Run Bloqueo/Riesgo Query': { main: [[{ node: 'Format Bloqueo/Riesgo Response', type: 'main', index: 0 }]] },
 }));
 
-const reportQuery = `SELECT
-  (SELECT COUNT(*) FROM pm_tareas WHERE estado = 'completada' AND fecha_actualizacion::date >= CURRENT_DATE - INTERVAL '7 days') AS tareas_completadas_7d,
+const reportQuery = `WITH cfg AS (
+  SELECT GREATEST(1, LEAST(90, $1::int)) AS dias
+)
+SELECT
+  cfg.dias AS rango_dias,
+  (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date AS fecha_desde,
+  CURRENT_DATE::date AS fecha_hasta,
+  (SELECT COUNT(*) FROM pm_tareas WHERE estado = 'completada' AND fecha_actualizacion::date >= (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS tareas_completadas_periodo,
   (SELECT COUNT(*) FROM pm_tareas WHERE estado NOT IN ('completada','cancelada')) AS tareas_pendientes,
   (SELECT COUNT(*) FROM pm_tareas WHERE fecha_limite < CURRENT_DATE AND estado NOT IN ('completada','cancelada')) AS tareas_atrasadas,
   (SELECT COUNT(*) FROM pm_bloqueos WHERE estado <> 'resuelto') AS bloqueos_activos,
   (SELECT COUNT(*) FROM pm_riesgos WHERE estado = 'abierto') AS riesgos_abiertos,
+  (SELECT COUNT(*) FROM pm_avances WHERE fecha::date >= (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS avances_periodo,
+  (SELECT COUNT(*) FROM pm_decisiones WHERE fecha::date >= (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS decisiones_periodo,
   (SELECT COALESCE(json_agg(t ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,titulo,responsable,prioridad,estado,fecha_limite FROM pm_tareas WHERE estado NOT IN ('completada','cancelada') ORDER BY fecha_limite NULLS LAST LIMIT 8) t) AS tareas,
   (SELECT COALESCE(json_agg(b ORDER BY fecha_creacion DESC), '[]'::json) FROM (SELECT id,descripcion,responsable_afectado,severidad FROM pm_bloqueos WHERE estado <> 'resuelto' ORDER BY fecha_creacion DESC LIMIT 5) b) AS bloqueos,
   (SELECT COALESCE(json_agg(r ORDER BY fecha_creacion DESC), '[]'::json) FROM (SELECT id,descripcion,prioridad_calculada,mitigacion FROM pm_riesgos WHERE estado='abierto' ORDER BY fecha_creacion DESC LIMIT 5) r) AS riesgos,
   (SELECT COALESCE(json_agg(e ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,nombre,responsable,estado,fecha_limite FROM pm_entregables WHERE estado NOT IN ('entregado','aprobado') ORDER BY fecha_limite NULLS LAST LIMIT 5) e) AS entregables,
-  (SELECT COALESCE(json_agg(d ORDER BY fecha DESC), '[]'::json) FROM (SELECT id,decision,responsable,fecha FROM pm_decisiones ORDER BY fecha DESC LIMIT 5) d) AS decisiones;`;
+  (SELECT COALESCE(json_agg(d ORDER BY fecha DESC), '[]'::json) FROM (SELECT id,decision,responsable,fecha FROM pm_decisiones ORDER BY fecha DESC LIMIT 5) d) AS decisiones
+FROM cfg;`;
 
 const reportFormatCode = code(function(){
 const row = $json;
 const ctx = $('Execute Workflow Trigger').item.json || {};
-const tipo = ctx.sub_intencion === 'semanal' ? 'semanal' : (ctx.intencion === 'estado_proyecto' ? 'estado general' : 'diario');
+const dias = Number(row.rango_dias || ctx.datos?.dias || (ctx.sub_intencion === 'diario' ? 1 : 7));
+const tipo = ctx.sub_intencion === 'kpis' ? 'KPIs' : (ctx.sub_intencion === 'semanal' ? 'semanal' : (ctx.intencion === 'estado_proyecto' ? 'estado general' : (dias === 1 ? 'diario' : 'periodo')));
+const periodo = dias === 1 ? `hoy (${row.fecha_hasta})` : `ultimos ${dias} dias (${row.fecha_desde} a ${row.fecha_hasta})`;
 function list(arr, fn, empty) { return (arr || []).length ? arr.map(fn).join('\n') : empty; }
 const tareas = typeof row.tareas === 'string' ? JSON.parse(row.tareas) : row.tareas;
 const bloqueos = typeof row.bloqueos === 'string' ? JSON.parse(row.bloqueos) : row.bloqueos;
@@ -676,11 +1147,28 @@ if (Number(row.tareas_atrasadas) > 0) recomendaciones.push('Priorizar tareas atr
 if (Number(row.bloqueos_activos) > 0) recomendaciones.push('Revisar bloqueos activos antes de abrir trabajo nuevo.');
 if (Number(row.riesgos_abiertos) > 0) recomendaciones.push('Actualizar mitigaciones de riesgos abiertos y asignar fecha de revision.');
 if (!recomendaciones.length) recomendaciones.push('Mantener cadencia de avances y preparar evidencia de entregables.');
+if (ctx.sub_intencion === 'kpis') {
+  const respuestaKpis = [
+    `KPIs PetSafe - ${periodo}`,
+    `Tareas completadas en el periodo: ${row.tareas_completadas_periodo}`,
+    `Avances registrados: ${row.avances_periodo}`,
+    `Tareas activas: ${row.tareas_pendientes}`,
+    `Tareas atrasadas: ${row.tareas_atrasadas}`,
+    `Bloqueos activos: ${row.bloqueos_activos}`,
+    `Riesgos abiertos: ${row.riesgos_abiertos}`,
+    `Decisiones registradas en el periodo: ${row.decisiones_periodo}`,
+    '',
+    'Lectura PM:',
+    recomendaciones.map(r => `- ${r}`).join('\n')
+  ].join('\n');
+  return [{ json: { respuesta: respuestaKpis, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: ctx.intencion === 'reporte' } }];
+}
 const respuesta = [
   `Reporte ${tipo} PetSafe`,
-  `Tareas completadas ultimos 7 dias: ${row.tareas_completadas_7d}`,
-  `Pendientes: ${row.tareas_pendientes} | Atrasadas: ${row.tareas_atrasadas}`,
-  `Bloqueos activos: ${row.bloqueos_activos} | Riesgos abiertos: ${row.riesgos_abiertos}`,
+  `Periodo evaluado: ${periodo}`,
+  `Completadas en el periodo: ${row.tareas_completadas_periodo} | Avances registrados: ${row.avances_periodo}`,
+  `Activas: ${row.tareas_pendientes} | Atrasadas: ${row.tareas_atrasadas}`,
+  `Bloqueos activos: ${row.bloqueos_activos} | Riesgos abiertos: ${row.riesgos_abiertos} | Decisiones del periodo: ${row.decisiones_periodo}`,
   '',
   'Tareas clave:',
   list(tareas, t => `- #${t.id} [${t.estado}/${t.prioridad}] ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - ' + t.fecha_limite : ''}`, '- Sin tareas activas.'),
@@ -710,7 +1198,9 @@ RETURNING outbox_id;`;
 
 writeWorkflow(path.join(pmoDir, 'WF_PM_Reportes.json'), workflow('wf-pm-reportes', 'WF_PM_Reportes', [
   trigger,
-  pgNode('query-report', 'Query PM Report Data', [240, 0], reportQuery),
+  pgNode('query-report', 'Query PM Report Data', [240, 0], reportQuery, {
+    queryReplacement: '={{ [ $json.datos?.dias || ($json.sub_intencion === "diario" ? 1 : 7) ] }}',
+  }),
   node('format-report', 'Format PM Report', 'n8n-nodes-base.code', 2, [500, 0], { jsCode: reportFormatCode }),
   node('publish?', 'Publish Report?', 'n8n-nodes-base.if', 2.2, [760, 0], {
     conditions: { options: { caseSensitive: true, typeValidation: 'loose' }, conditions: [{ id: 'publish', leftValue: '={{ $json.should_publish ? 1 : 0 }}', rightValue: 1, operator: { type: 'number', operation: 'equals' } }], combinator: 'and' },
@@ -790,7 +1280,8 @@ const reunionesQuery = `SELECT
   (SELECT COALESCE(json_agg(t), '[]'::json) FROM (SELECT id,titulo,responsable,prioridad,fecha_limite FROM pm_tareas WHERE estado NOT IN ('completada','cancelada') ORDER BY fecha_limite NULLS LAST LIMIT 8) t) AS tareas,
   (SELECT COALESCE(json_agg(b), '[]'::json) FROM (SELECT id,descripcion,severidad,responsable_afectado FROM pm_bloqueos WHERE estado <> 'resuelto' ORDER BY fecha_creacion DESC LIMIT 5) b) AS bloqueos,
   (SELECT COALESCE(json_agg(r), '[]'::json) FROM (SELECT id,descripcion,prioridad_calculada FROM pm_riesgos WHERE estado='abierto' ORDER BY fecha_creacion DESC LIMIT 5) r) AS riesgos,
-  (SELECT COALESCE(json_agg(e), '[]'::json) FROM (SELECT id,nombre,responsable,fecha_limite,estado FROM pm_entregables WHERE estado NOT IN ('entregado','aprobado') ORDER BY fecha_limite NULLS LAST LIMIT 5) e) AS entregables;`;
+  (SELECT COALESCE(json_agg(e), '[]'::json) FROM (SELECT id,nombre,responsable,fecha_limite,estado FROM pm_entregables WHERE estado NOT IN ('entregado','aprobado') ORDER BY fecha_limite NULLS LAST LIMIT 5) e) AS entregables,
+  (SELECT COALESCE(json_agg(m), '[]'::json) FROM (SELECT id,titulo,fecha_reunion,duracion_minutos,lugar,participantes,estado,discord_event_id,discord_event_url FROM pm_reuniones ORDER BY fecha_reunion NULLS LAST, fecha_creacion DESC LIMIT 10) m) AS reuniones;`;
 
 const reunionesFormatCode = code(function(){
 const row = $json; const ctx = $('Execute Workflow Trigger').item.json || {};
@@ -798,9 +1289,60 @@ const tareas = typeof row.tareas === 'string' ? JSON.parse(row.tareas) : row.tar
 const bloqueos = typeof row.bloqueos === 'string' ? JSON.parse(row.bloqueos) : row.bloqueos;
 const riesgos = typeof row.riesgos === 'string' ? JSON.parse(row.riesgos) : row.riesgos;
 const entregables = typeof row.entregables === 'string' ? JSON.parse(row.entregables) : row.entregables;
-const titulo = (ctx.datos?.texto || '').replace(/^\/pm\s+reunion\s+\w+/i, '').trim() || 'Reunion de seguimiento PetSafe';
-const respuesta = [
-  `Agenda preparada: ${titulo}`,
+const reuniones = typeof row.reuniones === 'string' ? JSON.parse(row.reuniones) : row.reuniones;
+const sub = String(ctx.sub_intencion || 'agendar').toLowerCase();
+if (['listar','lista','ver'].includes(sub)) {
+  const respuestaLista = reuniones.length
+    ? 'Reuniones registradas:\n' + reuniones.map(m => `- #${m.id} ${m.titulo} | ${m.fecha_reunion || 'sin fecha'} | ${m.estado || 'programada'} | ${m.discord_event_url || 'sin evento Discord'} | participantes: ${(m.participantes || []).join(', ') || 'sin definir'}`).join('\n')
+    : 'No hay reuniones registradas.';
+  return [{ json: { respuesta: respuestaLista, should_store: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen } }];
+}
+const raw = String(ctx.datos?.texto || ctx.mensaje_original || '');
+const titulo = raw.replace(/^\/pm\s+reunion\s+\w+/i, '').replace(/(?:cuando|cu[aá]ndo|fecha|para|hora|donde|d[oó]nde|lugar|participantes|asistentes|con):?.*$/i, '').trim() || 'Reunion de seguimiento PetSafe';
+function dateFromText() {
+  const direct = ctx.datos?.fecha_reunion || raw.match(/(?:cuando|cu[aá]ndo|fecha|para):?\s*(\d{4}-\d{2}-\d{2})/i)?.[1];
+  if (direct) return direct;
+  const anyDate = raw.match(/(\d{4}-\d{2}-\d{2})/)?.[1];
+  if (anyDate) return anyDate;
+  const d = new Date();
+  if (/ma[nñ]ana/i.test(raw)) { d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); }
+  if (/\bhoy\b/i.test(raw)) return d.toISOString().slice(0, 10);
+  return null;
+}
+const timeMatch = raw.match(/(?:hora:?\s*|a las\s*|desde las\s*)([01]?\d|2[0-3])(?::([0-5]\d))?/i);
+const date = dateFromText();
+const hour = timeMatch ? String(timeMatch[1]).padStart(2, '0') : null;
+const minute = timeMatch ? String(timeMatch[2] || '00').padStart(2, '0') : null;
+if (!date || !hour) {
+  const respuestaFaltante = [
+    `Para agendar "${titulo}" necesito fecha y hora.`,
+    'Formato sugerido: `/pm reunion agendar mitigar impedimentos cuando: 2026-05-27 hora: 10:00 donde: videollamada participantes: todos`.',
+    'Si no indicas lugar usare videollamada; si no indicas participantes asumire todo el equipo.'
+  ].join('\n');
+  return [{ json: { respuesta: respuestaFaltante, should_store: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen } }];
+}
+const durationRaw = Number(raw.match(/(?:duracion|duraci[oó]n|minutos):?\s*(\d{1,3})/i)?.[1] || process.env.PM_MEETING_DURATION_MINUTES || 45);
+const duracion = Math.max(15, Math.min(240, Number.isFinite(durationRaw) ? durationRaw : 45));
+const lugar = ctx.datos?.lugar || raw.match(/(?:donde|d[oó]nde|lugar|ubicacion|ubicaci[oó]n):?\s*([^,;\n]+?)(?=\s+(?:participantes|asistentes|con|duracion|duraci[oó]n|minutos|cuando|cu[aá]ndo|fecha|hora):?\s|$)/i)?.[1]?.trim() || 'videollamada';
+const TEAM = ['David Manjarres','David Josue Barragan Pozo','Josue Joel Garcia Abata','Fernando Joel Bonilla Guerrero','Joel Bonilla'];
+const rawParticipants = ctx.datos?.participantes || raw.match(/(?:participantes|asistentes|con):?\s*([^;\n]+)/i)?.[1]?.trim() || 'todos';
+const participantes = /todos|equipo/i.test(rawParticipants) ? TEAM : rawParticipants.split(/,|\sy\s/).map(p => p.trim()).filter(Boolean);
+let mentionMap = {};
+try { mentionMap = JSON.parse(process.env.PM_TEAM_DISCORD_MAP_JSON || '{}'); } catch (e) {}
+const menciones = participantes.map(p => mentionMap[p] ? `<@${mentionMap[p]}>` : p).join(', ');
+const start = new Date(`${date}T${hour}:${minute}:00-05:00`);
+if (!Number.isFinite(start.getTime()) || start <= new Date()) {
+  return [{ json: { respuesta: `Para crear una reunion real en Discord necesito una fecha y hora futura. Recibi: ${date} ${hour}:${minute}.`, should_store: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen } }];
+}
+const end = new Date(start.getTime() + duracion * 60000);
+const fechaReunion = start.toISOString();
+const fechaFin = end.toISOString();
+const agenda = [
+  `Reunion PM PetSafe: ${titulo}`,
+  `Cuando: ${date} ${hour}:${minute}`,
+  `Duracion: ${duracion} min`,
+  `Donde: ${lugar}`,
+  `Participantes: ${participantes.join(', ')}`,
   '',
   '1. Estado general: pendientes, atrasos y entregables proximos.',
   '2. Tareas a revisar:',
@@ -814,26 +1356,137 @@ const respuesta = [
   '',
   'Cierre esperado: registrar decisiones, acuerdos y compromisos con responsable y fecha.'
 ].join('\n');
-return [{ json: { respuesta, titulo, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen } }];
+const guildId = process.env.DISCORD_GUILD_ID || '';
+const voiceChannelId = process.env.DISCORD_MEETING_VOICE_CHANNEL_ID || '';
+const meetingChannelId = process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen;
+const description = agenda.slice(0, 1000);
+const payload = {
+  name: titulo.slice(0, 100),
+  privacy_level: 2,
+  scheduled_start_time: fechaReunion,
+  scheduled_end_time: fechaFin,
+  description
+};
+if (voiceChannelId) {
+  payload.entity_type = 2;
+  payload.channel_id = voiceChannelId;
+} else {
+  payload.entity_type = 3;
+  payload.channel_id = null;
+  payload.entity_metadata = { location: lugar === 'videollamada' ? 'Discord: canal General / #reuniones' : lugar };
+}
+return [{ json: {
+  respuesta_base: agenda,
+  titulo,
+  fecha_reunion: fechaReunion,
+  fecha_fin: fechaFin,
+  duracion_minutos: duracion,
+  participantes: participantes.join(','),
+  participantes_texto: participantes.join(', '),
+  menciones,
+  lugar,
+  guild_id: guildId,
+  meeting_channel_id: meetingChannelId,
+  discord_ready: Boolean(guildId && process.env.DISCORD_BOT_TOKEN),
+  discord_event_payload: payload,
+  discord_event_api_url: `https://discord.com/api/v10/guilds/${guildId || 'missing-guild'}/scheduled-events`,
+  should_store: true,
+  canal_destino: 'DISCORD_CHANNEL_REUNIONES',
+  canal_id: meetingChannelId
+} }];
 });
 
-const reunionesInsert = `INSERT INTO pm_reuniones (titulo, tipo, agenda, creado_por)
-VALUES ($1, 'seguimiento', $2, $3)
+const reunionesInsert = `INSERT INTO pm_reuniones (titulo, tipo, fecha_reunion, duracion_minutos, participantes, lugar, agenda, creado_por, discord_event_id, discord_event_url, discord_event_status)
+VALUES ($1, 'seguimiento', $2::timestamptz, $3, string_to_array($4, ','), $5, $6, $7, $8, $9, $10)
 RETURNING id;`;
+
+const meetingResponseCode = code(function(){
+const base = $('Format Meeting Agenda').item.json;
+const stored = $('Store Meeting Agenda').item.json || {};
+let event = {};
+try { event = $('Create Discord Scheduled Event').item.json || {}; } catch (e) {}
+const eventId = event.id || '';
+const eventUrl = eventId && base.guild_id ? `https://discord.com/events/${base.guild_id}/${eventId}` : '';
+const rawError = event.error?.message || event.message || event.errors || '';
+const createError = rawError ? (typeof rawError === 'string' ? rawError : JSON.stringify(rawError)).slice(0, 300) : '';
+const lines = [];
+if (eventId) {
+  lines.push(`Reunion Discord programada: ${base.titulo}`);
+  lines.push(`Evento: ${eventUrl}`);
+} else {
+  lines.push(`Reunion registrada, pero el evento Discord no se pudo crear automaticamente.`);
+  lines.push(`Motivo probable: ${base.discord_ready ? (createError || 'Discord no devolvio id de evento.') : 'falta DISCORD_GUILD_ID o DISCORD_BOT_TOKEN en n8n.'}`);
+}
+lines.push(`ID interno: #${stored.id || 'pendiente'}`);
+lines.push(`Cuando: ${base.fecha_reunion}`);
+lines.push(`Duracion: ${base.duracion_minutos} min`);
+lines.push(`Donde: ${base.lugar}`);
+lines.push(`Participantes: ${base.participantes_texto}`);
+if (base.menciones) lines.push(`Notificados: ${base.menciones}`);
+lines.push('');
+lines.push(base.respuesta_base);
+if (eventId) lines.push('', 'Recordatorio automatico: 15 minutos antes en este canal.');
+const reminderContent = [
+  `Recordatorio: la reunion "${base.titulo}" empieza en 15 minutos.`,
+  eventUrl ? `Evento Discord: ${eventUrl}` : '',
+  base.menciones ? `Participantes: ${base.menciones}` : `Participantes: ${base.participantes_texto}`
+].filter(Boolean).join('\n');
+return [{ json: {
+  respuesta: lines.join('\n'),
+  canal_destino: 'DISCORD_CHANNEL_REUNIONES',
+  canal_id: base.meeting_channel_id,
+  storage: 'postgres:pm_reuniones',
+  reminder_payload: { channel_id: base.meeting_channel_id, content: reminderContent },
+  reminder_at: base.fecha_reunion,
+  meeting_id: stored.id || null,
+  discord_event_id: eventId,
+  discord_event_url: eventUrl
+} }];
+});
+
+const meetingReminderQuery = `INSERT INTO events_outbox (event_id, target, action, idempotency_key, payload, scheduled_at)
+VALUES (NULL, 'discord', 'pm_meeting_reminder', $1, $2::jsonb, GREATEST($3::timestamptz - INTERVAL '15 minutes', NOW()))
+ON CONFLICT (idempotency_key) DO NOTHING
+RETURNING outbox_id;`;
 
 writeWorkflow(path.join(pmoDir, 'WF_PM_Reuniones.json'), workflow('wf-pm-reuniones', 'WF_PM_Reuniones', [
   trigger,
   pgNode('query-meeting', 'Query Meeting Context', [240, 0], reunionesQuery),
   node('format-meeting', 'Format Meeting Agenda', 'n8n-nodes-base.code', 2, [500, 0], { jsCode: reunionesFormatCode }),
-  pgNode('store-meeting', 'Store Meeting Agenda', [760, 0], reunionesInsert, {
-    queryReplacement: '={{ [ $json.titulo, $json.respuesta, $("Execute Workflow Trigger").item.json.usuario ] }}',
+  node('should-store-meeting?', 'Should Store Meeting?', 'n8n-nodes-base.if', 2.2, [720, 0], {
+    conditions: { options: { caseSensitive: true, typeValidation: 'loose' }, conditions: [{ id: 'store', leftValue: '={{ $json.should_store ? 1 : 0 }}', rightValue: 1, operator: { type: 'number', operation: 'equals' } }], combinator: 'and' },
+    options: {},
   }),
-  node('return-meeting', 'Return Meeting Response', 'n8n-nodes-base.code', 2, [1000, 0], { jsCode: "return [{ json: $('Format Meeting Agenda').item.json }];" }),
+  node('create-discord-event', 'Create Discord Scheduled Event', 'n8n-nodes-base.httpRequest', 4.2, [960, -100], {
+    method: 'POST',
+    url: '={{ $json.discord_event_api_url }}',
+    sendHeaders: true,
+    headerParameters: { parameters: [
+      { name: 'Authorization', value: '={{ "Bot " + $env.DISCORD_BOT_TOKEN }}' },
+      { name: 'Content-Type', value: 'application/json' },
+    ] },
+    sendBody: true,
+    specifyBody: 'json',
+    jsonBody: '={{ JSON.stringify($json.discord_event_payload) }}',
+    options: {},
+  }, { continueOnFail: true }),
+  pgNode('store-meeting', 'Store Meeting Agenda', [1200, -100], reunionesInsert, {
+    queryReplacement: '={{ [ $("Format Meeting Agenda").item.json.titulo, $("Format Meeting Agenda").item.json.fecha_reunion, $("Format Meeting Agenda").item.json.duracion_minutos, $("Format Meeting Agenda").item.json.participantes, $("Format Meeting Agenda").item.json.lugar, $("Format Meeting Agenda").item.json.respuesta_base, $("Execute Workflow Trigger").item.json.usuario, $("Create Discord Scheduled Event").item.json.id || null, $("Create Discord Scheduled Event").item.json.id ? ("https://discord.com/events/" + $("Format Meeting Agenda").item.json.guild_id + "/" + $("Create Discord Scheduled Event").item.json.id) : null, $("Create Discord Scheduled Event").item.json.id ? "created" : "error" ] }}',
+  }),
+  node('build-meeting-response', 'Build Meeting Response', 'n8n-nodes-base.code', 2, [1440, -100], { jsCode: meetingResponseCode }),
+  pgNode('queue-meeting-reminder', 'Queue Meeting Reminder', [1680, -100], meetingReminderQuery, {
+    queryReplacement: '={{ [ "pm-meeting-reminder-" + $json.meeting_id + "-15m", JSON.stringify($json.reminder_payload), $json.reminder_at ] }}',
+  }),
+  node('return-meeting', 'Return Meeting Response', 'n8n-nodes-base.code', 2, [1920, 0], { jsCode: "try { return [{ json: $('Build Meeting Response').item.json }]; } catch (e) { return [{ json: $('Format Meeting Agenda').item.json }]; }" }),
 ], {
   'Execute Workflow Trigger': { main: [[{ node: 'Query Meeting Context', type: 'main', index: 0 }]] },
   'Query Meeting Context': { main: [[{ node: 'Format Meeting Agenda', type: 'main', index: 0 }]] },
-  'Format Meeting Agenda': { main: [[{ node: 'Store Meeting Agenda', type: 'main', index: 0 }]] },
-  'Store Meeting Agenda': { main: [[{ node: 'Return Meeting Response', type: 'main', index: 0 }]] },
+  'Format Meeting Agenda': { main: [[{ node: 'Should Store Meeting?', type: 'main', index: 0 }]] },
+  'Should Store Meeting?': { main: [[{ node: 'Create Discord Scheduled Event', type: 'main', index: 0 }], [{ node: 'Return Meeting Response', type: 'main', index: 0 }]] },
+  'Create Discord Scheduled Event': { main: [[{ node: 'Store Meeting Agenda', type: 'main', index: 0 }]] },
+  'Store Meeting Agenda': { main: [[{ node: 'Build Meeting Response', type: 'main', index: 0 }]] },
+  'Build Meeting Response': { main: [[{ node: 'Queue Meeting Reminder', type: 'main', index: 0 }]] },
+  'Queue Meeting Reminder': { main: [[{ node: 'Return Meeting Response', type: 'main', index: 0 }]] },
 }));
 
 const adminQuery = `SELECT
@@ -916,6 +1569,48 @@ schema.id = 'wf-pm-schema-manager';
 schema.settings = settings;
 const createTables = schema.nodes.find((n) => n.name === 'Create PM Tables');
 if (createTables) {
+  if (!createTables.parameters.query.includes('fecha_inicio date,')) {
+    createTables.parameters.query = createTables.parameters.query.replace(
+      '  fecha_limite date,\n  entregable text,',
+      '  fecha_inicio date,\n  fecha_limite date,\n  entregable text,'
+    );
+  }
+  if (!createTables.parameters.query.includes('trello_card_id text,\n  creado_por text,')) {
+    createTables.parameters.query = createTables.parameters.query.replace(
+      '  tipo text DEFAULT \'tecnico\' CHECK (tipo IN (\'tecnico\',\'academico\',\'documentacion\',\'prototipo\',\'informe\')),\n  creado_por text,',
+      '  tipo text DEFAULT \'tecnico\' CHECK (tipo IN (\'tecnico\',\'academico\',\'documentacion\',\'prototipo\',\'informe\')),\n  trello_card_id text,\n  creado_por text,'
+    );
+  }
+  if (!createTables.parameters.query.includes('ALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS fecha_inicio')) {
+    createTables.parameters.query = createTables.parameters.query.replace(
+      "SELECT 'PM Schema Manager: All tables created/validated successfully' AS result;",
+      `ALTER TABLE pm_tareas ADD COLUMN IF NOT EXISTS fecha_inicio date;
+ALTER TABLE pm_entregables ADD COLUMN IF NOT EXISTS trello_card_id text;
+ALTER TABLE pm_reuniones ADD COLUMN IF NOT EXISTS duracion_minutos integer NOT NULL DEFAULT 45;
+ALTER TABLE pm_reuniones ADD COLUMN IF NOT EXISTS lugar text;
+ALTER TABLE pm_reuniones ADD COLUMN IF NOT EXISTS discord_event_id text;
+ALTER TABLE pm_reuniones ADD COLUMN IF NOT EXISTS discord_event_url text;
+ALTER TABLE pm_reuniones ADD COLUMN IF NOT EXISTS discord_event_status text;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pm_tareas_trello_card_id_unique ON pm_tareas(trello_card_id) WHERE trello_card_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pm_entregables_trello_card_id_unique ON pm_entregables(trello_card_id) WHERE trello_card_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_pm_reuniones_discord_event ON pm_reuniones(discord_event_id);
+
+SELECT 'PM Schema Manager: All tables created/validated successfully' AS result;`
+    );
+  }
+  if (!createTables.parameters.query.includes('ALTER TABLE pm_reuniones ADD COLUMN IF NOT EXISTS discord_event_id')) {
+    createTables.parameters.query = createTables.parameters.query.replace(
+      "SELECT 'PM Schema Manager: All tables created/validated successfully' AS result;",
+      `ALTER TABLE pm_reuniones ADD COLUMN IF NOT EXISTS duracion_minutos integer NOT NULL DEFAULT 45;
+ALTER TABLE pm_reuniones ADD COLUMN IF NOT EXISTS lugar text;
+ALTER TABLE pm_reuniones ADD COLUMN IF NOT EXISTS discord_event_id text;
+ALTER TABLE pm_reuniones ADD COLUMN IF NOT EXISTS discord_event_url text;
+ALTER TABLE pm_reuniones ADD COLUMN IF NOT EXISTS discord_event_status text;
+CREATE INDEX IF NOT EXISTS idx_pm_reuniones_discord_event ON pm_reuniones(discord_event_id);
+
+SELECT 'PM Schema Manager: All tables created/validated successfully' AS result;`
+    );
+  }
   createTables.parameters.query = createTables.parameters.query.replace(
     /\n-- 10\. PM Bot errors\nCREATE TABLE IF NOT EXISTS pm_bot_errors \([\s\S]*?CREATE INDEX IF NOT EXISTS idx_pm_bot_errors_fecha ON pm_bot_errors\(fecha\);\n/g,
     '\n'
@@ -1009,6 +1704,28 @@ const pmIntentHint = /^\\/pm(\\s|$)/i.test(pregunta)
     content: pregunta
   }`
     );
+  }
+  if (router?.parameters?.jsCode) {
+    router.parameters.jsCode = router.parameters.jsCode
+      .replace(/pregunta\.startsWith\('!'\)/g, "/^\\//.test(pregunta)")
+      .replace(/case '!/g, "case '/")
+      .replace(/`!([^`]+)`/g, '`/$1`')
+      .replace(/Comando \\`\$\{cmd\}\\` no reconocido\. Usa \\`!ayuda\\`/g, 'Comando `${cmd}` no reconocido. Usa `/ayuda`');
+  }
+  const helpNode = wf.nodes.find((n) => n.name === 'Resp Ayuda1');
+  if (helpNode?.parameters?.responseBody) {
+    helpNode.parameters.responseBody = helpNode.parameters.responseBody
+      .replace(/`!([^`]+)`/g, '`/$1`')
+      .replace(/!reunion/g, '/reunion')
+      .replace(/!reporte/g, '/reporte')
+      .replace(/!pto/g, '/pto');
+  }
+  for (const n of wf.nodes) {
+    if (n.parameters?.jsCode) {
+      n.parameters.jsCode = n.parameters.jsCode
+        .replace(/`!([^`]+)`/g, '`/$1`')
+        .replace(/usa !ayuda/ig, 'usa /ayuda');
+    }
   }
 
   ensureNode(wf, node('if-pm', 'IF Es PM Project Manager', 'n8n-nodes-base.if', 2.2, [45152, 36624], {
