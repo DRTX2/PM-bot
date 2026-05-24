@@ -282,7 +282,7 @@ if (isCommand) {
     case 'reunión':
     case 'reuniones':
       intencion = 'reunion';
-      sub_intencion = actionOrDefault(sub, ['preparar','agendar','programar','listar','lista','ver','acta','registrar_acta'], 'agendar');
+      sub_intencion = actionOrDefault(sub, ['preparar','agendar','programar','listar','lista','ver','actualizar','update','editar','reprogramar','cancelar','cancelada','eliminar','borrar','acta','registrar_acta','acuerdos','compromisos'], 'agendar');
       datos.texto = sub_intencion === sub ? rest : cmdParts.slice(1).join(' ');
       canal_destino = 'DISCORD_CHANNEL_REUNIONES';
       break;
@@ -351,7 +351,7 @@ if (isCommand) {
 } else if (/kpis?|indicadores|reporte (diario|semanal)|genera(r)? reporte|resumen (del|de la) semana|estado (del|general)/i.test(low)) {
   intencion = 'reporte'; sub_intencion = /kpis?|indicadores/i.test(low) ? 'kpis' : (/semanal|semana/i.test(low) ? 'semanal' : 'diario'); canal_destino = 'DISCORD_CHANNEL_REPORTES';
 } else if (/reuni[oó]n|prepara(r)? la reuni|agenda|acta|acuerdo|compromiso/i.test(low)) {
-  intencion = 'reunion'; sub_intencion = /listar|lista|ver|mostrar/i.test(low) ? 'listar' : (/acta|acuerdo|compromiso/i.test(low) ? 'registrar_acta' : 'agendar'); canal_destino = 'DISCORD_CHANNEL_REUNIONES';
+  intencion = 'reunion'; sub_intencion = /cancelar|cancela|eliminar|borrar/i.test(low) ? 'cancelar' : (/actualizar|editar|reprogramar|mover/i.test(low) ? 'actualizar' : (/listar|lista|ver|mostrar/i.test(low) ? 'listar' : (/acta|acuerdo|compromiso/i.test(low) ? 'registrar_acta' : 'agendar'))); canal_destino = 'DISCORD_CHANNEL_REUNIONES';
 } else if (/decisi[oó]n|decidimos|usaremos|registra(r)? esta decisi/i.test(low)) {
   intencion = 'decision'; sub_intencion = /listar|lista|ver|historial|mostrar/i.test(low) ? 'listar' : 'registrar'; canal_destino = 'DISCORD_CHANNEL_REUNIONES';
 } else if (/entregable|document(o|aci)|versi[oó]n|informe|prototipo|entregables falt/i.test(low)) {
@@ -489,6 +489,9 @@ const sections = {
     '**Ayuda PM - reuniones, decisiones y acuerdos**',
     'Este canal es para preparar/agendar reuniones y dejar trazabilidad de decisiones.',
     '`/pm reunion agendar tema cuando: 2026-05-27 hora: 10:00 donde: videollamada participantes: todos`',
+    '`/pm reunion actualizar #2 cuando: 2026-05-28 hora: 11:00 participantes: todos`',
+    '`/pm reunion cancelar #2`',
+    '`/pm reunion acta #2 acuerdos: ... compromisos: ... decisiones: ...`',
     '`/pm reunion listar`',
     '`/pm decision registrar usaremos Contabo como VPS`',
     '`/pm decision listar`',
@@ -895,10 +898,11 @@ function memberIdFor(name) {
 const params = new URLSearchParams();
 params.set('name', `#${task.id} ${task.titulo}`.slice(0, 160));
 params.set('desc', String(task.descripcion || task.titulo || '').slice(0, 1500));
-if (!task.trello_card_id) params.set('idList', listId);
+if (listId) params.set('idList', listId);
 if (task.fecha_limite) params.set('due', task.fecha_limite);
 if (task.fecha_inicio) params.set('start', task.fecha_inicio);
 if (task.estado === 'completada') params.set('dueComplete', 'true');
+if (task.estado && task.estado !== 'completada') params.set('dueComplete', 'false');
 if (task.responsable) {
   const memberId = memberIdFor(task.responsable);
   if (memberId) params.set('idMembers', memberId);
@@ -943,8 +947,9 @@ writeWorkflow(path.join(pmoDir, 'WF_PM_Tareas.json'), workflow('wf-pm-tareas', '
       },
     },
     continueOnFail: true,
+    alwaysOutputData: true,
   }),
-  pgNode('store-trello-card', 'Store Trello Card Id', [1680, 40], `WITH upd AS (
+  { ...pgNode('store-trello-card', 'Store Trello Card Id', [1680, 40], `WITH upd AS (
   UPDATE pm_tareas
   SET trello_card_id = COALESCE(trello_card_id, $1), fecha_actualizacion = NOW()
   WHERE id = $2 AND $1 IS NOT NULL
@@ -952,7 +957,7 @@ writeWorkflow(path.join(pmoDir, 'WF_PM_Tareas.json'), workflow('wf-pm-tareas', '
 )
 SELECT COALESCE((SELECT trello_card_id FROM upd), $1) AS trello_card_id;`, {
     queryReplacement: '={{ [ $json.id || $("Build Trello Sync").item.json.existing_card_id || null, $("Build Trello Sync").item.json.task_id ] }}',
-  }),
+  }), continueOnFail: true, alwaysOutputData: true },
   node('format-task', 'Format Task Response', 'n8n-nodes-base.code', 2, [1900, 120], { jsCode: taskFormatCode }),
 ], {
   'Execute Workflow Trigger': { main: [[{ node: 'Build Task Query', type: 'main', index: 0 }]] },
@@ -1117,17 +1122,25 @@ SELECT
   (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date AS fecha_desde,
   CURRENT_DATE::date AS fecha_hasta,
   (SELECT COUNT(*) FROM pm_tareas WHERE estado = 'completada' AND fecha_actualizacion::date >= (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS tareas_completadas_periodo,
+  (SELECT COUNT(*) FROM pm_tareas) AS tareas_totales,
+  (SELECT COUNT(*) FROM pm_tareas WHERE estado = 'completada') AS tareas_completadas_total,
   (SELECT COUNT(*) FROM pm_tareas WHERE estado NOT IN ('completada','cancelada')) AS tareas_pendientes,
   (SELECT COUNT(*) FROM pm_tareas WHERE fecha_limite < CURRENT_DATE AND estado NOT IN ('completada','cancelada')) AS tareas_atrasadas,
+  (SELECT COUNT(*) FROM pm_tareas WHERE fecha_limite <= CURRENT_DATE + INTERVAL '3 days' AND estado NOT IN ('completada','cancelada')) AS tareas_vencen_pronto,
   (SELECT COUNT(*) FROM pm_bloqueos WHERE estado <> 'resuelto') AS bloqueos_activos,
+  (SELECT COUNT(*) FROM pm_bloqueos WHERE estado <> 'resuelto' AND severidad IN ('alta','critica')) AS bloqueos_altos,
   (SELECT COUNT(*) FROM pm_riesgos WHERE estado = 'abierto') AS riesgos_abiertos,
+  (SELECT COUNT(*) FROM pm_riesgos WHERE estado = 'abierto' AND prioridad_calculada IN ('alta','critica')) AS riesgos_altos,
   (SELECT COUNT(*) FROM pm_avances WHERE fecha::date >= (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS avances_periodo,
   (SELECT COUNT(*) FROM pm_decisiones WHERE fecha::date >= (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS decisiones_periodo,
   (SELECT COALESCE(json_agg(t ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,titulo,responsable,prioridad,estado,fecha_limite FROM pm_tareas WHERE estado NOT IN ('completada','cancelada') ORDER BY fecha_limite NULLS LAST LIMIT 8) t) AS tareas,
-  (SELECT COALESCE(json_agg(b ORDER BY fecha_creacion DESC), '[]'::json) FROM (SELECT id,descripcion,responsable_afectado,severidad FROM pm_bloqueos WHERE estado <> 'resuelto' ORDER BY fecha_creacion DESC LIMIT 5) b) AS bloqueos,
-  (SELECT COALESCE(json_agg(r ORDER BY fecha_creacion DESC), '[]'::json) FROM (SELECT id,descripcion,prioridad_calculada,mitigacion FROM pm_riesgos WHERE estado='abierto' ORDER BY fecha_creacion DESC LIMIT 5) r) AS riesgos,
+  (SELECT COALESCE(json_agg(t ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,titulo,responsable,prioridad,estado,fecha_limite FROM pm_tareas WHERE fecha_limite <= CURRENT_DATE + INTERVAL '3 days' AND estado NOT IN ('completada','cancelada') ORDER BY fecha_limite NULLS LAST LIMIT 8) t) AS tareas_pronto,
+  (SELECT COALESCE(json_agg(b ORDER BY fecha_creacion DESC), '[]'::json) FROM (SELECT id,descripcion,responsable_afectado,severidad,fecha_creacion FROM pm_bloqueos WHERE estado <> 'resuelto' ORDER BY fecha_creacion DESC LIMIT 5) b) AS bloqueos,
+  (SELECT COALESCE(json_agg(r ORDER BY fecha_creacion DESC), '[]'::json) FROM (SELECT id,descripcion,prioridad_calculada,mitigacion,fecha_creacion FROM pm_riesgos WHERE estado='abierto' ORDER BY fecha_creacion DESC LIMIT 5) r) AS riesgos,
   (SELECT COALESCE(json_agg(e ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,nombre,responsable,estado,fecha_limite FROM pm_entregables WHERE estado NOT IN ('entregado','aprobado') ORDER BY fecha_limite NULLS LAST LIMIT 5) e) AS entregables,
-  (SELECT COALESCE(json_agg(d ORDER BY fecha DESC), '[]'::json) FROM (SELECT id,decision,responsable,fecha FROM pm_decisiones ORDER BY fecha DESC LIMIT 5) d) AS decisiones
+  (SELECT COALESCE(json_agg(d ORDER BY fecha DESC), '[]'::json) FROM (SELECT id,decision,responsable,fecha FROM pm_decisiones ORDER BY fecha DESC LIMIT 5) d) AS decisiones,
+  (SELECT COALESCE(json_agg(a ORDER BY avances DESC), '[]'::json) FROM (SELECT responsable, COUNT(*) AS avances, MAX(fecha) AS ultimo_avance FROM pm_avances WHERE fecha::date >= (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date GROUP BY responsable) a) AS avances_por_responsable,
+  (SELECT COALESCE(json_agg(c ORDER BY tareas DESC), '[]'::json) FROM (SELECT COALESCE(responsable,'sin responsable') AS responsable, COUNT(*) AS tareas FROM pm_tareas WHERE estado NOT IN ('completada','cancelada') GROUP BY COALESCE(responsable,'sin responsable')) c) AS carga_responsables
 FROM cfg;`;
 
 const reportFormatCode = code(function(){
@@ -1142,21 +1155,40 @@ const bloqueos = typeof row.bloqueos === 'string' ? JSON.parse(row.bloqueos) : r
 const riesgos = typeof row.riesgos === 'string' ? JSON.parse(row.riesgos) : row.riesgos;
 const entregables = typeof row.entregables === 'string' ? JSON.parse(row.entregables) : row.entregables;
 const decisiones = typeof row.decisiones === 'string' ? JSON.parse(row.decisiones) : row.decisiones;
+const tareasPronto = typeof row.tareas_pronto === 'string' ? JSON.parse(row.tareas_pronto) : row.tareas_pronto;
+const avancesResp = typeof row.avances_por_responsable === 'string' ? JSON.parse(row.avances_por_responsable) : row.avances_por_responsable;
+const cargaResp = typeof row.carga_responsables === 'string' ? JSON.parse(row.carga_responsables) : row.carga_responsables;
+const total = Number(row.tareas_totales || 0);
+const completadasTotal = Number(row.tareas_completadas_total || 0);
+const avancePct = total ? Math.round((completadasTotal / total) * 100) : 0;
+let semaforo = 'verde';
+if (Number(row.tareas_atrasadas) > 0 || Number(row.bloqueos_altos) > 0 || Number(row.riesgos_altos) > 0) semaforo = 'rojo';
+else if (Number(row.tareas_vencen_pronto) > 0 || Number(row.bloqueos_activos) > 0 || Number(row.riesgos_abiertos) > 0 || Number(row.avances_periodo) === 0) semaforo = 'amarillo';
 const recomendaciones = [];
 if (Number(row.tareas_atrasadas) > 0) recomendaciones.push('Priorizar tareas atrasadas y validar bloqueos con responsables hoy.');
+if (Number(row.tareas_vencen_pronto) > 0) recomendaciones.push('Cerrar o replanificar tareas que vencen en los proximos 3 dias.');
 if (Number(row.bloqueos_activos) > 0) recomendaciones.push('Revisar bloqueos activos antes de abrir trabajo nuevo.');
 if (Number(row.riesgos_abiertos) > 0) recomendaciones.push('Actualizar mitigaciones de riesgos abiertos y asignar fecha de revision.');
+if (Number(row.avances_periodo) === 0) recomendaciones.push('Pedir avances concretos; no hay actividad registrada en el periodo.');
 if (!recomendaciones.length) recomendaciones.push('Mantener cadencia de avances y preparar evidencia de entregables.');
 if (ctx.sub_intencion === 'kpis') {
   const respuestaKpis = [
     `KPIs PetSafe - ${periodo}`,
+    `Semaforo PM: ${semaforo}`,
+    `Avance global de tareas: ${avancePct}% (${completadasTotal}/${total})`,
     `Tareas completadas en el periodo: ${row.tareas_completadas_periodo}`,
     `Avances registrados: ${row.avances_periodo}`,
     `Tareas activas: ${row.tareas_pendientes}`,
-    `Tareas atrasadas: ${row.tareas_atrasadas}`,
-    `Bloqueos activos: ${row.bloqueos_activos}`,
-    `Riesgos abiertos: ${row.riesgos_abiertos}`,
+    `Tareas atrasadas: ${row.tareas_atrasadas} | Vencen pronto: ${row.tareas_vencen_pronto}`,
+    `Bloqueos activos: ${row.bloqueos_activos} | Altos/criticos: ${row.bloqueos_altos}`,
+    `Riesgos abiertos: ${row.riesgos_abiertos} | Altos/criticos: ${row.riesgos_altos}`,
     `Decisiones registradas en el periodo: ${row.decisiones_periodo}`,
+    '',
+    'Avances por responsable:',
+    list(avancesResp, a => `- ${a.responsable || 'sin responsable'}: ${a.avances}`, '- Sin avances registrados en el periodo.'),
+    '',
+    'Carga activa por responsable:',
+    list(cargaResp, c => `- ${c.responsable}: ${c.tareas} tarea(s)`, '- Sin tareas activas.'),
     '',
     'Lectura PM:',
     recomendaciones.map(r => `- ${r}`).join('\n')
@@ -1166,12 +1198,16 @@ if (ctx.sub_intencion === 'kpis') {
 const respuesta = [
   `Reporte ${tipo} PetSafe`,
   `Periodo evaluado: ${periodo}`,
+  `Semaforo PM: ${semaforo} | Avance global: ${avancePct}% (${completadasTotal}/${total})`,
   `Completadas en el periodo: ${row.tareas_completadas_periodo} | Avances registrados: ${row.avances_periodo}`,
-  `Activas: ${row.tareas_pendientes} | Atrasadas: ${row.tareas_atrasadas}`,
-  `Bloqueos activos: ${row.bloqueos_activos} | Riesgos abiertos: ${row.riesgos_abiertos} | Decisiones del periodo: ${row.decisiones_periodo}`,
+  `Activas: ${row.tareas_pendientes} | Atrasadas: ${row.tareas_atrasadas} | Vencen pronto: ${row.tareas_vencen_pronto}`,
+  `Bloqueos activos: ${row.bloqueos_activos} (${row.bloqueos_altos} altos/criticos) | Riesgos abiertos: ${row.riesgos_abiertos} (${row.riesgos_altos} altos/criticos) | Decisiones del periodo: ${row.decisiones_periodo}`,
   '',
   'Tareas clave:',
   list(tareas, t => `- #${t.id} [${t.estado}/${t.prioridad}] ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - ' + t.fecha_limite : ''}`, '- Sin tareas activas.'),
+  '',
+  'Vencen pronto:',
+  list(tareasPronto, t => `- #${t.id} [${t.estado}/${t.prioridad}] ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - ' + t.fecha_limite : ''}`, '- Sin vencimientos criticos en 3 dias.'),
   '',
   'Bloqueos:',
   list(bloqueos, b => `- #${b.id} [${b.severidad}] ${b.descripcion}`, '- Sin bloqueos activos.'),
@@ -1192,7 +1228,7 @@ return [{ json: { respuesta, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id
 });
 
 const outboxReportQuery = `INSERT INTO events_outbox (event_id, target, action, idempotency_key, payload)
-VALUES ($1, 'discord', 'pm_report', $2, $3::jsonb)
+VALUES (NULL, 'discord', 'pm_report', $1, $2::jsonb)
 ON CONFLICT (idempotency_key) DO NOTHING
 RETURNING outbox_id;`;
 
@@ -1207,7 +1243,7 @@ writeWorkflow(path.join(pmoDir, 'WF_PM_Reportes.json'), workflow('wf-pm-reportes
     options: {},
   }),
   pgNode('outbox-report', 'Queue Report To Discord', [1000, -80], outboxReportQuery, {
-    queryReplacement: '={{ [ "pm-report-" + Date.now(), "pm-report-" + Date.now(), JSON.stringify({ content: $json.respuesta, channel_id: $json.canal_id }) ] }}',
+    queryReplacement: '={{ [ "pm-report-" + Date.now(), JSON.stringify({ content: $json.respuesta, channel_id: $json.canal_id }) ] }}',
   }),
   node('return-report', 'Return Report Response', 'n8n-nodes-base.code', 2, [1240, 0], { jsCode: "const r = $('Format PM Report').item.json; return [{ json: r }];" }),
 ], {
@@ -1291,15 +1327,25 @@ const riesgos = typeof row.riesgos === 'string' ? JSON.parse(row.riesgos) : row.
 const entregables = typeof row.entregables === 'string' ? JSON.parse(row.entregables) : row.entregables;
 const reuniones = typeof row.reuniones === 'string' ? JSON.parse(row.reuniones) : row.reuniones;
 const sub = String(ctx.sub_intencion || 'agendar').toLowerCase();
-if (['listar','lista','ver'].includes(sub)) {
-  const respuestaLista = reuniones.length
-    ? 'Reuniones registradas:\n' + reuniones.map(m => `- #${m.id} ${m.titulo} | ${m.fecha_reunion || 'sin fecha'} | ${m.estado || 'programada'} | ${m.discord_event_url || 'sin evento Discord'} | participantes: ${(m.participantes || []).join(', ') || 'sin definir'}`).join('\n')
-    : 'No hay reuniones registradas.';
-  return [{ json: { respuesta: respuestaLista, should_store: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen } }];
-}
 const raw = String(ctx.datos?.texto || ctx.mensaje_original || '');
-const titulo = raw.replace(/^\/pm\s+reunion\s+\w+/i, '').replace(/(?:cuando|cu[aá]ndo|fecha|para|hora|donde|d[oó]nde|lugar|participantes|asistentes|con):?.*$/i, '').trim() || 'Reunion de seguimiento PetSafe';
-function dateFromText() {
+const TEAM = ['David Manjarres','David Josue Barragan Pozo','Josue Joel Garcia Abata','Fernando Joel Bonilla Guerrero','Joel Bonilla'];
+const guildId = process.env.DISCORD_GUILD_ID || '';
+const voiceChannelId = process.env.DISCORD_MEETING_VOICE_CHANNEL_ID || '';
+const meetingChannelId = process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen;
+const stopFields = 'participantes|asistentes|con|duracion|duraci[oó]n|minutos|cuando|cu[aá]ndo|fecha|hora|donde|d[oó]nde|lugar|ubicacion|ubicaci[oó]n|acuerdos?|compromisos?|decisiones?|acta';
+function field(rx) {
+  return raw.match(new RegExp('(?:' + rx + '):?\\s*([^,;\\n]+?)(?=\\s+(?:' + stopFields + '):?\\s|$)', 'i'))?.[1]?.trim() || null;
+}
+function meetingId() { return Number(ctx.datos?.id || raw.match(/#?(\d+)/)?.[1] || 0) || null; }
+function byId(id) { return reuniones.find(m => Number(m.id) === Number(id)); }
+function localParts(iso) {
+  if (!iso) return { date: null, hour: null, minute: null };
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return { date: null, hour: null, minute: null };
+  const ec = new Date(d.getTime() - (5 * 60 * 60 * 1000));
+  return { date: ec.toISOString().slice(0, 10), hour: ec.toISOString().slice(11, 13), minute: ec.toISOString().slice(14, 16) };
+}
+function dateFromText(fallbackIso = null) {
   const direct = ctx.datos?.fecha_reunion || raw.match(/(?:cuando|cu[aá]ndo|fecha|para):?\s*(\d{4}-\d{2}-\d{2})/i)?.[1];
   if (direct) return direct;
   const anyDate = raw.match(/(\d{4}-\d{2}-\d{2})/)?.[1];
@@ -1307,75 +1353,161 @@ function dateFromText() {
   const d = new Date();
   if (/ma[nñ]ana/i.test(raw)) { d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); }
   if (/\bhoy\b/i.test(raw)) return d.toISOString().slice(0, 10);
-  return null;
+  return localParts(fallbackIso).date;
 }
-const timeMatch = raw.match(/(?:hora:?\s*|a las\s*|desde las\s*)([01]?\d|2[0-3])(?::([0-5]\d))?/i);
-const date = dateFromText();
-const hour = timeMatch ? String(timeMatch[1]).padStart(2, '0') : null;
-const minute = timeMatch ? String(timeMatch[2] || '00').padStart(2, '0') : null;
+function timeFromText(fallbackIso = null) {
+  const hit = raw.match(/(?:hora:?\s*|a las\s*|desde las\s*)([01]?\d|2[0-3])(?::([0-5]\d))?/i);
+  if (hit) return { hour: String(hit[1]).padStart(2, '0'), minute: String(hit[2] || '00').padStart(2, '0') };
+  const p = localParts(fallbackIso);
+  return { hour: p.hour, minute: p.minute };
+}
+function topic(defaultTitle = 'Reunion de seguimiento PetSafe') {
+  const text = raw
+    .replace(/^\/pm\s+reuni[oó]n\s+\w+/i, '')
+    .replace(/^\/reuni[oó]n\s+\w+/i, '')
+    .replace(/#\d+/g, '')
+    .replace(new RegExp('\\s+(?:' + stopFields + '):?.*$', 'i'), '')
+    .trim();
+  return text || defaultTitle;
+}
+function participantsFromText(existing = []) {
+  const rawParticipants = ctx.datos?.participantes || field('participantes|asistentes|con') || (existing.length ? existing.join(',') : 'todos');
+  return /todos|equipo/i.test(rawParticipants) ? TEAM : rawParticipants.split(/,|\sy\s/).map(p => p.trim()).filter(Boolean);
+}
+function mentions(participantes) {
+  let mentionMap = {};
+  try { mentionMap = JSON.parse(process.env.PM_TEAM_DISCORD_MAP_JSON || '{}'); } catch (e) {}
+  return participantes.map(p => mentionMap[p] ? `<@${mentionMap[p]}>` : p).join(', ');
+}
+function agendaFor({ titulo, date, hour, minute, duracion, lugar, participantes }) {
+  return [
+    `Reunion PM PetSafe: ${titulo}`,
+    `Cuando: ${date} ${hour}:${minute}`,
+    `Duracion: ${duracion} min`,
+    `Donde: ${lugar}`,
+    `Participantes: ${participantes.join(', ')}`,
+    '',
+    '1. Estado general: pendientes, atrasos y entregables proximos.',
+    '2. Tareas a revisar:',
+    ...(tareas.length ? tareas.map(t => `- #${t.id} ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - ' + t.fecha_limite : ''}`) : ['- Sin tareas activas.']),
+    '3. Bloqueos:',
+    ...(bloqueos.length ? bloqueos.map(b => `- #${b.id} [${b.severidad}] ${b.descripcion}`) : ['- Sin bloqueos activos.']),
+    '4. Riesgos:',
+    ...(riesgos.length ? riesgos.map(r => `- #${r.id} [${r.prioridad_calculada}] ${r.descripcion}`) : ['- Sin riesgos abiertos.']),
+    '5. Entregables:',
+    ...(entregables.length ? entregables.map(e => `- #${e.id} ${e.nombre} - ${e.responsable || 'sin responsable'}${e.fecha_limite ? ' - ' + e.fecha_limite : ''}`) : ['- Sin entregables pendientes.']),
+    '',
+    'Cierre esperado: registrar decisiones, acuerdos y compromisos con responsable y fecha.'
+  ].join('\n');
+}
+function eventPayload({ titulo, fechaReunion, fechaFin, agenda, lugar }) {
+  const payload = {
+    name: titulo.slice(0, 100),
+    privacy_level: 2,
+    scheduled_start_time: fechaReunion,
+    scheduled_end_time: fechaFin,
+    description: agenda.slice(0, 1000)
+  };
+  if (voiceChannelId) {
+    payload.entity_type = 2;
+    payload.channel_id = voiceChannelId;
+  } else {
+    payload.entity_type = 3;
+    payload.channel_id = null;
+    payload.entity_metadata = { location: lugar === 'videollamada' ? 'Discord: canal General / #reuniones' : lugar };
+  }
+  return payload;
+}
+if (['listar','lista','ver'].includes(sub)) {
+  const respuestaLista = reuniones.length
+    ? 'Reuniones registradas:\n' + reuniones.map(m => `- #${m.id} ${m.titulo} | ${m.fecha_reunion || 'sin fecha'} | ${m.estado || 'programada'} | ${m.discord_event_url || 'sin evento Discord'} | participantes: ${(m.participantes || []).join(', ') || 'sin definir'}`).join('\n')
+    : 'No hay reuniones registradas.';
+  return [{ json: { respuesta: respuestaLista, needs_write: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: meetingChannelId } }];
+}
+
+if (['cancelar','cancelada','eliminar','borrar'].includes(sub)) {
+  const id = meetingId();
+  const current = byId(id);
+  if (!id || !current) {
+    return [{ json: { respuesta: 'Para cancelar necesito un ID valido. Ejemplo: `/pm reunion cancelar #2`.', needs_write: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: meetingChannelId } }];
+  }
+  return [{ json: {
+    operation: 'cancel',
+    needs_write: true,
+    needs_discord_delete: Boolean(current.discord_event_id && guildId && process.env.DISCORD_BOT_TOKEN),
+    http_url: `https://discord.com/api/v10/guilds/${guildId}/scheduled-events/${current.discord_event_id || 'missing-event'}`,
+    meeting_id: id,
+    titulo: current.titulo,
+    discord_event_id: current.discord_event_id || '',
+    discord_event_url: current.discord_event_url || '',
+    canal_destino: 'DISCORD_CHANNEL_REUNIONES',
+    canal_id: meetingChannelId
+  } }];
+}
+
+if (['acta','registrar_acta','acuerdos','compromisos'].includes(sub)) {
+  const id = meetingId();
+  const current = byId(id);
+  if (!id || !current) {
+    return [{ json: { respuesta: 'Para registrar acta necesito el ID de la reunion. Ejemplo: `/pm reunion acta #2 acuerdos: ... compromisos: ... decisiones: ...`.', needs_write: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: meetingChannelId } }];
+  }
+  const acuerdos = field('acuerdos?') || '';
+  const compromisos = field('compromisos?') || '';
+  const decisiones = field('decisiones?') || '';
+  const acta = field('acta') || raw.replace(/^\/pm\s+reuni[oó]n\s+\w+/i, '').replace(/#\d+/g, '').trim();
+  if (!acta && !acuerdos && !compromisos && !decisiones) {
+    return [{ json: { respuesta: 'No encontre contenido de acta. Usa `acuerdos:`, `compromisos:` o `decisiones:`.', needs_write: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: meetingChannelId } }];
+  }
+  return [{ json: {
+    operation: 'acta',
+    needs_write: true,
+    meeting_id: id,
+    titulo: current.titulo,
+    acta,
+    acuerdos,
+    compromisos,
+    decisiones,
+    canal_destino: 'DISCORD_CHANNEL_REUNIONES',
+    canal_id: meetingChannelId
+  } }];
+}
+
+const updating = ['actualizar','update','editar','reprogramar'].includes(sub);
+const current = updating ? byId(meetingId()) : null;
+if (updating && !current) {
+  return [{ json: { respuesta: 'Para actualizar necesito un ID valido. Ejemplo: `/pm reunion actualizar #2 cuando: 2026-05-27 hora: 11:00 participantes: todos`.', needs_write: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: meetingChannelId } }];
+}
+const titulo = updating ? topic(current.titulo) : topic();
+const date = dateFromText(current?.fecha_reunion || null);
+const time = timeFromText(current?.fecha_reunion || null);
+const hour = time.hour;
+const minute = time.minute;
 if (!date || !hour) {
   const respuestaFaltante = [
     `Para agendar "${titulo}" necesito fecha y hora.`,
     'Formato sugerido: `/pm reunion agendar mitigar impedimentos cuando: 2026-05-27 hora: 10:00 donde: videollamada participantes: todos`.',
     'Si no indicas lugar usare videollamada; si no indicas participantes asumire todo el equipo.'
   ].join('\n');
-  return [{ json: { respuesta: respuestaFaltante, should_store: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen } }];
+  return [{ json: { respuesta: respuestaFaltante, needs_write: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: meetingChannelId } }];
 }
 const durationRaw = Number(raw.match(/(?:duracion|duraci[oó]n|minutos):?\s*(\d{1,3})/i)?.[1] || process.env.PM_MEETING_DURATION_MINUTES || 45);
-const duracion = Math.max(15, Math.min(240, Number.isFinite(durationRaw) ? durationRaw : 45));
-const lugar = ctx.datos?.lugar || raw.match(/(?:donde|d[oó]nde|lugar|ubicacion|ubicaci[oó]n):?\s*([^,;\n]+?)(?=\s+(?:participantes|asistentes|con|duracion|duraci[oó]n|minutos|cuando|cu[aá]ndo|fecha|hora):?\s|$)/i)?.[1]?.trim() || 'videollamada';
-const TEAM = ['David Manjarres','David Josue Barragan Pozo','Josue Joel Garcia Abata','Fernando Joel Bonilla Guerrero','Joel Bonilla'];
-const rawParticipants = ctx.datos?.participantes || raw.match(/(?:participantes|asistentes|con):?\s*([^;\n]+)/i)?.[1]?.trim() || 'todos';
-const participantes = /todos|equipo/i.test(rawParticipants) ? TEAM : rawParticipants.split(/,|\sy\s/).map(p => p.trim()).filter(Boolean);
-let mentionMap = {};
-try { mentionMap = JSON.parse(process.env.PM_TEAM_DISCORD_MAP_JSON || '{}'); } catch (e) {}
-const menciones = participantes.map(p => mentionMap[p] ? `<@${mentionMap[p]}>` : p).join(', ');
+const duracionBase = updating ? Number(current.duracion_minutos || 45) : Number(process.env.PM_MEETING_DURATION_MINUTES || 45);
+const duracion = Math.max(15, Math.min(240, Number.isFinite(durationRaw) && /(?:duracion|duraci[oó]n|minutos):?\s*\d/i.test(raw) ? durationRaw : duracionBase));
+const lugar = ctx.datos?.lugar || field('donde|d[oó]nde|lugar|ubicacion|ubicaci[oó]n') || current?.lugar || 'videollamada';
+const participantes = participantsFromText(current?.participantes || []);
+const menciones = mentions(participantes);
 const start = new Date(`${date}T${hour}:${minute}:00-05:00`);
 if (!Number.isFinite(start.getTime()) || start <= new Date()) {
-  return [{ json: { respuesta: `Para crear una reunion real en Discord necesito una fecha y hora futura. Recibi: ${date} ${hour}:${minute}.`, should_store: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen } }];
+  return [{ json: { respuesta: `Para crear o actualizar una reunion real en Discord necesito fecha y hora futura. Recibi: ${date} ${hour}:${minute}.`, needs_write: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: meetingChannelId } }];
 }
 const end = new Date(start.getTime() + duracion * 60000);
 const fechaReunion = start.toISOString();
 const fechaFin = end.toISOString();
-const agenda = [
-  `Reunion PM PetSafe: ${titulo}`,
-  `Cuando: ${date} ${hour}:${minute}`,
-  `Duracion: ${duracion} min`,
-  `Donde: ${lugar}`,
-  `Participantes: ${participantes.join(', ')}`,
-  '',
-  '1. Estado general: pendientes, atrasos y entregables proximos.',
-  '2. Tareas a revisar:',
-  ...(tareas.length ? tareas.map(t => `- #${t.id} ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - ' + t.fecha_limite : ''}`) : ['- Sin tareas activas.']),
-  '3. Bloqueos:',
-  ...(bloqueos.length ? bloqueos.map(b => `- #${b.id} [${b.severidad}] ${b.descripcion}`) : ['- Sin bloqueos activos.']),
-  '4. Riesgos:',
-  ...(riesgos.length ? riesgos.map(r => `- #${r.id} [${r.prioridad_calculada}] ${r.descripcion}`) : ['- Sin riesgos abiertos.']),
-  '5. Entregables:',
-  ...(entregables.length ? entregables.map(e => `- #${e.id} ${e.nombre} - ${e.responsable || 'sin responsable'}${e.fecha_limite ? ' - ' + e.fecha_limite : ''}`) : ['- Sin entregables pendientes.']),
-  '',
-  'Cierre esperado: registrar decisiones, acuerdos y compromisos con responsable y fecha.'
-].join('\n');
-const guildId = process.env.DISCORD_GUILD_ID || '';
-const voiceChannelId = process.env.DISCORD_MEETING_VOICE_CHANNEL_ID || '';
-const meetingChannelId = process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen;
-const description = agenda.slice(0, 1000);
-const payload = {
-  name: titulo.slice(0, 100),
-  privacy_level: 2,
-  scheduled_start_time: fechaReunion,
-  scheduled_end_time: fechaFin,
-  description
-};
-if (voiceChannelId) {
-  payload.entity_type = 2;
-  payload.channel_id = voiceChannelId;
-} else {
-  payload.entity_type = 3;
-  payload.channel_id = null;
-  payload.entity_metadata = { location: lugar === 'videollamada' ? 'Discord: canal General / #reuniones' : lugar };
-}
+const agenda = agendaFor({ titulo, date, hour, minute, duracion, lugar, participantes });
+const payload = eventPayload({ titulo, fechaReunion, fechaFin, agenda, lugar });
+const eventId = current?.discord_event_id || '';
 return [{ json: {
+  operation: updating ? 'update' : 'create',
   respuesta_base: agenda,
   titulo,
   fecha_reunion: fechaReunion,
@@ -1388,44 +1520,124 @@ return [{ json: {
   guild_id: guildId,
   meeting_channel_id: meetingChannelId,
   discord_ready: Boolean(guildId && process.env.DISCORD_BOT_TOKEN),
+  meeting_id: current?.id || null,
+  existing_discord_event_id: eventId,
+  existing_discord_event_url: current?.discord_event_url || '',
   discord_event_payload: payload,
-  discord_event_api_url: `https://discord.com/api/v10/guilds/${guildId || 'missing-guild'}/scheduled-events`,
-  should_store: true,
+  needs_write: true,
+  needs_discord_upsert: Boolean(guildId && process.env.DISCORD_BOT_TOKEN && (!updating || eventId)),
+  http_method: updating ? 'PATCH' : 'POST',
+  http_url: updating
+    ? `https://discord.com/api/v10/guilds/${guildId || 'missing-guild'}/scheduled-events/${eventId || 'missing-event'}`
+    : `https://discord.com/api/v10/guilds/${guildId || 'missing-guild'}/scheduled-events`,
+  should_queue_reminder: true,
   canal_destino: 'DISCORD_CHANNEL_REUNIONES',
   canal_id: meetingChannelId
 } }];
 });
 
-const reunionesInsert = `INSERT INTO pm_reuniones (titulo, tipo, fecha_reunion, duracion_minutos, participantes, lugar, agenda, creado_por, discord_event_id, discord_event_url, discord_event_status)
+const meetingMutationCode = code(function(){
+const base = $('Format Meeting Agenda').item.json;
+let discord = {};
+try { discord = $('Discord Meeting Upsert').item.json || {}; } catch (e) {}
+try { if (!Object.keys(discord).length) discord = $('Discord Meeting Delete').item.json || {}; } catch (e) {}
+const rawError = discord.error?.message || discord.message || discord.errors || '';
+const discordError = rawError ? (typeof rawError === 'string' ? rawError : JSON.stringify(rawError)).slice(0, 300) : '';
+const eventId = discord.id || base.existing_discord_event_id || '';
+const eventUrl = eventId && base.guild_id ? `https://discord.com/events/${base.guild_id}/${eventId}` : (base.existing_discord_event_url || '');
+let query = 'SELECT 1;';
+let queryParams = [];
+if (base.operation === 'create') {
+  query = `INSERT INTO pm_reuniones (titulo, tipo, fecha_reunion, duracion_minutos, participantes, lugar, agenda, creado_por, discord_event_id, discord_event_url, discord_event_status)
 VALUES ($1, 'seguimiento', $2::timestamptz, $3, string_to_array($4, ','), $5, $6, $7, $8, $9, $10)
-RETURNING id;`;
+RETURNING id,titulo,fecha_reunion,duracion_minutos,lugar,participantes,estado,discord_event_id,discord_event_url,discord_event_status;`;
+  queryParams = [base.titulo, base.fecha_reunion, base.duracion_minutos, base.participantes, base.lugar, base.respuesta_base, $('Execute Workflow Trigger').item.json.usuario, eventId || null, eventUrl || null, eventId ? 'created' : 'discord_error'];
+} else if (base.operation === 'update') {
+  query = `WITH upd AS (
+  UPDATE pm_reuniones
+  SET titulo=$1, fecha_reunion=$2::timestamptz, duracion_minutos=$3, participantes=string_to_array($4, ','), lugar=$5, agenda=$6,
+      discord_event_id=COALESCE(NULLIF($7,''), discord_event_id),
+      discord_event_url=COALESCE(NULLIF($8,''), discord_event_url),
+      discord_event_status=$9
+  WHERE id=$10
+  RETURNING id,titulo,fecha_reunion,duracion_minutos,lugar,participantes,estado,discord_event_id,discord_event_url,discord_event_status
+), cancel_old AS (
+  UPDATE events_outbox SET status='cancelled'
+  WHERE action='pm_meeting_reminder' AND status IN ('pending','sending') AND idempotency_key LIKE ('pm-meeting-reminder-' || $10 || '-%')
+  RETURNING outbox_id
+)
+SELECT upd.*, (SELECT COUNT(*) FROM cancel_old) AS reminders_cancelled FROM upd;`;
+  queryParams = [base.titulo, base.fecha_reunion, base.duracion_minutos, base.participantes, base.lugar, base.respuesta_base, eventId || '', eventUrl || '', discordError ? 'discord_update_error' : 'updated', base.meeting_id];
+} else if (base.operation === 'cancel') {
+  query = `WITH upd AS (
+  UPDATE pm_reuniones
+  SET estado='cancelada', discord_event_status=$2
+  WHERE id=$1
+  RETURNING id,titulo,fecha_reunion,duracion_minutos,lugar,participantes,estado,discord_event_id,discord_event_url,discord_event_status
+), cancel_old AS (
+  UPDATE events_outbox SET status='cancelled'
+  WHERE action='pm_meeting_reminder' AND status IN ('pending','sending') AND idempotency_key LIKE ('pm-meeting-reminder-' || $1 || '-%')
+  RETURNING outbox_id
+)
+SELECT upd.*, (SELECT COUNT(*) FROM cancel_old) AS reminders_cancelled FROM upd;`;
+  queryParams = [base.meeting_id, discordError ? 'discord_cancel_error' : 'cancelled'];
+} else if (base.operation === 'acta') {
+  query = `UPDATE pm_reuniones
+SET acta=$1, acuerdos=$2, compromisos=$3, decisiones=$4, estado='completada'
+WHERE id=$5
+RETURNING id,titulo,fecha_reunion,duracion_minutos,lugar,participantes,estado,discord_event_id,discord_event_url,discord_event_status;`;
+  queryParams = [base.acta || null, base.acuerdos || null, base.compromisos || null, base.decisiones || null, base.meeting_id];
+}
+return [{ json: { ...base, query, query_params: queryParams, discord_event_id: eventId, discord_event_url: eventUrl, discord_error: discordError } }];
+});
 
 const meetingResponseCode = code(function(){
-const base = $('Format Meeting Agenda').item.json;
-const stored = $('Store Meeting Agenda').item.json || {};
-let event = {};
-try { event = $('Create Discord Scheduled Event').item.json || {}; } catch (e) {}
-const eventId = event.id || '';
-const eventUrl = eventId && base.guild_id ? `https://discord.com/events/${base.guild_id}/${eventId}` : '';
-const rawError = event.error?.message || event.message || event.errors || '';
-const createError = rawError ? (typeof rawError === 'string' ? rawError : JSON.stringify(rawError)).slice(0, 300) : '';
+const base = $('Build Meeting Mutation').item.json;
+const stored = $('Run Meeting Mutation').item.json || {};
 const lines = [];
-if (eventId) {
-  lines.push(`Reunion Discord programada: ${base.titulo}`);
-  lines.push(`Evento: ${eventUrl}`);
+const eventId = base.discord_event_id || stored.discord_event_id || '';
+const eventUrl = base.discord_event_url || stored.discord_event_url || '';
+const discordError = base.discord_error || '';
+if (base.operation === 'create') {
+  if (eventId) {
+    lines.push(`Reunion Discord programada: ${base.titulo}`);
+    lines.push(`Evento: ${eventUrl}`);
+  } else {
+    lines.push(`Reunion registrada, pero el evento Discord no se pudo crear automaticamente.`);
+    lines.push(`Motivo probable: ${base.discord_ready ? (discordError || 'Discord no devolvio id de evento.') : 'falta DISCORD_GUILD_ID o DISCORD_BOT_TOKEN en n8n.'}`);
+  }
+  lines.push(`ID interno: #${stored.id || 'pendiente'}`);
+  lines.push(`Cuando: ${base.fecha_reunion}`);
+  lines.push(`Duracion: ${base.duracion_minutos} min`);
+  lines.push(`Donde: ${base.lugar}`);
+  lines.push(`Participantes: ${base.participantes_texto}`);
+  if (base.menciones) lines.push(`Notificados: ${base.menciones}`);
+  lines.push('');
+  lines.push(base.respuesta_base);
+  if (eventId) lines.push('', 'Recordatorio automatico: 15 minutos antes en este canal.');
+} else if (base.operation === 'update') {
+  lines.push(`Reunion actualizada: #${stored.id || base.meeting_id} ${base.titulo}`);
+  if (eventUrl) lines.push(`Evento: ${eventUrl}`);
+  if (discordError) lines.push(`Discord: no pude actualizar el evento automaticamente (${discordError}).`);
+  lines.push(`Cuando: ${base.fecha_reunion}`);
+  lines.push(`Duracion: ${base.duracion_minutos} min`);
+  lines.push(`Donde: ${base.lugar}`);
+  lines.push(`Participantes: ${base.participantes_texto}`);
+  lines.push('Recordatorio automatico reajustado a 15 minutos antes.');
+} else if (base.operation === 'cancel') {
+  lines.push(`Reunion cancelada: #${stored.id || base.meeting_id} ${stored.titulo || base.titulo}`);
+  if (eventUrl) lines.push(`Evento: ${eventUrl}`);
+  lines.push(discordError ? `Discord: revisar manualmente, no pude eliminar el evento (${discordError}).` : 'Discord: evento eliminado o no habia evento vinculado.');
+  lines.push(`Recordatorios cancelados: ${stored.reminders_cancelled || 0}.`);
+} else if (base.operation === 'acta') {
+  lines.push(`Acta registrada: #${stored.id || base.meeting_id} ${stored.titulo || base.titulo}`);
+  if (base.acuerdos) lines.push(`Acuerdos: ${base.acuerdos}`);
+  if (base.compromisos) lines.push(`Compromisos: ${base.compromisos}`);
+  if (base.decisiones) lines.push(`Decisiones: ${base.decisiones}`);
+  lines.push('Estado: completada. Las decisiones/tareas derivadas se pueden registrar con `/pm decision registrar` y `/pm tarea crear`.');
 } else {
-  lines.push(`Reunion registrada, pero el evento Discord no se pudo crear automaticamente.`);
-  lines.push(`Motivo probable: ${base.discord_ready ? (createError || 'Discord no devolvio id de evento.') : 'falta DISCORD_GUILD_ID o DISCORD_BOT_TOKEN en n8n.'}`);
+  lines.push('Operacion de reunion ejecutada.');
 }
-lines.push(`ID interno: #${stored.id || 'pendiente'}`);
-lines.push(`Cuando: ${base.fecha_reunion}`);
-lines.push(`Duracion: ${base.duracion_minutos} min`);
-lines.push(`Donde: ${base.lugar}`);
-lines.push(`Participantes: ${base.participantes_texto}`);
-if (base.menciones) lines.push(`Notificados: ${base.menciones}`);
-lines.push('');
-lines.push(base.respuesta_base);
-if (eventId) lines.push('', 'Recordatorio automatico: 15 minutos antes en este canal.');
 const reminderContent = [
   `Recordatorio: la reunion "${base.titulo}" empieza en 15 minutos.`,
   eventUrl ? `Evento Discord: ${eventUrl}` : '',
@@ -1438,7 +1650,8 @@ return [{ json: {
   storage: 'postgres:pm_reuniones',
   reminder_payload: { channel_id: base.meeting_channel_id, content: reminderContent },
   reminder_at: base.fecha_reunion,
-  meeting_id: stored.id || null,
+  should_queue_reminder: Boolean(base.should_queue_reminder && stored.id && base.fecha_reunion),
+  meeting_id: stored.id || base.meeting_id || null,
   discord_event_id: eventId,
   discord_event_url: eventUrl
 } }];
@@ -1446,20 +1659,38 @@ return [{ json: {
 
 const meetingReminderQuery = `INSERT INTO events_outbox (event_id, target, action, idempotency_key, payload, scheduled_at)
 VALUES (NULL, 'discord', 'pm_meeting_reminder', $1, $2::jsonb, GREATEST($3::timestamptz - INTERVAL '15 minutes', NOW()))
-ON CONFLICT (idempotency_key) DO NOTHING
+ON CONFLICT (idempotency_key) DO UPDATE
+SET payload=EXCLUDED.payload, scheduled_at=EXCLUDED.scheduled_at, status='pending', retry_count=0, last_error=NULL
 RETURNING outbox_id;`;
 
 writeWorkflow(path.join(pmoDir, 'WF_PM_Reuniones.json'), workflow('wf-pm-reuniones', 'WF_PM_Reuniones', [
   trigger,
   pgNode('query-meeting', 'Query Meeting Context', [240, 0], reunionesQuery),
   node('format-meeting', 'Format Meeting Agenda', 'n8n-nodes-base.code', 2, [500, 0], { jsCode: reunionesFormatCode }),
-  node('should-store-meeting?', 'Should Store Meeting?', 'n8n-nodes-base.if', 2.2, [720, 0], {
-    conditions: { options: { caseSensitive: true, typeValidation: 'loose' }, conditions: [{ id: 'store', leftValue: '={{ $json.should_store ? 1 : 0 }}', rightValue: 1, operator: { type: 'number', operation: 'equals' } }], combinator: 'and' },
+  node('needs-meeting-write?', 'Needs Meeting Write?', 'n8n-nodes-base.if', 2.2, [720, 0], {
+    conditions: { options: { caseSensitive: true, typeValidation: 'loose' }, conditions: [{ id: 'write', leftValue: '={{ $json.needs_write ? 1 : 0 }}', rightValue: 1, operator: { type: 'number', operation: 'equals' } }], combinator: 'and' },
     options: {},
   }),
-  node('create-discord-event', 'Create Discord Scheduled Event', 'n8n-nodes-base.httpRequest', 4.2, [960, -100], {
-    method: 'POST',
-    url: '={{ $json.discord_event_api_url }}',
+  node('needs-discord-delete?', 'Needs Discord Delete?', 'n8n-nodes-base.if', 2.2, [960, -120], {
+    conditions: { options: { caseSensitive: true, typeValidation: 'loose' }, conditions: [{ id: 'delete', leftValue: '={{ $json.needs_discord_delete ? 1 : 0 }}', rightValue: 1, operator: { type: 'number', operation: 'equals' } }], combinator: 'and' },
+    options: {},
+  }),
+  node('needs-discord-upsert?', 'Needs Discord Upsert?', 'n8n-nodes-base.if', 2.2, [1180, 20], {
+    conditions: { options: { caseSensitive: true, typeValidation: 'loose' }, conditions: [{ id: 'upsert', leftValue: '={{ $json.needs_discord_upsert ? 1 : 0 }}', rightValue: 1, operator: { type: 'number', operation: 'equals' } }], combinator: 'and' },
+    options: {},
+  }),
+  node('discord-delete', 'Discord Meeting Delete', 'n8n-nodes-base.httpRequest', 4.2, [1180, -180], {
+    method: 'DELETE',
+    url: '={{ $json.http_url }}',
+    sendHeaders: true,
+    headerParameters: { parameters: [
+      { name: 'Authorization', value: '={{ "Bot " + $env.DISCORD_BOT_TOKEN }}' },
+    ] },
+    options: {},
+  }, { continueOnFail: true }),
+  node('discord-upsert', 'Discord Meeting Upsert', 'n8n-nodes-base.httpRequest', 4.2, [1400, -20], {
+    method: '={{ $json.http_method }}',
+    url: '={{ $json.http_url }}',
     sendHeaders: true,
     headerParameters: { parameters: [
       { name: 'Authorization', value: '={{ "Bot " + $env.DISCORD_BOT_TOKEN }}' },
@@ -1470,22 +1701,32 @@ writeWorkflow(path.join(pmoDir, 'WF_PM_Reuniones.json'), workflow('wf-pm-reunion
     jsonBody: '={{ JSON.stringify($json.discord_event_payload) }}',
     options: {},
   }, { continueOnFail: true }),
-  pgNode('store-meeting', 'Store Meeting Agenda', [1200, -100], reunionesInsert, {
-    queryReplacement: '={{ [ $("Format Meeting Agenda").item.json.titulo, $("Format Meeting Agenda").item.json.fecha_reunion, $("Format Meeting Agenda").item.json.duracion_minutos, $("Format Meeting Agenda").item.json.participantes, $("Format Meeting Agenda").item.json.lugar, $("Format Meeting Agenda").item.json.respuesta_base, $("Execute Workflow Trigger").item.json.usuario, $("Create Discord Scheduled Event").item.json.id || null, $("Create Discord Scheduled Event").item.json.id ? ("https://discord.com/events/" + $("Format Meeting Agenda").item.json.guild_id + "/" + $("Create Discord Scheduled Event").item.json.id) : null, $("Create Discord Scheduled Event").item.json.id ? "created" : "error" ] }}',
+  node('build-meeting-mutation', 'Build Meeting Mutation', 'n8n-nodes-base.code', 2, [1620, 0], { jsCode: meetingMutationCode }),
+  pgNode('run-meeting-mutation', 'Run Meeting Mutation', [1840, 0], '={{ $json.query }}', {
+    queryReplacement: '={{ $json.query_params }}',
   }),
-  node('build-meeting-response', 'Build Meeting Response', 'n8n-nodes-base.code', 2, [1440, -100], { jsCode: meetingResponseCode }),
-  pgNode('queue-meeting-reminder', 'Queue Meeting Reminder', [1680, -100], meetingReminderQuery, {
-    queryReplacement: '={{ [ "pm-meeting-reminder-" + $json.meeting_id + "-15m", JSON.stringify($json.reminder_payload), $json.reminder_at ] }}',
+  node('build-meeting-response', 'Build Meeting Response', 'n8n-nodes-base.code', 2, [2060, 0], { jsCode: meetingResponseCode }),
+  node('should-queue-meeting-reminder?', 'Should Queue Meeting Reminder?', 'n8n-nodes-base.if', 2.2, [2280, 0], {
+    conditions: { options: { caseSensitive: true, typeValidation: 'loose' }, conditions: [{ id: 'queue', leftValue: '={{ $json.should_queue_reminder ? 1 : 0 }}', rightValue: 1, operator: { type: 'number', operation: 'equals' } }], combinator: 'and' },
+    options: {},
   }),
-  node('return-meeting', 'Return Meeting Response', 'n8n-nodes-base.code', 2, [1920, 0], { jsCode: "try { return [{ json: $('Build Meeting Response').item.json }]; } catch (e) { return [{ json: $('Format Meeting Agenda').item.json }]; }" }),
+  pgNode('queue-meeting-reminder', 'Queue Meeting Reminder', [2500, -80], meetingReminderQuery, {
+    queryReplacement: '={{ [ "pm-meeting-reminder-" + $json.meeting_id + "-" + new Date($json.reminder_at).getTime(), JSON.stringify($json.reminder_payload), $json.reminder_at ] }}',
+  }),
+  node('return-meeting', 'Return Meeting Response', 'n8n-nodes-base.code', 2, [2720, 0], { jsCode: "try { return [{ json: $('Build Meeting Response').item.json }]; } catch (e) { return [{ json: $('Format Meeting Agenda').item.json }]; }" }),
 ], {
   'Execute Workflow Trigger': { main: [[{ node: 'Query Meeting Context', type: 'main', index: 0 }]] },
   'Query Meeting Context': { main: [[{ node: 'Format Meeting Agenda', type: 'main', index: 0 }]] },
-  'Format Meeting Agenda': { main: [[{ node: 'Should Store Meeting?', type: 'main', index: 0 }]] },
-  'Should Store Meeting?': { main: [[{ node: 'Create Discord Scheduled Event', type: 'main', index: 0 }], [{ node: 'Return Meeting Response', type: 'main', index: 0 }]] },
-  'Create Discord Scheduled Event': { main: [[{ node: 'Store Meeting Agenda', type: 'main', index: 0 }]] },
-  'Store Meeting Agenda': { main: [[{ node: 'Build Meeting Response', type: 'main', index: 0 }]] },
-  'Build Meeting Response': { main: [[{ node: 'Queue Meeting Reminder', type: 'main', index: 0 }]] },
+  'Format Meeting Agenda': { main: [[{ node: 'Needs Meeting Write?', type: 'main', index: 0 }]] },
+  'Needs Meeting Write?': { main: [[{ node: 'Needs Discord Delete?', type: 'main', index: 0 }], [{ node: 'Return Meeting Response', type: 'main', index: 0 }]] },
+  'Needs Discord Delete?': { main: [[{ node: 'Discord Meeting Delete', type: 'main', index: 0 }], [{ node: 'Needs Discord Upsert?', type: 'main', index: 0 }]] },
+  'Needs Discord Upsert?': { main: [[{ node: 'Discord Meeting Upsert', type: 'main', index: 0 }], [{ node: 'Build Meeting Mutation', type: 'main', index: 0 }]] },
+  'Discord Meeting Delete': { main: [[{ node: 'Build Meeting Mutation', type: 'main', index: 0 }]] },
+  'Discord Meeting Upsert': { main: [[{ node: 'Build Meeting Mutation', type: 'main', index: 0 }]] },
+  'Build Meeting Mutation': { main: [[{ node: 'Run Meeting Mutation', type: 'main', index: 0 }]] },
+  'Run Meeting Mutation': { main: [[{ node: 'Build Meeting Response', type: 'main', index: 0 }]] },
+  'Build Meeting Response': { main: [[{ node: 'Should Queue Meeting Reminder?', type: 'main', index: 0 }]] },
+  'Should Queue Meeting Reminder?': { main: [[{ node: 'Queue Meeting Reminder', type: 'main', index: 0 }], [{ node: 'Return Meeting Response', type: 'main', index: 0 }]] },
   'Queue Meeting Reminder': { main: [[{ node: 'Return Meeting Response', type: 'main', index: 0 }]] },
 }));
 
@@ -1498,23 +1739,31 @@ const adminQuery = `SELECT
   (SELECT COUNT(*) FROM pm_decisiones) AS decisiones,
   (SELECT COUNT(*) FROM events_outbox WHERE status IN ('pending','sending')) AS outbox_pendiente,
   (SELECT COUNT(*) FROM events_outbox WHERE status IN ('failed','dead')) AS outbox_fallido,
-  (SELECT COALESCE(json_agg(l), '[]'::json) FROM (SELECT id,intencion,usuario,canal,exito,fecha FROM pm_command_log ORDER BY fecha DESC LIMIT 5) l) AS ultimos_comandos;`;
+  (SELECT COUNT(*) FROM pm_bot_errors WHERE fecha >= NOW() - INTERVAL '24 hours' AND NOT (workflow_name = 'System - PM Schema Manager' AND error_message ILIKE '%has no node to start%')) AS errores_24h,
+  (SELECT COUNT(*) FROM pm_command_log WHERE exito = false) AS comandos_fallidos,
+  (SELECT COALESCE(json_agg(l), '[]'::json) FROM (SELECT id,intencion,usuario,canal,exito,fecha FROM pm_command_log ORDER BY fecha DESC LIMIT 5) l) AS ultimos_comandos,
+  (SELECT COALESCE(json_agg(e), '[]'::json) FROM (SELECT id,workflow_name,node_name,error_message,fecha FROM pm_bot_errors WHERE NOT (workflow_name = 'System - PM Schema Manager' AND error_message ILIKE '%has no node to start%') ORDER BY fecha DESC LIMIT 3) e) AS ultimos_errores;`;
 
 const adminFormatCode = code(function(){
 const row = $json; const ctx = $('Execute Workflow Trigger').item.json || {};
-const required = ['DISCORD_BOT_TOKEN','DISCORD_CHANNEL_TAREAS','DISCORD_CHANNEL_AVANCES','DISCORD_CHANNEL_BLOQUEOS','DISCORD_CHANNEL_REPORTES','DISCORD_CHANNEL_REUNIONES','DISCORD_CHANNEL_ENTREGABLES','DISCORD_CHANNEL_RIESGOS','DISCORD_CHANNEL_BOT_LOG','DISCORD_CHANNEL_ADMIN'];
+const required = ['DISCORD_BOT_TOKEN','DISCORD_GUILD_ID','DISCORD_MEETING_VOICE_CHANNEL_ID','DISCORD_CHANNEL_TAREAS','DISCORD_CHANNEL_AVANCES','DISCORD_CHANNEL_BLOQUEOS','DISCORD_CHANNEL_REPORTES','DISCORD_CHANNEL_REUNIONES','DISCORD_CHANNEL_ENTREGABLES','DISCORD_CHANNEL_RIESGOS','DISCORD_CHANNEL_BOT_LOG','DISCORD_CHANNEL_ADMIN','TRELLO_BOARD_ID','TRELLO_DEFAULT_LIST_ID'];
 const missing = required.filter(k => !process.env[k]);
 const logs = typeof row.ultimos_comandos === 'string' ? JSON.parse(row.ultimos_comandos) : row.ultimos_comandos;
+const errors = typeof row.ultimos_errores === 'string' ? JSON.parse(row.ultimos_errores) : row.ultimos_errores;
 const respuesta = [
   'Estado administrativo del PM Bot',
   `Storage: Postgres`,
   `Tareas: ${row.tareas} | Avances: ${row.avances} | Entregables: ${row.entregables} | Decisiones: ${row.decisiones}`,
   `Bloqueos activos: ${row.bloqueos_activos} | Riesgos abiertos: ${row.riesgos_abiertos}`,
   `Outbox pendiente: ${row.outbox_pendiente} | Outbox fallido: ${row.outbox_fallido}`,
+  `Errores PM 24h: ${row.errores_24h} | Comandos fallidos: ${row.comandos_fallidos}`,
   `Variables faltantes: ${missing.length ? missing.join(', ') : 'ninguna'}`,
   '',
   'Ultimos comandos:',
-  ...(logs.length ? logs.map(l => `- #${l.id} ${l.intencion} por ${l.usuario} en ${l.canal}`) : ['- Sin comandos auditados.'])
+  ...(logs.length ? logs.map(l => `- #${l.id} ${l.intencion} por ${l.usuario} en ${l.canal}`) : ['- Sin comandos auditados.']),
+  '',
+  'Ultimos errores:',
+  ...(errors.length ? errors.map(e => `- #${e.id} ${e.workflow_name || 'workflow'} / ${e.node_name || 'nodo'}: ${String(e.error_message || '').slice(0, 120)}`) : ['- Sin errores registrados.'])
 ].join('\n');
 return [{ json: { respuesta, canal_destino: 'DISCORD_CHANNEL_ADMIN', canal_id: process.env.DISCORD_CHANNEL_ADMIN || ctx.canal_origen, storage: 'postgres:pm_command_log/events_outbox' } }];
 });
@@ -1531,17 +1780,31 @@ writeWorkflow(path.join(pmoDir, 'WF_PM_Admin.json'), workflow('wf-pm-admin', 'WF
 const remindersQuery = `SELECT
   (SELECT COALESCE(json_agg(t), '[]'::json) FROM (SELECT id,titulo,responsable,fecha_limite, CURRENT_DATE - fecha_limite::date AS dias_atraso FROM pm_tareas WHERE fecha_limite < CURRENT_DATE AND estado NOT IN ('completada','cancelada') ORDER BY fecha_limite LIMIT 10) t) AS tareas_atrasadas,
   (SELECT COALESCE(json_agg(e), '[]'::json) FROM (SELECT id,nombre,responsable,fecha_limite, fecha_limite::date - CURRENT_DATE AS dias_restantes FROM pm_entregables WHERE fecha_limite <= CURRENT_DATE + INTERVAL '3 days' AND estado NOT IN ('entregado','aprobado') ORDER BY fecha_limite LIMIT 10) e) AS entregables_proximos,
-  (SELECT COUNT(*) FROM pm_bloqueos WHERE estado <> 'resuelto') AS bloqueos_activos;`;
+  (SELECT COALESCE(json_agg(s), '[]'::json) FROM (
+    SELECT t.id,t.titulo,t.responsable,t.fecha_limite
+    FROM pm_tareas t
+    WHERE t.estado NOT IN ('completada','cancelada')
+      AND NOT EXISTS (SELECT 1 FROM pm_avances a WHERE a.tarea_id = t.id AND a.fecha >= NOW() - INTERVAL '3 days')
+    ORDER BY t.fecha_limite NULLS LAST LIMIT 10
+  ) s) AS tareas_sin_avance,
+  (SELECT COALESCE(json_agg(m), '[]'::json) FROM (SELECT id,titulo,fecha_reunion,discord_event_url FROM pm_reuniones WHERE estado='programada' AND fecha_reunion BETWEEN NOW() AND NOW() + INTERVAL '24 hours' ORDER BY fecha_reunion LIMIT 5) m) AS reuniones_24h,
+  (SELECT COUNT(*) FROM pm_bloqueos WHERE estado <> 'resuelto') AS bloqueos_activos,
+  (SELECT COUNT(*) FROM pm_riesgos WHERE estado='abierto' AND prioridad_calculada IN ('alta','critica')) AS riesgos_altos;`;
 
 const remindersFormatCode = code(function(){
 const row = $json; const ctx = $('Execute Workflow Trigger').item?.json || {};
 const tareas = typeof row.tareas_atrasadas === 'string' ? JSON.parse(row.tareas_atrasadas) : row.tareas_atrasadas;
 const entregables = typeof row.entregables_proximos === 'string' ? JSON.parse(row.entregables_proximos) : row.entregables_proximos;
+const sinAvance = typeof row.tareas_sin_avance === 'string' ? JSON.parse(row.tareas_sin_avance) : row.tareas_sin_avance;
+const reuniones = typeof row.reuniones_24h === 'string' ? JSON.parse(row.reuniones_24h) : row.reuniones_24h;
 const lines = ['Recordatorio PM PetSafe'];
 if (tareas.length) lines.push('Tareas atrasadas:', ...tareas.map(t => `- #${t.id} ${t.titulo} - ${t.responsable || 'sin responsable'} - ${t.dias_atraso} dia(s)`));
 if (entregables.length) lines.push('Entregables proximos/vencidos:', ...entregables.map(e => `- #${e.id} ${e.nombre} - ${e.responsable || 'sin responsable'} - ${e.dias_restantes} dia(s)`));
+if (sinAvance.length) lines.push('Tareas sin avance registrado en 3 dias:', ...sinAvance.map(t => `- #${t.id} ${t.titulo} - ${t.responsable || 'sin responsable'}`));
+if (reuniones.length) lines.push('Reuniones proximas 24h:', ...reuniones.map(m => `- #${m.id} ${m.titulo} - ${m.fecha_reunion}${m.discord_event_url ? ' - ' + m.discord_event_url : ''}`));
 if (Number(row.bloqueos_activos) > 0) lines.push(`Bloqueos activos: ${row.bloqueos_activos}. Revisar #bloqueos.`);
-if (lines.length === 1) lines.push('Sin atrasos ni entregables criticos para los proximos 3 dias.');
+if (Number(row.riesgos_altos) > 0) lines.push(`Riesgos altos/criticos abiertos: ${row.riesgos_altos}. Revisar #riesgos.`);
+if (lines.length === 1) lines.push('Sin atrasos, entregables criticos ni silencios de avance relevantes.');
 const respuesta = lines.join('\n');
 return [{ json: { respuesta, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: true } }];
 });
@@ -1552,7 +1815,7 @@ writeWorkflow(path.join(pmoDir, 'WF_PM_Recordatorios.json'), workflow('wf-pm-rec
   pgNode('query-reminders', 'Query Reminder Data', [260, 0], remindersQuery),
   node('format-reminders', 'Format Reminder', 'n8n-nodes-base.code', 2, [520, 0], { jsCode: remindersFormatCode }),
   pgNode('queue-reminder', 'Queue Reminder To Discord', [780, 0], outboxReportQuery, {
-    queryReplacement: '={{ [ "pm-reminder-" + Date.now(), "pm-reminder-" + Date.now(), JSON.stringify({ content: $json.respuesta, channel_id: $json.canal_id }) ] }}',
+    queryReplacement: '={{ [ "pm-reminder-" + Date.now(), JSON.stringify({ content: $json.respuesta, channel_id: $json.canal_id }) ] }}',
   }),
   node('return-reminder', 'Return Reminder Response', 'n8n-nodes-base.code', 2, [1020, 0], { jsCode: "return [{ json: $('Format Reminder').item.json }];" }),
 ], {
@@ -1566,6 +1829,7 @@ writeWorkflow(path.join(pmoDir, 'WF_PM_Recordatorios.json'), workflow('wf-pm-rec
 const schemaFile = path.join(coreDir, 'System - PM Schema Manager.json');
 const schema = JSON.parse(fs.readFileSync(schemaFile, 'utf8'));
 schema.id = 'wf-pm-schema-manager';
+schema.active = false;
 schema.settings = settings;
 const createTables = schema.nodes.find((n) => n.name === 'Create PM Tables');
 if (createTables) {
@@ -1651,7 +1915,7 @@ VALUES ($1,$2,$3,$4,$5::jsonb) RETURNING id;`, {
     queryReplacement: '={{ [ $json.workflow, $json.node, $json.msg, $json.execution_id, JSON.stringify($json.payload || {}) ] }}',
   }),
   pgNode('queue-error', 'Queue Error Notification', [760, 0], outboxReportQuery, {
-    queryReplacement: '={{ [ "pm-error-" + Date.now(), "pm-error-" + Date.now(), JSON.stringify({ content: $("Format Error").item.json.content, channel_id: $("Format Error").item.json.channel_id }) ] }}',
+    queryReplacement: '={{ [ "pm-error-" + Date.now(), JSON.stringify({ content: $("Format Error").item.json.content, channel_id: $("Format Error").item.json.channel_id }) ] }}',
   }),
 ], {
   'Error Trigger': { main: [[{ node: 'Format Error', type: 'main', index: 0 }]] },

@@ -90,7 +90,7 @@
         120
       ],
       "parameters": {
-        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst rows = $('Run Task Query').all().map(i => i.json);\nconst task = rows[0] || {};\nconst syncable = ['created','assigned','updated'].includes(task.action);\nif (!syncable) {\n  return [{ json: { needs_sync: false, trello_sync: { status: 'no_aplica' } } }];\n}\n\nconst defaultListId = process.env.TRELLO_DEFAULT_LIST_ID || process.env.TRELLO_TASKS_LIST_ID || '';\nconst listId = task.trello_list_id || defaultListId;\nif (!task.trello_card_id && !listId) {\n  return [{ json: { needs_sync: false, trello_sync: { status: 'omitido', detalle: 'falta TRELLO_DEFAULT_LIST_ID o una fase vinculada a lista Trello' }, task_id: task.id } }];\n}\n\nfunction memberMap() {\n  try { return JSON.parse(process.env.TRELLO_MEMBER_MAP_JSON || '{}'); } catch (e) { return {}; }\n}\nfunction norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, ''); }\nfunction memberIdFor(name) {\n  const map = memberMap();\n  const direct = map[name] || map[norm(name)];\n  if (direct) return direct;\n  const hit = Object.entries(map).find(([k]) => norm(k) === norm(name));\n  return hit ? hit[1] : '';\n}\n\nconst params = new URLSearchParams();\nparams.set('name', `#${task.id} ${task.titulo}`.slice(0, 160));\nparams.set('desc', String(task.descripcion || task.titulo || '').slice(0, 1500));\nif (!task.trello_card_id) params.set('idList', listId);\nif (task.fecha_limite) params.set('due', task.fecha_limite);\nif (task.fecha_inicio) params.set('start', task.fecha_inicio);\nif (task.estado === 'completada') params.set('dueComplete', 'true');\nif (task.responsable) {\n  const memberId = memberIdFor(task.responsable);\n  if (memberId) params.set('idMembers', memberId);\n}\n\nconst method = task.trello_card_id ? 'PUT' : 'POST';\nconst path = task.trello_card_id ? `/cards/${task.trello_card_id}` : '/cards';\nreturn [{ json: {\n  needs_sync: true,\n  method,\n  url: `https://api.trello.com/1${path}?${params.toString()}`,\n  task_id: task.id,\n  existing_card_id: task.trello_card_id || '',\n  trello_sync: { status: 'pendiente' }\n}}];"
+        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst rows = $('Run Task Query').all().map(i => i.json);\nconst task = rows[0] || {};\nconst syncable = ['created','assigned','updated'].includes(task.action);\nif (!syncable) {\n  return [{ json: { needs_sync: false, trello_sync: { status: 'no_aplica' } } }];\n}\n\nconst defaultListId = process.env.TRELLO_DEFAULT_LIST_ID || process.env.TRELLO_TASKS_LIST_ID || '';\nconst listId = task.trello_list_id || defaultListId;\nif (!task.trello_card_id && !listId) {\n  return [{ json: { needs_sync: false, trello_sync: { status: 'omitido', detalle: 'falta TRELLO_DEFAULT_LIST_ID o una fase vinculada a lista Trello' }, task_id: task.id } }];\n}\n\nfunction memberMap() {\n  try { return JSON.parse(process.env.TRELLO_MEMBER_MAP_JSON || '{}'); } catch (e) { return {}; }\n}\nfunction norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, ''); }\nfunction memberIdFor(name) {\n  const map = memberMap();\n  const direct = map[name] || map[norm(name)];\n  if (direct) return direct;\n  const hit = Object.entries(map).find(([k]) => norm(k) === norm(name));\n  return hit ? hit[1] : '';\n}\n\nconst params = new URLSearchParams();\nparams.set('name', `#${task.id} ${task.titulo}`.slice(0, 160));\nparams.set('desc', String(task.descripcion || task.titulo || '').slice(0, 1500));\nif (listId) params.set('idList', listId);\nif (task.fecha_limite) params.set('due', task.fecha_limite);\nif (task.fecha_inicio) params.set('start', task.fecha_inicio);\nif (task.estado === 'completada') params.set('dueComplete', 'true');\nif (task.estado && task.estado !== 'completada') params.set('dueComplete', 'false');\nif (task.responsable) {\n  const memberId = memberIdFor(task.responsable);\n  if (memberId) params.set('idMembers', memberId);\n}\n\nconst method = task.trello_card_id ? 'PUT' : 'POST';\nconst path = task.trello_card_id ? `/cards/${task.trello_card_id}` : '/cards';\nreturn [{ json: {\n  needs_sync: true,\n  method,\n  url: `https://api.trello.com/1${path}?${params.toString()}`,\n  task_id: task.id,\n  existing_card_id: task.trello_card_id || '',\n  trello_sync: { status: 'pendiente' }\n}}];"
       }
     },
     {
@@ -146,7 +146,8 @@
           "name": "Trello account"
         }
       },
-      "continueOnFail": true
+      "continueOnFail": true,
+      "alwaysOutputData": true
     },
     {
       "id": "store-trello-card",
@@ -169,7 +170,9 @@
           "id": "upx1y0H6Nw7XOqLJ",
           "name": "Postgres account"
         }
-      }
+      },
+      "continueOnFail": true,
+      "alwaysOutputData": true
     },
     {
       "id": "format-task",

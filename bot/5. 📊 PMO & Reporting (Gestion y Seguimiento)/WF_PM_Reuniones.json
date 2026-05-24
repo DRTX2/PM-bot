@@ -45,12 +45,12 @@
         0
       ],
       "parameters": {
-        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst row = $json; const ctx = $('Execute Workflow Trigger').item.json || {};\nconst tareas = typeof row.tareas === 'string' ? JSON.parse(row.tareas) : row.tareas;\nconst bloqueos = typeof row.bloqueos === 'string' ? JSON.parse(row.bloqueos) : row.bloqueos;\nconst riesgos = typeof row.riesgos === 'string' ? JSON.parse(row.riesgos) : row.riesgos;\nconst entregables = typeof row.entregables === 'string' ? JSON.parse(row.entregables) : row.entregables;\nconst reuniones = typeof row.reuniones === 'string' ? JSON.parse(row.reuniones) : row.reuniones;\nconst sub = String(ctx.sub_intencion || 'agendar').toLowerCase();\nif (['listar','lista','ver'].includes(sub)) {\n  const respuestaLista = reuniones.length\n    ? 'Reuniones registradas:\\n' + reuniones.map(m => `- #${m.id} ${m.titulo} | ${m.fecha_reunion || 'sin fecha'} | ${m.estado || 'programada'} | ${m.discord_event_url || 'sin evento Discord'} | participantes: ${(m.participantes || []).join(', ') || 'sin definir'}`).join('\\n')\n    : 'No hay reuniones registradas.';\n  return [{ json: { respuesta: respuestaLista, should_store: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen } }];\n}\nconst raw = String(ctx.datos?.texto || ctx.mensaje_original || '');\nconst titulo = raw.replace(/^\\/pm\\s+reunion\\s+\\w+/i, '').replace(/(?:cuando|cu[aá]ndo|fecha|para|hora|donde|d[oó]nde|lugar|participantes|asistentes|con):?.*$/i, '').trim() || 'Reunion de seguimiento PetSafe';\nfunction dateFromText() {\n  const direct = ctx.datos?.fecha_reunion || raw.match(/(?:cuando|cu[aá]ndo|fecha|para):?\\s*(\\d{4}-\\d{2}-\\d{2})/i)?.[1];\n  if (direct) return direct;\n  const anyDate = raw.match(/(\\d{4}-\\d{2}-\\d{2})/)?.[1];\n  if (anyDate) return anyDate;\n  const d = new Date();\n  if (/ma[nñ]ana/i.test(raw)) { d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); }\n  if (/\\bhoy\\b/i.test(raw)) return d.toISOString().slice(0, 10);\n  return null;\n}\nconst timeMatch = raw.match(/(?:hora:?\\s*|a las\\s*|desde las\\s*)([01]?\\d|2[0-3])(?::([0-5]\\d))?/i);\nconst date = dateFromText();\nconst hour = timeMatch ? String(timeMatch[1]).padStart(2, '0') : null;\nconst minute = timeMatch ? String(timeMatch[2] || '00').padStart(2, '0') : null;\nif (!date || !hour) {\n  const respuestaFaltante = [\n    `Para agendar \"${titulo}\" necesito fecha y hora.`,\n    'Formato sugerido: `/pm reunion agendar mitigar impedimentos cuando: 2026-05-27 hora: 10:00 donde: videollamada participantes: todos`.',\n    'Si no indicas lugar usare videollamada; si no indicas participantes asumire todo el equipo.'\n  ].join('\\n');\n  return [{ json: { respuesta: respuestaFaltante, should_store: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen } }];\n}\nconst durationRaw = Number(raw.match(/(?:duracion|duraci[oó]n|minutos):?\\s*(\\d{1,3})/i)?.[1] || process.env.PM_MEETING_DURATION_MINUTES || 45);\nconst duracion = Math.max(15, Math.min(240, Number.isFinite(durationRaw) ? durationRaw : 45));\nconst lugar = ctx.datos?.lugar || raw.match(/(?:donde|d[oó]nde|lugar|ubicacion|ubicaci[oó]n):?\\s*([^,;\\n]+?)(?=\\s+(?:participantes|asistentes|con|duracion|duraci[oó]n|minutos|cuando|cu[aá]ndo|fecha|hora):?\\s|$)/i)?.[1]?.trim() || 'videollamada';\nconst TEAM = ['David Manjarres','David Josue Barragan Pozo','Josue Joel Garcia Abata','Fernando Joel Bonilla Guerrero','Joel Bonilla'];\nconst rawParticipants = ctx.datos?.participantes || raw.match(/(?:participantes|asistentes|con):?\\s*([^;\\n]+)/i)?.[1]?.trim() || 'todos';\nconst participantes = /todos|equipo/i.test(rawParticipants) ? TEAM : rawParticipants.split(/,|\\sy\\s/).map(p => p.trim()).filter(Boolean);\nlet mentionMap = {};\ntry { mentionMap = JSON.parse(process.env.PM_TEAM_DISCORD_MAP_JSON || '{}'); } catch (e) {}\nconst menciones = participantes.map(p => mentionMap[p] ? `<@${mentionMap[p]}>` : p).join(', ');\nconst start = new Date(`${date}T${hour}:${minute}:00-05:00`);\nif (!Number.isFinite(start.getTime()) || start <= new Date()) {\n  return [{ json: { respuesta: `Para crear una reunion real en Discord necesito una fecha y hora futura. Recibi: ${date} ${hour}:${minute}.`, should_store: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen } }];\n}\nconst end = new Date(start.getTime() + duracion * 60000);\nconst fechaReunion = start.toISOString();\nconst fechaFin = end.toISOString();\nconst agenda = [\n  `Reunion PM PetSafe: ${titulo}`,\n  `Cuando: ${date} ${hour}:${minute}`,\n  `Duracion: ${duracion} min`,\n  `Donde: ${lugar}`,\n  `Participantes: ${participantes.join(', ')}`,\n  '',\n  '1. Estado general: pendientes, atrasos y entregables proximos.',\n  '2. Tareas a revisar:',\n  ...(tareas.length ? tareas.map(t => `- #${t.id} ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - ' + t.fecha_limite : ''}`) : ['- Sin tareas activas.']),\n  '3. Bloqueos:',\n  ...(bloqueos.length ? bloqueos.map(b => `- #${b.id} [${b.severidad}] ${b.descripcion}`) : ['- Sin bloqueos activos.']),\n  '4. Riesgos:',\n  ...(riesgos.length ? riesgos.map(r => `- #${r.id} [${r.prioridad_calculada}] ${r.descripcion}`) : ['- Sin riesgos abiertos.']),\n  '5. Entregables:',\n  ...(entregables.length ? entregables.map(e => `- #${e.id} ${e.nombre} - ${e.responsable || 'sin responsable'}${e.fecha_limite ? ' - ' + e.fecha_limite : ''}`) : ['- Sin entregables pendientes.']),\n  '',\n  'Cierre esperado: registrar decisiones, acuerdos y compromisos con responsable y fecha.'\n].join('\\n');\nconst guildId = process.env.DISCORD_GUILD_ID || '';\nconst voiceChannelId = process.env.DISCORD_MEETING_VOICE_CHANNEL_ID || '';\nconst meetingChannelId = process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen;\nconst description = agenda.slice(0, 1000);\nconst payload = {\n  name: titulo.slice(0, 100),\n  privacy_level: 2,\n  scheduled_start_time: fechaReunion,\n  scheduled_end_time: fechaFin,\n  description\n};\nif (voiceChannelId) {\n  payload.entity_type = 2;\n  payload.channel_id = voiceChannelId;\n} else {\n  payload.entity_type = 3;\n  payload.channel_id = null;\n  payload.entity_metadata = { location: lugar === 'videollamada' ? 'Discord: canal General / #reuniones' : lugar };\n}\nreturn [{ json: {\n  respuesta_base: agenda,\n  titulo,\n  fecha_reunion: fechaReunion,\n  fecha_fin: fechaFin,\n  duracion_minutos: duracion,\n  participantes: participantes.join(','),\n  participantes_texto: participantes.join(', '),\n  menciones,\n  lugar,\n  guild_id: guildId,\n  meeting_channel_id: meetingChannelId,\n  discord_ready: Boolean(guildId && process.env.DISCORD_BOT_TOKEN),\n  discord_event_payload: payload,\n  discord_event_api_url: `https://discord.com/api/v10/guilds/${guildId || 'missing-guild'}/scheduled-events`,\n  should_store: true,\n  canal_destino: 'DISCORD_CHANNEL_REUNIONES',\n  canal_id: meetingChannelId\n} }];"
+        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst row = $json; const ctx = $('Execute Workflow Trigger').item.json || {};\nconst tareas = typeof row.tareas === 'string' ? JSON.parse(row.tareas) : row.tareas;\nconst bloqueos = typeof row.bloqueos === 'string' ? JSON.parse(row.bloqueos) : row.bloqueos;\nconst riesgos = typeof row.riesgos === 'string' ? JSON.parse(row.riesgos) : row.riesgos;\nconst entregables = typeof row.entregables === 'string' ? JSON.parse(row.entregables) : row.entregables;\nconst reuniones = typeof row.reuniones === 'string' ? JSON.parse(row.reuniones) : row.reuniones;\nconst sub = String(ctx.sub_intencion || 'agendar').toLowerCase();\nconst raw = String(ctx.datos?.texto || ctx.mensaje_original || '');\nconst TEAM = ['David Manjarres','David Josue Barragan Pozo','Josue Joel Garcia Abata','Fernando Joel Bonilla Guerrero','Joel Bonilla'];\nconst guildId = process.env.DISCORD_GUILD_ID || '';\nconst voiceChannelId = process.env.DISCORD_MEETING_VOICE_CHANNEL_ID || '';\nconst meetingChannelId = process.env.DISCORD_CHANNEL_REUNIONES || ctx.canal_origen;\nconst stopFields = 'participantes|asistentes|con|duracion|duraci[oó]n|minutos|cuando|cu[aá]ndo|fecha|hora|donde|d[oó]nde|lugar|ubicacion|ubicaci[oó]n|acuerdos?|compromisos?|decisiones?|acta';\nfunction field(rx) {\n  return raw.match(new RegExp('(?:' + rx + '):?\\\\s*([^,;\\\\n]+?)(?=\\\\s+(?:' + stopFields + '):?\\\\s|$)', 'i'))?.[1]?.trim() || null;\n}\nfunction meetingId() { return Number(ctx.datos?.id || raw.match(/#?(\\d+)/)?.[1] || 0) || null; }\nfunction byId(id) { return reuniones.find(m => Number(m.id) === Number(id)); }\nfunction localParts(iso) {\n  if (!iso) return { date: null, hour: null, minute: null };\n  const d = new Date(iso);\n  if (!Number.isFinite(d.getTime())) return { date: null, hour: null, minute: null };\n  const ec = new Date(d.getTime() - (5 * 60 * 60 * 1000));\n  return { date: ec.toISOString().slice(0, 10), hour: ec.toISOString().slice(11, 13), minute: ec.toISOString().slice(14, 16) };\n}\nfunction dateFromText(fallbackIso = null) {\n  const direct = ctx.datos?.fecha_reunion || raw.match(/(?:cuando|cu[aá]ndo|fecha|para):?\\s*(\\d{4}-\\d{2}-\\d{2})/i)?.[1];\n  if (direct) return direct;\n  const anyDate = raw.match(/(\\d{4}-\\d{2}-\\d{2})/)?.[1];\n  if (anyDate) return anyDate;\n  const d = new Date();\n  if (/ma[nñ]ana/i.test(raw)) { d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); }\n  if (/\\bhoy\\b/i.test(raw)) return d.toISOString().slice(0, 10);\n  return localParts(fallbackIso).date;\n}\nfunction timeFromText(fallbackIso = null) {\n  const hit = raw.match(/(?:hora:?\\s*|a las\\s*|desde las\\s*)([01]?\\d|2[0-3])(?::([0-5]\\d))?/i);\n  if (hit) return { hour: String(hit[1]).padStart(2, '0'), minute: String(hit[2] || '00').padStart(2, '0') };\n  const p = localParts(fallbackIso);\n  return { hour: p.hour, minute: p.minute };\n}\nfunction topic(defaultTitle = 'Reunion de seguimiento PetSafe') {\n  const text = raw\n    .replace(/^\\/pm\\s+reuni[oó]n\\s+\\w+/i, '')\n    .replace(/^\\/reuni[oó]n\\s+\\w+/i, '')\n    .replace(/#\\d+/g, '')\n    .replace(new RegExp('\\\\s+(?:' + stopFields + '):?.*$', 'i'), '')\n    .trim();\n  return text || defaultTitle;\n}\nfunction participantsFromText(existing = []) {\n  const rawParticipants = ctx.datos?.participantes || field('participantes|asistentes|con') || (existing.length ? existing.join(',') : 'todos');\n  return /todos|equipo/i.test(rawParticipants) ? TEAM : rawParticipants.split(/,|\\sy\\s/).map(p => p.trim()).filter(Boolean);\n}\nfunction mentions(participantes) {\n  let mentionMap = {};\n  try { mentionMap = JSON.parse(process.env.PM_TEAM_DISCORD_MAP_JSON || '{}'); } catch (e) {}\n  return participantes.map(p => mentionMap[p] ? `<@${mentionMap[p]}>` : p).join(', ');\n}\nfunction agendaFor({ titulo, date, hour, minute, duracion, lugar, participantes }) {\n  return [\n    `Reunion PM PetSafe: ${titulo}`,\n    `Cuando: ${date} ${hour}:${minute}`,\n    `Duracion: ${duracion} min`,\n    `Donde: ${lugar}`,\n    `Participantes: ${participantes.join(', ')}`,\n    '',\n    '1. Estado general: pendientes, atrasos y entregables proximos.',\n    '2. Tareas a revisar:',\n    ...(tareas.length ? tareas.map(t => `- #${t.id} ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - ' + t.fecha_limite : ''}`) : ['- Sin tareas activas.']),\n    '3. Bloqueos:',\n    ...(bloqueos.length ? bloqueos.map(b => `- #${b.id} [${b.severidad}] ${b.descripcion}`) : ['- Sin bloqueos activos.']),\n    '4. Riesgos:',\n    ...(riesgos.length ? riesgos.map(r => `- #${r.id} [${r.prioridad_calculada}] ${r.descripcion}`) : ['- Sin riesgos abiertos.']),\n    '5. Entregables:',\n    ...(entregables.length ? entregables.map(e => `- #${e.id} ${e.nombre} - ${e.responsable || 'sin responsable'}${e.fecha_limite ? ' - ' + e.fecha_limite : ''}`) : ['- Sin entregables pendientes.']),\n    '',\n    'Cierre esperado: registrar decisiones, acuerdos y compromisos con responsable y fecha.'\n  ].join('\\n');\n}\nfunction eventPayload({ titulo, fechaReunion, fechaFin, agenda, lugar }) {\n  const payload = {\n    name: titulo.slice(0, 100),\n    privacy_level: 2,\n    scheduled_start_time: fechaReunion,\n    scheduled_end_time: fechaFin,\n    description: agenda.slice(0, 1000)\n  };\n  if (voiceChannelId) {\n    payload.entity_type = 2;\n    payload.channel_id = voiceChannelId;\n  } else {\n    payload.entity_type = 3;\n    payload.channel_id = null;\n    payload.entity_metadata = { location: lugar === 'videollamada' ? 'Discord: canal General / #reuniones' : lugar };\n  }\n  return payload;\n}\nif (['listar','lista','ver'].includes(sub)) {\n  const respuestaLista = reuniones.length\n    ? 'Reuniones registradas:\\n' + reuniones.map(m => `- #${m.id} ${m.titulo} | ${m.fecha_reunion || 'sin fecha'} | ${m.estado || 'programada'} | ${m.discord_event_url || 'sin evento Discord'} | participantes: ${(m.participantes || []).join(', ') || 'sin definir'}`).join('\\n')\n    : 'No hay reuniones registradas.';\n  return [{ json: { respuesta: respuestaLista, needs_write: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: meetingChannelId } }];\n}\n\nif (['cancelar','cancelada','eliminar','borrar'].includes(sub)) {\n  const id = meetingId();\n  const current = byId(id);\n  if (!id || !current) {\n    return [{ json: { respuesta: 'Para cancelar necesito un ID valido. Ejemplo: `/pm reunion cancelar #2`.', needs_write: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: meetingChannelId } }];\n  }\n  return [{ json: {\n    operation: 'cancel',\n    needs_write: true,\n    needs_discord_delete: Boolean(current.discord_event_id && guildId && process.env.DISCORD_BOT_TOKEN),\n    http_url: `https://discord.com/api/v10/guilds/${guildId}/scheduled-events/${current.discord_event_id || 'missing-event'}`,\n    meeting_id: id,\n    titulo: current.titulo,\n    discord_event_id: current.discord_event_id || '',\n    discord_event_url: current.discord_event_url || '',\n    canal_destino: 'DISCORD_CHANNEL_REUNIONES',\n    canal_id: meetingChannelId\n  } }];\n}\n\nif (['acta','registrar_acta','acuerdos','compromisos'].includes(sub)) {\n  const id = meetingId();\n  const current = byId(id);\n  if (!id || !current) {\n    return [{ json: { respuesta: 'Para registrar acta necesito el ID de la reunion. Ejemplo: `/pm reunion acta #2 acuerdos: ... compromisos: ... decisiones: ...`.', needs_write: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: meetingChannelId } }];\n  }\n  const acuerdos = field('acuerdos?') || '';\n  const compromisos = field('compromisos?') || '';\n  const decisiones = field('decisiones?') || '';\n  const acta = field('acta') || raw.replace(/^\\/pm\\s+reuni[oó]n\\s+\\w+/i, '').replace(/#\\d+/g, '').trim();\n  if (!acta && !acuerdos && !compromisos && !decisiones) {\n    return [{ json: { respuesta: 'No encontre contenido de acta. Usa `acuerdos:`, `compromisos:` o `decisiones:`.', needs_write: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: meetingChannelId } }];\n  }\n  return [{ json: {\n    operation: 'acta',\n    needs_write: true,\n    meeting_id: id,\n    titulo: current.titulo,\n    acta,\n    acuerdos,\n    compromisos,\n    decisiones,\n    canal_destino: 'DISCORD_CHANNEL_REUNIONES',\n    canal_id: meetingChannelId\n  } }];\n}\n\nconst updating = ['actualizar','update','editar','reprogramar'].includes(sub);\nconst current = updating ? byId(meetingId()) : null;\nif (updating && !current) {\n  return [{ json: { respuesta: 'Para actualizar necesito un ID valido. Ejemplo: `/pm reunion actualizar #2 cuando: 2026-05-27 hora: 11:00 participantes: todos`.', needs_write: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: meetingChannelId } }];\n}\nconst titulo = updating ? topic(current.titulo) : topic();\nconst date = dateFromText(current?.fecha_reunion || null);\nconst time = timeFromText(current?.fecha_reunion || null);\nconst hour = time.hour;\nconst minute = time.minute;\nif (!date || !hour) {\n  const respuestaFaltante = [\n    `Para agendar \"${titulo}\" necesito fecha y hora.`,\n    'Formato sugerido: `/pm reunion agendar mitigar impedimentos cuando: 2026-05-27 hora: 10:00 donde: videollamada participantes: todos`.',\n    'Si no indicas lugar usare videollamada; si no indicas participantes asumire todo el equipo.'\n  ].join('\\n');\n  return [{ json: { respuesta: respuestaFaltante, needs_write: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: meetingChannelId } }];\n}\nconst durationRaw = Number(raw.match(/(?:duracion|duraci[oó]n|minutos):?\\s*(\\d{1,3})/i)?.[1] || process.env.PM_MEETING_DURATION_MINUTES || 45);\nconst duracionBase = updating ? Number(current.duracion_minutos || 45) : Number(process.env.PM_MEETING_DURATION_MINUTES || 45);\nconst duracion = Math.max(15, Math.min(240, Number.isFinite(durationRaw) && /(?:duracion|duraci[oó]n|minutos):?\\s*\\d/i.test(raw) ? durationRaw : duracionBase));\nconst lugar = ctx.datos?.lugar || field('donde|d[oó]nde|lugar|ubicacion|ubicaci[oó]n') || current?.lugar || 'videollamada';\nconst participantes = participantsFromText(current?.participantes || []);\nconst menciones = mentions(participantes);\nconst start = new Date(`${date}T${hour}:${minute}:00-05:00`);\nif (!Number.isFinite(start.getTime()) || start <= new Date()) {\n  return [{ json: { respuesta: `Para crear o actualizar una reunion real en Discord necesito fecha y hora futura. Recibi: ${date} ${hour}:${minute}.`, needs_write: false, canal_destino: 'DISCORD_CHANNEL_REUNIONES', canal_id: meetingChannelId } }];\n}\nconst end = new Date(start.getTime() + duracion * 60000);\nconst fechaReunion = start.toISOString();\nconst fechaFin = end.toISOString();\nconst agenda = agendaFor({ titulo, date, hour, minute, duracion, lugar, participantes });\nconst payload = eventPayload({ titulo, fechaReunion, fechaFin, agenda, lugar });\nconst eventId = current?.discord_event_id || '';\nreturn [{ json: {\n  operation: updating ? 'update' : 'create',\n  respuesta_base: agenda,\n  titulo,\n  fecha_reunion: fechaReunion,\n  fecha_fin: fechaFin,\n  duracion_minutos: duracion,\n  participantes: participantes.join(','),\n  participantes_texto: participantes.join(', '),\n  menciones,\n  lugar,\n  guild_id: guildId,\n  meeting_channel_id: meetingChannelId,\n  discord_ready: Boolean(guildId && process.env.DISCORD_BOT_TOKEN),\n  meeting_id: current?.id || null,\n  existing_discord_event_id: eventId,\n  existing_discord_event_url: current?.discord_event_url || '',\n  discord_event_payload: payload,\n  needs_write: true,\n  needs_discord_upsert: Boolean(guildId && process.env.DISCORD_BOT_TOKEN && (!updating || eventId)),\n  http_method: updating ? 'PATCH' : 'POST',\n  http_url: updating\n    ? `https://discord.com/api/v10/guilds/${guildId || 'missing-guild'}/scheduled-events/${eventId || 'missing-event'}`\n    : `https://discord.com/api/v10/guilds/${guildId || 'missing-guild'}/scheduled-events`,\n  should_queue_reminder: true,\n  canal_destino: 'DISCORD_CHANNEL_REUNIONES',\n  canal_id: meetingChannelId\n} }];"
       }
     },
     {
-      "id": "should-store-meeting?",
-      "name": "Should Store Meeting?",
+      "id": "needs-meeting-write?",
+      "name": "Needs Meeting Write?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
@@ -65,8 +65,8 @@
           },
           "conditions": [
             {
-              "id": "store",
-              "leftValue": "={{ $json.should_store ? 1 : 0 }}",
+              "id": "write",
+              "leftValue": "={{ $json.needs_write ? 1 : 0 }}",
               "rightValue": 1,
               "operator": {
                 "type": "number",
@@ -80,17 +80,104 @@
       }
     },
     {
-      "id": "create-discord-event",
-      "name": "Create Discord Scheduled Event",
+      "id": "needs-discord-delete?",
+      "name": "Needs Discord Delete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        -120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "delete",
+              "leftValue": "={{ $json.needs_discord_delete ? 1 : 0 }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "needs-discord-upsert?",
+      "name": "Needs Discord Upsert?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1180,
+        20
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "upsert",
+              "leftValue": "={{ $json.needs_discord_upsert ? 1 : 0 }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "discord-delete",
+      "name": "Discord Meeting Delete",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        960,
-        -100
+        1180,
+        -180
       ],
       "parameters": {
-        "method": "POST",
-        "url": "={{ $json.discord_event_api_url }}",
+        "method": "DELETE",
+        "url": "={{ $json.http_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ \"Bot \" + $env.DISCORD_BOT_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "discord-upsert",
+      "name": "Discord Meeting Upsert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1400,
+        -20
+      ],
+      "parameters": {
+        "method": "={{ $json.http_method }}",
+        "url": "={{ $json.http_url }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -112,19 +199,32 @@
       "continueOnFail": true
     },
     {
-      "id": "store-meeting",
-      "name": "Store Meeting Agenda",
+      "id": "build-meeting-mutation",
+      "name": "Build Meeting Mutation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1620,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst base = $('Format Meeting Agenda').item.json;\nlet discord = {};\ntry { discord = $('Discord Meeting Upsert').item.json || {}; } catch (e) {}\ntry { if (!Object.keys(discord).length) discord = $('Discord Meeting Delete').item.json || {}; } catch (e) {}\nconst rawError = discord.error?.message || discord.message || discord.errors || '';\nconst discordError = rawError ? (typeof rawError === 'string' ? rawError : JSON.stringify(rawError)).slice(0, 300) : '';\nconst eventId = discord.id || base.existing_discord_event_id || '';\nconst eventUrl = eventId && base.guild_id ? `https://discord.com/events/${base.guild_id}/${eventId}` : (base.existing_discord_event_url || '');\nlet query = 'SELECT 1;';\nlet queryParams = [];\nif (base.operation === 'create') {\n  query = `INSERT INTO pm_reuniones (titulo, tipo, fecha_reunion, duracion_minutos, participantes, lugar, agenda, creado_por, discord_event_id, discord_event_url, discord_event_status)\nVALUES ($1, 'seguimiento', $2::timestamptz, $3, string_to_array($4, ','), $5, $6, $7, $8, $9, $10)\nRETURNING id,titulo,fecha_reunion,duracion_minutos,lugar,participantes,estado,discord_event_id,discord_event_url,discord_event_status;`;\n  queryParams = [base.titulo, base.fecha_reunion, base.duracion_minutos, base.participantes, base.lugar, base.respuesta_base, $('Execute Workflow Trigger').item.json.usuario, eventId || null, eventUrl || null, eventId ? 'created' : 'discord_error'];\n} else if (base.operation === 'update') {\n  query = `WITH upd AS (\n  UPDATE pm_reuniones\n  SET titulo=$1, fecha_reunion=$2::timestamptz, duracion_minutos=$3, participantes=string_to_array($4, ','), lugar=$5, agenda=$6,\n      discord_event_id=COALESCE(NULLIF($7,''), discord_event_id),\n      discord_event_url=COALESCE(NULLIF($8,''), discord_event_url),\n      discord_event_status=$9\n  WHERE id=$10\n  RETURNING id,titulo,fecha_reunion,duracion_minutos,lugar,participantes,estado,discord_event_id,discord_event_url,discord_event_status\n), cancel_old AS (\n  UPDATE events_outbox SET status='cancelled'\n  WHERE action='pm_meeting_reminder' AND status IN ('pending','sending') AND idempotency_key LIKE ('pm-meeting-reminder-' || $10 || '-%')\n  RETURNING outbox_id\n)\nSELECT upd.*, (SELECT COUNT(*) FROM cancel_old) AS reminders_cancelled FROM upd;`;\n  queryParams = [base.titulo, base.fecha_reunion, base.duracion_minutos, base.participantes, base.lugar, base.respuesta_base, eventId || '', eventUrl || '', discordError ? 'discord_update_error' : 'updated', base.meeting_id];\n} else if (base.operation === 'cancel') {\n  query = `WITH upd AS (\n  UPDATE pm_reuniones\n  SET estado='cancelada', discord_event_status=$2\n  WHERE id=$1\n  RETURNING id,titulo,fecha_reunion,duracion_minutos,lugar,participantes,estado,discord_event_id,discord_event_url,discord_event_status\n), cancel_old AS (\n  UPDATE events_outbox SET status='cancelled'\n  WHERE action='pm_meeting_reminder' AND status IN ('pending','sending') AND idempotency_key LIKE ('pm-meeting-reminder-' || $1 || '-%')\n  RETURNING outbox_id\n)\nSELECT upd.*, (SELECT COUNT(*) FROM cancel_old) AS reminders_cancelled FROM upd;`;\n  queryParams = [base.meeting_id, discordError ? 'discord_cancel_error' : 'cancelled'];\n} else if (base.operation === 'acta') {\n  query = `UPDATE pm_reuniones\nSET acta=$1, acuerdos=$2, compromisos=$3, decisiones=$4, estado='completada'\nWHERE id=$5\nRETURNING id,titulo,fecha_reunion,duracion_minutos,lugar,participantes,estado,discord_event_id,discord_event_url,discord_event_status;`;\n  queryParams = [base.acta || null, base.acuerdos || null, base.compromisos || null, base.decisiones || null, base.meeting_id];\n}\nreturn [{ json: { ...base, query, query_params: queryParams, discord_event_id: eventId, discord_event_url: eventUrl, discord_error: discordError } }];"
+      }
+    },
+    {
+      "id": "run-meeting-mutation",
+      "name": "Run Meeting Mutation",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1200,
-        -100
+        1840,
+        0
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO pm_reuniones (titulo, tipo, fecha_reunion, duracion_minutos, participantes, lugar, agenda, creado_por, discord_event_id, discord_event_url, discord_event_status)\nVALUES ($1, 'seguimiento', $2::timestamptz, $3, string_to_array($4, ','), $5, $6, $7, $8, $9, $10)\nRETURNING id;",
+        "query": "={{ $json.query }}",
         "options": {
-          "queryReplacement": "={{ [ $(\"Format Meeting Agenda\").item.json.titulo, $(\"Format Meeting Agenda\").item.json.fecha_reunion, $(\"Format Meeting Agenda\").item.json.duracion_minutos, $(\"Format Meeting Agenda\").item.json.participantes, $(\"Format Meeting Agenda\").item.json.lugar, $(\"Format Meeting Agenda\").item.json.respuesta_base, $(\"Execute Workflow Trigger\").item.json.usuario, $(\"Create Discord Scheduled Event\").item.json.id || null, $(\"Create Discord Scheduled Event\").item.json.id ? (\"https://discord.com/events/\" + $(\"Format Meeting Agenda\").item.json.guild_id + \"/\" + $(\"Create Discord Scheduled Event\").item.json.id) : null, $(\"Create Discord Scheduled Event\").item.json.id ? \"created\" : \"error\" ] }}"
+          "queryReplacement": "={{ $json.query_params }}"
         }
       },
       "credentials": {
@@ -140,11 +240,42 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1440,
-        -100
+        2060,
+        0
       ],
       "parameters": {
-        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst base = $('Format Meeting Agenda').item.json;\nconst stored = $('Store Meeting Agenda').item.json || {};\nlet event = {};\ntry { event = $('Create Discord Scheduled Event').item.json || {}; } catch (e) {}\nconst eventId = event.id || '';\nconst eventUrl = eventId && base.guild_id ? `https://discord.com/events/${base.guild_id}/${eventId}` : '';\nconst rawError = event.error?.message || event.message || event.errors || '';\nconst createError = rawError ? (typeof rawError === 'string' ? rawError : JSON.stringify(rawError)).slice(0, 300) : '';\nconst lines = [];\nif (eventId) {\n  lines.push(`Reunion Discord programada: ${base.titulo}`);\n  lines.push(`Evento: ${eventUrl}`);\n} else {\n  lines.push(`Reunion registrada, pero el evento Discord no se pudo crear automaticamente.`);\n  lines.push(`Motivo probable: ${base.discord_ready ? (createError || 'Discord no devolvio id de evento.') : 'falta DISCORD_GUILD_ID o DISCORD_BOT_TOKEN en n8n.'}`);\n}\nlines.push(`ID interno: #${stored.id || 'pendiente'}`);\nlines.push(`Cuando: ${base.fecha_reunion}`);\nlines.push(`Duracion: ${base.duracion_minutos} min`);\nlines.push(`Donde: ${base.lugar}`);\nlines.push(`Participantes: ${base.participantes_texto}`);\nif (base.menciones) lines.push(`Notificados: ${base.menciones}`);\nlines.push('');\nlines.push(base.respuesta_base);\nif (eventId) lines.push('', 'Recordatorio automatico: 15 minutos antes en este canal.');\nconst reminderContent = [\n  `Recordatorio: la reunion \"${base.titulo}\" empieza en 15 minutos.`,\n  eventUrl ? `Evento Discord: ${eventUrl}` : '',\n  base.menciones ? `Participantes: ${base.menciones}` : `Participantes: ${base.participantes_texto}`\n].filter(Boolean).join('\\n');\nreturn [{ json: {\n  respuesta: lines.join('\\n'),\n  canal_destino: 'DISCORD_CHANNEL_REUNIONES',\n  canal_id: base.meeting_channel_id,\n  storage: 'postgres:pm_reuniones',\n  reminder_payload: { channel_id: base.meeting_channel_id, content: reminderContent },\n  reminder_at: base.fecha_reunion,\n  meeting_id: stored.id || null,\n  discord_event_id: eventId,\n  discord_event_url: eventUrl\n} }];"
+        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst base = $('Build Meeting Mutation').item.json;\nconst stored = $('Run Meeting Mutation').item.json || {};\nconst lines = [];\nconst eventId = base.discord_event_id || stored.discord_event_id || '';\nconst eventUrl = base.discord_event_url || stored.discord_event_url || '';\nconst discordError = base.discord_error || '';\nif (base.operation === 'create') {\n  if (eventId) {\n    lines.push(`Reunion Discord programada: ${base.titulo}`);\n    lines.push(`Evento: ${eventUrl}`);\n  } else {\n    lines.push(`Reunion registrada, pero el evento Discord no se pudo crear automaticamente.`);\n    lines.push(`Motivo probable: ${base.discord_ready ? (discordError || 'Discord no devolvio id de evento.') : 'falta DISCORD_GUILD_ID o DISCORD_BOT_TOKEN en n8n.'}`);\n  }\n  lines.push(`ID interno: #${stored.id || 'pendiente'}`);\n  lines.push(`Cuando: ${base.fecha_reunion}`);\n  lines.push(`Duracion: ${base.duracion_minutos} min`);\n  lines.push(`Donde: ${base.lugar}`);\n  lines.push(`Participantes: ${base.participantes_texto}`);\n  if (base.menciones) lines.push(`Notificados: ${base.menciones}`);\n  lines.push('');\n  lines.push(base.respuesta_base);\n  if (eventId) lines.push('', 'Recordatorio automatico: 15 minutos antes en este canal.');\n} else if (base.operation === 'update') {\n  lines.push(`Reunion actualizada: #${stored.id || base.meeting_id} ${base.titulo}`);\n  if (eventUrl) lines.push(`Evento: ${eventUrl}`);\n  if (discordError) lines.push(`Discord: no pude actualizar el evento automaticamente (${discordError}).`);\n  lines.push(`Cuando: ${base.fecha_reunion}`);\n  lines.push(`Duracion: ${base.duracion_minutos} min`);\n  lines.push(`Donde: ${base.lugar}`);\n  lines.push(`Participantes: ${base.participantes_texto}`);\n  lines.push('Recordatorio automatico reajustado a 15 minutos antes.');\n} else if (base.operation === 'cancel') {\n  lines.push(`Reunion cancelada: #${stored.id || base.meeting_id} ${stored.titulo || base.titulo}`);\n  if (eventUrl) lines.push(`Evento: ${eventUrl}`);\n  lines.push(discordError ? `Discord: revisar manualmente, no pude eliminar el evento (${discordError}).` : 'Discord: evento eliminado o no habia evento vinculado.');\n  lines.push(`Recordatorios cancelados: ${stored.reminders_cancelled || 0}.`);\n} else if (base.operation === 'acta') {\n  lines.push(`Acta registrada: #${stored.id || base.meeting_id} ${stored.titulo || base.titulo}`);\n  if (base.acuerdos) lines.push(`Acuerdos: ${base.acuerdos}`);\n  if (base.compromisos) lines.push(`Compromisos: ${base.compromisos}`);\n  if (base.decisiones) lines.push(`Decisiones: ${base.decisiones}`);\n  lines.push('Estado: completada. Las decisiones/tareas derivadas se pueden registrar con `/pm decision registrar` y `/pm tarea crear`.');\n} else {\n  lines.push('Operacion de reunion ejecutada.');\n}\nconst reminderContent = [\n  `Recordatorio: la reunion \"${base.titulo}\" empieza en 15 minutos.`,\n  eventUrl ? `Evento Discord: ${eventUrl}` : '',\n  base.menciones ? `Participantes: ${base.menciones}` : `Participantes: ${base.participantes_texto}`\n].filter(Boolean).join('\\n');\nreturn [{ json: {\n  respuesta: lines.join('\\n'),\n  canal_destino: 'DISCORD_CHANNEL_REUNIONES',\n  canal_id: base.meeting_channel_id,\n  storage: 'postgres:pm_reuniones',\n  reminder_payload: { channel_id: base.meeting_channel_id, content: reminderContent },\n  reminder_at: base.fecha_reunion,\n  should_queue_reminder: Boolean(base.should_queue_reminder && stored.id && base.fecha_reunion),\n  meeting_id: stored.id || base.meeting_id || null,\n  discord_event_id: eventId,\n  discord_event_url: eventUrl\n} }];"
+      }
+    },
+    {
+      "id": "should-queue-meeting-reminder?",
+      "name": "Should Queue Meeting Reminder?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2280,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "queue",
+              "leftValue": "={{ $json.should_queue_reminder ? 1 : 0 }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       }
     },
     {
@@ -153,14 +284,14 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1680,
-        -100
+        2500,
+        -80
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO events_outbox (event_id, target, action, idempotency_key, payload, scheduled_at)\nVALUES (NULL, 'discord', 'pm_meeting_reminder', $1, $2::jsonb, GREATEST($3::timestamptz - INTERVAL '15 minutes', NOW()))\nON CONFLICT (idempotency_key) DO NOTHING\nRETURNING outbox_id;",
+        "query": "INSERT INTO events_outbox (event_id, target, action, idempotency_key, payload, scheduled_at)\nVALUES (NULL, 'discord', 'pm_meeting_reminder', $1, $2::jsonb, GREATEST($3::timestamptz - INTERVAL '15 minutes', NOW()))\nON CONFLICT (idempotency_key) DO UPDATE\nSET payload=EXCLUDED.payload, scheduled_at=EXCLUDED.scheduled_at, status='pending', retry_count=0, last_error=NULL\nRETURNING outbox_id;",
         "options": {
-          "queryReplacement": "={{ [ \"pm-meeting-reminder-\" + $json.meeting_id + \"-15m\", JSON.stringify($json.reminder_payload), $json.reminder_at ] }}"
+          "queryReplacement": "={{ [ \"pm-meeting-reminder-\" + $json.meeting_id + \"-\" + new Date($json.reminder_at).getTime(), JSON.stringify($json.reminder_payload), $json.reminder_at ] }}"
         }
       },
       "credentials": {
@@ -176,7 +307,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1920,
+        2720,
         0
       ],
       "parameters": {
@@ -211,18 +342,18 @@
       "main": [
         [
           {
-            "node": "Should Store Meeting?",
+            "node": "Needs Meeting Write?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Should Store Meeting?": {
+    "Needs Meeting Write?": {
       "main": [
         [
           {
-            "node": "Create Discord Scheduled Event",
+            "node": "Needs Discord Delete?",
             "type": "main",
             "index": 0
           }
@@ -236,18 +367,76 @@
         ]
       ]
     },
-    "Create Discord Scheduled Event": {
+    "Needs Discord Delete?": {
       "main": [
         [
           {
-            "node": "Store Meeting Agenda",
+            "node": "Discord Meeting Delete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Needs Discord Upsert?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Store Meeting Agenda": {
+    "Needs Discord Upsert?": {
+      "main": [
+        [
+          {
+            "node": "Discord Meeting Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Meeting Mutation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discord Meeting Delete": {
+      "main": [
+        [
+          {
+            "node": "Build Meeting Mutation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discord Meeting Upsert": {
+      "main": [
+        [
+          {
+            "node": "Build Meeting Mutation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Meeting Mutation": {
+      "main": [
+        [
+          {
+            "node": "Run Meeting Mutation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Meeting Mutation": {
       "main": [
         [
           {
@@ -262,7 +451,25 @@
       "main": [
         [
           {
+            "node": "Should Queue Meeting Reminder?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Queue Meeting Reminder?": {
+      "main": [
+        [
+          {
             "node": "Queue Meeting Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Meeting Response",
             "type": "main",
             "index": 0
           }

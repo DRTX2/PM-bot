@@ -61,9 +61,9 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO events_outbox (event_id, target, action, idempotency_key, payload)\nVALUES ($1, 'discord', 'pm_report', $2, $3::jsonb)\nON CONFLICT (idempotency_key) DO NOTHING\nRETURNING outbox_id;",
+        "query": "INSERT INTO events_outbox (event_id, target, action, idempotency_key, payload)\nVALUES (NULL, 'discord', 'pm_report', $1, $2::jsonb)\nON CONFLICT (idempotency_key) DO NOTHING\nRETURNING outbox_id;",
         "options": {
-          "queryReplacement": "={{ [ \"pm-error-\" + Date.now(), \"pm-error-\" + Date.now(), JSON.stringify({ content: $(\"Format Error\").item.json.content, channel_id: $(\"Format Error\").item.json.channel_id }) ] }}"
+          "queryReplacement": "={{ [ \"pm-error-\" + Date.now(), JSON.stringify({ content: $(\"Format Error\").item.json.content, channel_id: $(\"Format Error\").item.json.channel_id }) ] }}"
         }
       },
       "credentials": {
