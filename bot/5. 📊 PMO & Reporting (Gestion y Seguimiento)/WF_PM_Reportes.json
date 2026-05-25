@@ -87,7 +87,7 @@
         -140
       ],
       "parameters": {
-        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst ctx = $('Execute Workflow Trigger').item.json || {};\nconst dias = Number(ctx.datos?.dias || 7);\nconst fileName = $json.fileName || $json.file_name || `PetSafe_Reporte_ultimos${dias}d.pdf`;\nconst respuesta = [\n  `📄 Reporte PDF solicitado (${dias} dias)`,\n  `Archivo: ${fileName}`,\n  'Se esta generando y publicando en el canal configurado de reportes/alertas.',\n  'Para resumen rapido en Discord usa `/reporte 7`; para PDF usa `/reporte pdf 7`.'\n].join('\\n');\nreturn [{ json: { respuesta, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: false } }];"
+        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst ctx = $('Execute Workflow Trigger').item.json || {};\nconst dias = Number(ctx.datos?.dias || 7);\nconst fileName = $json.fileName || $json.file_name || `PetSafe_Reporte_ultimos${dias}d.pdf`;\nconst respuesta = [\n  `📄 Reporte PDF solicitado (${dias} dias)`,\n  `Archivo: ${fileName}`,\n  'Se esta generando y publicando en el canal configurado de reportes/alertas.',\n  'Para resumen rapido en Discord usa `/reporte 7`; para PDF usa `/reporte 14 pdf` o `/reporte pdf 14`.'\n].join('\\n');\nreturn [{ json: { respuesta, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: false } }];"
       }
     },
     {

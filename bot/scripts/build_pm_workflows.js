@@ -220,7 +220,7 @@ function applyChannelDefault() {
   }
   if (channelRole === 'tareas') {
     intencion = 'tarea';
-    sub_intencion = /completad|terminad|cerrad/i.test(low) ? 'completadas' : (/cliente|usuario|firma|consentimiento|aprobaci[oó]n|aceptaci[oó]n|asistencia/i.test(low) ? 'cliente' : (/semana|preve|prev[eé]|previst|planificad|se espera completar|completar/i.test(low) ? 'prevision' : (/atrasad|vencid|atrasos/i.test(low) ? 'atrasos' : (/pendiente/i.test(low) ? 'pendientes' : (/listar|lista|ver|mostrar/i.test(low) ? 'listar' : 'crear')))));
+    sub_intencion = /completad|terminad|cerrad/i.test(low) ? 'completadas' : (/cliente|usuario|firma|consentimiento|aprobaci[oó]n|aceptaci[oó]n|asistencia/i.test(low) ? 'cliente' : (/semana|preve|prev[eé]|previst|planificad|se espera completar|completar/i.test(low) ? 'prevision' : (/atrasad|vencid|atrasos/i.test(low) ? 'atrasos' : (/pendiente/i.test(low) ? 'pendientes' : (/listar|lista|ver|mostrar/i.test(low) ? 'listar' : (/elimina(r)?|borra(r)?|delete/i.test(low) ? 'eliminar' : 'crear'))))));
     canal_destino = 'DISCORD_CHANNEL_TAREAS';
   } else if (channelRole === 'avances') {
     intencion = 'avance';
@@ -235,8 +235,8 @@ function applyChannelDefault() {
     sub_intencion = /listar|lista|ver|mostrar|consultar/i.test(low) ? 'listar' : 'registrar';
     canal_destino = 'DISCORD_CHANNEL_RIESGOS';
   } else if (channelRole === 'reportes') {
-    intencion = /kpis?|indicadores/i.test(low) ? 'reporte' : 'estado_proyecto';
-    sub_intencion = /kpis?|indicadores/i.test(low) ? 'kpis' : (/semanal|semana/i.test(low) ? 'semanal' : 'general');
+    intencion = /kpis?|indicadores|pdf|reporte/i.test(low) ? 'reporte' : 'estado_proyecto';
+    sub_intencion = /kpis?|indicadores/i.test(low) ? 'kpis' : (/pdf/i.test(low) ? 'pdf' : (/semanal|semana/i.test(low) ? 'semanal' : 'general'));
     canal_destino = 'DISCORD_CHANNEL_REPORTES';
   } else if (channelRole === 'reuniones') {
     intencion = 'reunion';
@@ -296,7 +296,7 @@ if (isCommand) {
       break;
     case 'reporte':
       intencion = 'reporte';
-      sub_intencion = sub === 'pdf' ? 'pdf' : (/^\d+$/.test(sub) ? 'rango' : (sub || 'diario'));
+      sub_intencion = cmdParts.slice(1).some(p => p.toLowerCase() === 'pdf') ? 'pdf' : (/^\d+$/.test(sub) ? 'rango' : (sub || 'diario'));
       canal_destino = 'DISCORD_CHANNEL_REPORTES';
       break;
     case 'kpis':
@@ -364,6 +364,8 @@ if (isCommand) {
   }
 } else if (/crea(r)? (una )?tarea|nueva tarea|registra(r)? tarea|agregar tarea/i.test(low)) {
   intencion = 'tarea'; sub_intencion = 'crear'; canal_destino = 'DISCORD_CHANNEL_TAREAS';
+} else if (/elimina(r)? (las? )?tareas?|borra(r)? (las? )?tareas?|delete tasks?/i.test(low)) {
+  intencion = 'tarea'; sub_intencion = 'eliminar'; canal_destino = 'DISCORD_CHANNEL_TAREAS';
 } else if (channelRole && ['tareas','avances','bloqueos','riesgos','reportes','reuniones','entregables','admin'].includes(channelRole)) {
   applyChannelDefault();
 } else if (/asigna(r)?\s|asignale|asígnale/i.test(low)) {
@@ -382,8 +384,8 @@ if (isCommand) {
   intencion = 'bloqueo'; sub_intencion = /listar|lista|ver|mostrar|consultar|dime|cuales|hay/i.test(low) ? 'listar' : 'registrar'; canal_destino = 'DISCORD_CHANNEL_BLOQUEOS';
 } else if (/riesgo|peligro|amenaza|podr[ií]a fallar/i.test(low)) {
   intencion = 'riesgo'; sub_intencion = /listar|lista|ver|mostrar|consultar|dime|cuales|hay/i.test(low) ? 'listar' : 'registrar'; canal_destino = 'DISCORD_CHANNEL_RIESGOS';
-} else if (/kpis?|indicadores|reporte (diario|semanal)|genera(r)? reporte|resumen (del|de la) semana|estado (del|general)/i.test(low)) {
-  intencion = 'reporte'; sub_intencion = /kpis?|indicadores/i.test(low) ? 'kpis' : (/semanal|semana/i.test(low) ? 'semanal' : 'diario'); canal_destino = 'DISCORD_CHANNEL_REPORTES';
+} else if (/kpis?|indicadores|reporte (diario|semanal)|genera(r)? reporte|resumen (del|de la) semana|estado (del|general)|pdf/i.test(low)) {
+  intencion = 'reporte'; sub_intencion = /kpis?|indicadores/i.test(low) ? 'kpis' : (/pdf/i.test(low) ? 'pdf' : (/semanal|semana/i.test(low) ? 'semanal' : 'diario')); canal_destino = 'DISCORD_CHANNEL_REPORTES';
 } else if (/reuni[oó]n|prepara(r)? la reuni|agenda|acta|acuerdo|compromiso/i.test(low)) {
   intencion = 'reunion'; sub_intencion = /cancelar|cancela|eliminar|borrar/i.test(low) ? 'cancelar' : (/actualizar|editar|reprogramar|mover/i.test(low) ? 'actualizar' : (/listar|lista|ver|mostrar/i.test(low) ? 'listar' : (/acta|acuerdo|compromiso/i.test(low) ? 'registrar_acta' : 'agendar'))); canal_destino = 'DISCORD_CHANNEL_REUNIONES';
 } else if (/decisi[oó]n|decidimos|usaremos|registra(r)? esta decisi/i.test(low)) {
@@ -520,7 +522,7 @@ const sections = {
     'Este canal concentra estado ejecutivo, reportes y lectura PM del proyecto.',
     '`/pm estado` o `/estado`',
     '`/pm reporte diario`, `/pm reporte semanal`, `/pm reporte 14`, `/reporte 7`',
-    '`/reporte pdf 7` genera el informe PDF y lo publica en Discord',
+    '`/reporte 14 pdf` o `/reporte pdf 14` genera el informe PDF y lo publica en Discord',
     '`/pm kpis 7` o `/kpis 7`',
     'Usa rangos de 1 a 90 dias.'
   ],
@@ -709,7 +711,8 @@ const datos = ctx.datos || {};
 const raw = String(datos.texto || datos.texto_original || ctx.mensaje_original || '');
 const sub = String(ctx.sub_intencion || 'listar').toLowerCase();
 const q = (v) => v === null || v === undefined || v === '' ? 'NULL' : "'" + String(v).replace(/'/g, "''") + "'";
-const id = Number(datos.id || (raw.match(/#?(\d+)/) || [])[1] || 0);
+const ids = [...raw.matchAll(/#?(\d+)/g)].map(m => Number(m[1])).filter(Boolean);
+const id = ids[0] || Number(datos.id || 0);
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const VALID_PRIORITIES = ['baja','media','alta','critica'];
 const VALID_STATES = ['pendiente','en_progreso','bloqueada','en_revision','completada','cancelada'];
@@ -722,6 +725,7 @@ const TEAM = [
 ];
 const TEAM_ALIASES = {
   dm: 'David Manjarres',
+  dp: 'David Josue Barragan Pozo',
   djb: 'David Josue Barragan Pozo',
   djbp: 'David Josue Barragan Pozo',
   barragan: 'David Josue Barragan Pozo',
@@ -741,10 +745,14 @@ const TEAM_ALIASES = {
   'joel bonilla': 'Joel Bonilla'
 };
 function cleanField(value) {
-  return String(value || '').replace(/\s+(responsable|prioridad|estado|limite|l[ií]mite|fase|hito|lista|inicio|desde):?.*$/i, '').trim();
+  return String(value || '')
+    .replace(/\s+\b(responsable|prioridad|estado|limite|l[ií]mite|fase|hito|lista|inicio|desde)\b\s*:.*$/i, '')
+    .trim()
+    .replace(/^["'“”]+|["'“”]+$/g, '')
+    .trim();
 }
 function parseField(name) {
-  const rx = new RegExp('(?:' + name + '):?\\s*([^,;\\n]+?)(?=\\s+(?:responsable|prioridad|estado|limite|l[ií]mite|fase|hito|lista|inicio|desde):?\\s|$)', 'i');
+  const rx = new RegExp('\\b(?:' + name + ')\\b\\s*:\\s*([^,;\\n]+?)(?=\\s+\\b(?:responsable|prioridad|estado|limite|l[ií]mite|fase|hito|lista|inicio|desde)\\b\\s*:|$)', 'i');
   return raw.match(rx)?.[1]?.trim() || null;
 }
 function normalizeState(value) {
@@ -764,8 +772,8 @@ function resolvePerson(value) {
   return { status: 'unknown', value: input, matches: [] };
 }
 
-const priorityText = datos.prioridad || raw.match(/prioridad:?\s*([^,;\n]+?)(?=\s+(?:responsable|estado|limite|l[ií]mite|fase|hito|lista|inicio|desde):?\s|$)/i)?.[1]?.trim();
-const stateText = datos.estado || raw.match(/estado:?\s*([^,;\n]+?)(?=\s+(?:responsable|prioridad|limite|l[ií]mite|fase|hito|lista|inicio|desde):?\s|$)/i)?.[1]?.trim();
+const priorityText = datos.prioridad || raw.match(/\bprioridad\b\s*:\s*([^,;\n]+?)(?=\s+\b(?:responsable|estado|limite|l[ií]mite|fase|hito|lista|inicio|desde)\b\s*:|$)/i)?.[1]?.trim();
+const stateText = datos.estado || raw.match(/\bestado\b\s*:\s*([^,;\n]+?)(?=\s+\b(?:responsable|prioridad|limite|l[ií]mite|fase|hito|lista|inicio|desde)\b\s*:|$)/i)?.[1]?.trim();
 const prio = priorityText ? norm(priorityText) : 'media';
 if (priorityText && !VALID_PRIORITIES.includes(prio)) {
   return [{ json: { action: 'validation_error', respuesta: 'Prioridad no valida. Usa una de estas: baja, media, alta, critica.', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];
@@ -775,7 +783,7 @@ if (stateText && !estado) {
   return [{ json: { action: 'validation_error', respuesta: 'Estado no valido. Usa uno de estos: pendiente, en_progreso, bloqueada, en_revision, completada, cancelada.', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];
 }
 const colonResponsible = ['crear','nueva','registrar','asignar','assign'].includes(sub)
-  ? raw.match(/:\s*([A-ZÁÉÍÓÚÑa-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+){0,3})(?=\s+(?:limite|l[ií]mite|prioridad|estado|fase|hito|lista|inicio|desde)\b|$)/)?.[1]?.trim()
+  ? raw.match(/:\s*([A-ZÁÉÍÓÚÑa-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+){0,3})(?=\s+\b(?:limite|l[ií]mite|prioridad|estado|fase|hito|lista|inicio|desde)\b\s*:|$)/)?.[1]?.trim()
   : null;
 const responsableInput = datos.responsable || parseField('responsable') || raw.match(/asigna(?:r|le)?\s+a\s+([^,;\n]+)/i)?.[1]?.trim() || colonResponsible || null;
 const resolved = resolvePerson(responsableInput);
@@ -801,18 +809,18 @@ function defaultWeekRange() {
 const week = defaultWeekRange();
 const fechaDesde = datos.fecha_desde || raw.match(/desde:?\s*(\d{4}-\d{2}-\d{2})/i)?.[1] || week.desde;
 const fechaHasta = datos.fecha_hasta || raw.match(/hasta:?\s*(\d{4}-\d{2}-\d{2})/i)?.[1] || week.hasta;
-const entregable = raw.match(/entregable:?\s*([^,;\n]+)/i)?.[1]?.trim() || null;
-const fase = cleanField(datos.fase || parseField('fase|hito|lista') || raw.match(/sprint:?\s*([^,;\n]+)/i)?.[1]?.trim() || '');
+const entregable = raw.match(/\bentregable\b\s*:\s*([^,;\n]+)/i)?.[1]?.trim() || null;
+const fase = cleanField(datos.fase || parseField('fase|hito|lista') || raw.match(/\bsprint\b\s*:\s*([^,;\n]+)/i)?.[1]?.trim() || '');
 const cleaned = raw
   .replace(/^\/pm\s+tarea\s+\w+/i, '')
   .replace(/^\/tarea\s+\w+/i, '')
-  .replace(/responsable:?\s*[^,;\n]+/ig, '')
-  .replace(/prioridad:?\s*(baja|media|alta|cr[ií]tica)/ig, '')
-  .replace(/estado:?\s*[^,;\n]+/ig, '')
-  .replace(/(?:fase|hito|lista|sprint):?\s*[^,;\n]+/ig, '')
-  .replace(/(?:inicio|desde):?\s*\d{4}-\d{2}-\d{2}/ig, '')
-  .replace(/limite:?\s*\d{4}-\d{2}-\d{2}/ig, '')
-  .replace(/l[ií]mite:?\s*\d{4}-\d{2}-\d{2}/ig, '')
+  .replace(/\bresponsable\b\s*:\s*[^,;\n]+/ig, '')
+  .replace(/\bprioridad\b\s*:\s*(baja|media|alta|cr[ií]tica)/ig, '')
+  .replace(/\bestado\b\s*:\s*[^,;\n]+/ig, '')
+  .replace(/\b(?:fase|hito|lista|sprint)\b\s*:\s*[^,;\n]+/ig, '')
+  .replace(/\b(?:inicio|desde)\b\s*:\s*\d{4}-\d{2}-\d{2}/ig, '')
+  .replace(/\blimite\b\s*:\s*\d{4}-\d{2}-\d{2}/ig, '')
+  .replace(/\bl[ií]mite\b\s*:\s*\d{4}-\d{2}-\d{2}/ig, '')
   .replace(/:\s*[A-ZÁÉÍÓÚÑa-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+){0,3}\s*$/i, '')
   .replace(/#\d+/g, '')
   .trim();
@@ -820,7 +828,13 @@ const titulo = cleaned || datos.titulo || datos.texto || 'Tarea sin titulo';
 
 let query;
 let action = sub;
-if (['crear','nueva','registrar'].includes(sub)) {
+if (['eliminar','borrar','delete'].includes(sub)) {
+  const targetIds = ids.length ? ids : (id ? [id] : []);
+  if (!targetIds.length) {
+    return [{ json: { action: 'validation_error', respuesta: 'Falta el ID de la tarea para eliminar. Ejemplo: `/pm tarea eliminar #73`', canal_destino: 'DISCORD_CHANNEL_TAREAS', canal_id: process.env.DISCORD_CHANNEL_TAREAS || ctx.canal_origen } }];
+  }
+  query = `DELETE FROM pm_tareas WHERE id IN (${targetIds.join(',')}) RETURNING 'deleted' AS action, id, titulo, trello_card_id;`;
+} else if (['crear','nueva','registrar'].includes(sub)) {
   query = `WITH ins AS (
   INSERT INTO pm_tareas (titulo, descripcion, responsable, prioridad, estado, fecha_inicio, fecha_limite, entregable, sprint, creado_por, canal_origen)
   VALUES (${q(titulo)}, ${q(raw)}, ${q(responsable)}, ${q(prio)}, 'pendiente', ${fechaInicio ? q(fechaInicio) + '::date' : 'NULL'}, ${fecha ? q(fecha) + '::date' : 'NULL'}, ${q(entregable)}, COALESCE(${q(fase)}, (SELECT name FROM project_phases WHERE status='active' ORDER BY position DESC LIMIT 1), 'Sin fase'), ${q(ctx.usuario)}, ${q(ctx.canal_origen)})
@@ -914,8 +928,17 @@ let trello = { status: 'no_aplica' };
 try { trello = $('Build Trello Sync').item.json.trello_sync || trello; } catch (e) {}
 try {
   const card = $('Trello Upsert Card').item.json;
-  if (card?.id) trello = { status: 'sincronizado', card_id: card.id, url: card.shortUrl || card.url || '' };
-  else if (trello.status === 'pendiente') trello = { status: 'fallo', detalle: 'Trello no devolvio id de tarjeta.' };
+  const isDelete = $('Build Trello Sync').item.json.method === 'DELETE';
+  if (isDelete) {
+    if (card && (card.error || card.message)) {
+      trello = { status: 'fallo', detalle: card.message || card.error };
+    } else {
+      trello = { status: 'sincronizado' };
+    }
+  } else {
+    if (card?.id) trello = { status: 'sincronizado', card_id: card.id, url: card.shortUrl || card.url || '' };
+    else if (trello.status === 'pendiente') trello = { status: 'fallo', detalle: 'Trello no devolvio id de tarjeta.' };
+  }
 } catch (e) {}
 function fmtDate(value) {
   if (!value) return 'sin fecha';
@@ -953,7 +976,39 @@ function trelloLine() {
   return '';
 }
 let respuesta;
-if (!rows.length) {
+if (action === 'deleted') {
+  if (!rows.length) {
+    respuesta = 'No se encontraron las tareas para eliminar o ya fueron eliminadas.';
+  } else {
+    let trelloStatusList = [];
+    try {
+      const isDelete = $('Build Trello Sync').item.json.method === 'DELETE';
+      const cardResults = $('Trello Upsert Card').all().map(i => i.json);
+      rows.forEach((t, idx) => {
+        if (!t.trello_card_id) {
+          trelloStatusList.push('omitido');
+        } else {
+          const card = cardResults[idx];
+          if (card && (card.error || card.message)) {
+            trelloStatusList.push('fallo');
+          } else {
+            trelloStatusList.push('sincronizado');
+          }
+        }
+      });
+    } catch (e) {}
+
+    const deletedLines = rows.map((t, idx) => {
+      let trelloInfo = '';
+      const tStat = trelloStatusList[idx] || 'omitido';
+      if (tStat === 'sincronizado') trelloInfo = ' (Trello card eliminada)';
+      else if (tStat === 'fallo') trelloInfo = ' (error al eliminar Trello card)';
+      else trelloInfo = ' (sin Trello card)';
+      return `- #${t.id} ${t.titulo}${trelloInfo}`;
+    });
+    respuesta = `Tareas eliminadas:\n${deletedLines.join('\n')}`;
+  }
+} else if (!rows.length) {
   respuesta = action === 'overdue' ? 'No hay tareas atrasadas. El proyecto va en tiempo.' : 'No hay tareas activas registradas.';
 } else if (action === 'created') {
   const t = rows[0];
@@ -1003,10 +1058,26 @@ return [{ json: { respuesta, canal_destino: ctx.canal_destino, canal_id: ctx.can
 
 const taskTrelloSyncCode = code(function(){
 const rows = $('Run Task Query').all().map(i => i.json);
-const task = rows[0] || {};
-const syncable = ['created','assigned','updated'].includes(task.action);
+const task = $json || {};
+const syncable = ['created','assigned','updated','deleted'].includes(task.action);
 if (!syncable) {
   return [{ json: { needs_sync: false, trello_sync: { status: 'no_aplica' } } }];
+}
+
+if (task.action === 'deleted') {
+  if (!task.trello_card_id) {
+    return [{ json: { needs_sync: false, trello_sync: { status: 'omitido', detalle: 'no tenia card_id en Trello' }, task_id: task.id } }];
+  }
+  const key = process.env.TRELLO_API_KEY || process.env.TRELLO_KEY || '';
+  const token = process.env.TRELLO_TOKEN || '';
+  return [{ json: {
+    needs_sync: true,
+    method: 'DELETE',
+    url: `https://api.trello.com/1/cards/${task.trello_card_id}?key=${key}&token=${token}`,
+    task_id: task.id,
+    existing_card_id: task.trello_card_id,
+    trello_sync: { status: 'pendiente' }
+  }}];
 }
 
 const defaultListId = process.env.TRELLO_DEFAULT_LIST_ID || process.env.TRELLO_TASKS_LIST_ID || '';
@@ -1043,6 +1114,8 @@ if (task.responsable) {
   const memberId = memberIdFor(task.responsable);
   if (memberId) addParam('idMembers', memberId);
 }
+addParam('key', process.env.TRELLO_API_KEY || process.env.TRELLO_KEY || '');
+addParam('token', process.env.TRELLO_TOKEN || '');
 
 const method = task.trello_card_id ? 'PUT' : 'POST';
 const path = task.trello_card_id ? `/cards/${task.trello_card_id}` : '/cards';
@@ -1072,16 +1145,8 @@ writeWorkflow(path.join(pmoDir, 'WF_PM_Tareas.json'), workflow('wf-pm-tareas', '
   node('trello-upsert-card', 'Trello Upsert Card', 'n8n-nodes-base.httpRequest', 4.2, [1460, 40], {
     method: '={{ $json.method }}',
     url: '={{ $json.url }}',
-    authentication: 'predefinedCredentialType',
-    nodeCredentialType: 'trelloApi',
     options: {},
   }, {
-    credentials: {
-      trelloApi: {
-        id: 'FWpamR2TOOuzCYJv',
-        name: 'Trello account',
-      },
-    },
     continueOnFail: true,
     alwaysOutputData: true,
   }),
@@ -1488,7 +1553,7 @@ const respuesta = [
   `📄 Reporte PDF solicitado (${dias} dias)`,
   `Archivo: ${fileName}`,
   'Se esta generando y publicando en el canal configurado de reportes/alertas.',
-  'Para resumen rapido en Discord usa `/reporte 7`; para PDF usa `/reporte pdf 7`.'
+  'Para resumen rapido en Discord usa `/reporte 7`; para PDF usa `/reporte 14 pdf` o `/reporte pdf 14`.'
 ].join('\n');
 return [{ json: { respuesta, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: false } }];
 });
