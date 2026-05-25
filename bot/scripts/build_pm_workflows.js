@@ -108,7 +108,12 @@ const input = $json || {};
 const env = process.env || {};
 const msg = String(input.message || input.pregunta || input.content || input.mensaje_original || '').trim();
 const low = msg.toLowerCase();
-const user = input.user || input.usuario || input.actor || input.username || 'desconocido';
+const rawUser = input.user || input.usuario || input.actor || input.username || 'desconocido';
+const discordToRealNameMap = {
+  'chicken_zombie': 'David Manjarres'
+  // Add other discord usernames here if needed
+};
+const user = discordToRealNameMap[rawUser] || rawUser;
 const userId = input.user_id || input.author_id || '';
 const channel = String(input.channel_id || input.channelId || input.canal || '');
 const channelName = input.channel_name || input.channelName || '';
@@ -176,6 +181,19 @@ function parseDate(value) {
   }
   return null;
 }
+function parseSpanishDateRange(text) {
+  const months = { enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6, julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10, noviembre: 11, diciembre: 12 };
+  const year = new Date().getFullYear();
+  const normText = clean(text).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  let m = normText.match(/(?:del?\s+)?(\d{1,2})\s+(?:al|a|-)\s+(\d{1,2})\s+de\s+([a-z]+)/i);
+  if (m && months[m[3]]) {
+    const mm = String(months[m[3]]).padStart(2, '0');
+    return { desde: `${year}-${mm}-${String(m[1]).padStart(2, '0')}`, hasta: `${year}-${mm}-${String(m[2]).padStart(2, '0')}` };
+  }
+  m = normText.match(/(\d{4}-\d{2}-\d{2})\s+(?:al|a|-)\s+(\d{4}-\d{2}-\d{2})/i);
+  if (m) return { desde: m[1], hasta: m[2] };
+  return { desde: null, hasta: null };
+}
 function clampDays(value) {
   const n = Number(value || 0);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -184,6 +202,7 @@ function clampDays(value) {
 function actionOrDefault(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
 }
+const asksChannelHelp = /(?:que|qué)\s+puedo\s+hacer|(?:para|pa)\s+que\s+sirve|c[oó]mo\s+(uso|funciona)|ayuda|comandos|este canal|en este canal/i.test(low);
 
 let intencion = 'desconocido';
 let sub_intencion = null;
@@ -192,9 +211,16 @@ let canal_destino = 'DISCORD_CHANNEL_REPORTES';
 
 function applyChannelDefault() {
   if (!channelRole || intencion !== 'desconocido') return;
+  if (asksChannelHelp) {
+    intencion = 'ayuda';
+    sub_intencion = channelRole;
+    canal_destino = channelRole === 'admin' ? 'DISCORD_CHANNEL_ADMIN' : 'DISCORD_CHANNEL_' + channelRole.toUpperCase();
+    datos.texto = msg;
+    return;
+  }
   if (channelRole === 'tareas') {
     intencion = 'tarea';
-    sub_intencion = /atrasad|vencid|atrasos/i.test(low) ? 'atrasos' : (/pendiente/i.test(low) ? 'pendientes' : (/listar|lista|ver|mostrar/i.test(low) ? 'listar' : 'crear'));
+    sub_intencion = /completad|terminad|cerrad/i.test(low) ? 'completadas' : (/cliente|usuario|firma|consentimiento|aprobaci[oó]n|aceptaci[oó]n|asistencia/i.test(low) ? 'cliente' : (/semana|preve|prev[eé]|previst|planificad|se espera completar|completar/i.test(low) ? 'prevision' : (/atrasad|vencid|atrasos/i.test(low) ? 'atrasos' : (/pendiente/i.test(low) ? 'pendientes' : (/listar|lista|ver|mostrar/i.test(low) ? 'listar' : 'crear')))));
     canal_destino = 'DISCORD_CHANNEL_TAREAS';
   } else if (channelRole === 'avances') {
     intencion = 'avance';
@@ -270,7 +296,7 @@ if (isCommand) {
       break;
     case 'reporte':
       intencion = 'reporte';
-      sub_intencion = /^\d+$/.test(sub) ? 'rango' : (sub || 'diario');
+      sub_intencion = sub === 'pdf' ? 'pdf' : (/^\d+$/.test(sub) ? 'rango' : (sub || 'diario'));
       canal_destino = 'DISCORD_CHANNEL_REPORTES';
       break;
     case 'kpis':
@@ -338,16 +364,24 @@ if (isCommand) {
   }
 } else if (/crea(r)? (una )?tarea|nueva tarea|registra(r)? tarea|agregar tarea/i.test(low)) {
   intencion = 'tarea'; sub_intencion = 'crear'; canal_destino = 'DISCORD_CHANNEL_TAREAS';
+} else if (channelRole && ['tareas','avances','bloqueos','riesgos','reportes','reuniones','entregables','admin'].includes(channelRole)) {
+  applyChannelDefault();
 } else if (/asigna(r)?\s|asignale|asígnale/i.test(low)) {
   intencion = 'tarea'; sub_intencion = 'asignar'; canal_destino = 'DISCORD_CHANNEL_TAREAS';
+} else if (/tareas?.*(completad|terminad|cerrad)|que .*se completaron|completadas?.*(ultimos|u[úu]ltimos|dias|d[ií]as)/i.test(low)) {
+  intencion = 'tarea'; sub_intencion = 'completadas'; canal_destino = 'DISCORD_CHANNEL_TAREAS';
+} else if (/tareas?.*(cliente|usuario|firma|consentimiento|aprobaci[oó]n|aceptaci[oó]n|asistencia)|requieren?.*(cliente|usuario|asistencia)/i.test(low)) {
+  intencion = 'tarea'; sub_intencion = 'cliente'; canal_destino = 'DISCORD_CHANNEL_TAREAS';
+} else if (/tareas?.*(semana|preve|prev[eé]|previst|planificad|se espera completar|completar)|para esta semana.*tareas/i.test(low)) {
+  intencion = 'tarea'; sub_intencion = 'prevision'; canal_destino = 'DISCORD_CHANNEL_TAREAS';
 } else if (/tareas? (pendiente|atrasad|vencid)|pendientes|atrasos/i.test(low)) {
   intencion = 'tarea'; sub_intencion = /atrasad|vencid|atrasos/i.test(low) ? 'atrasos' : 'pendientes'; canal_destino = 'DISCORD_CHANNEL_TAREAS';
 } else if (/registr(ar|a) avance|termin[eé]|complet[eé]|avance diario|progreso/i.test(low)) {
   intencion = 'avance'; sub_intencion = 'registrar'; canal_destino = 'DISCORD_CHANNEL_AVANCES';
 } else if (/bloque(o|ado)|impedimento|no puedo avanzar|detenid|trabado|atascado/i.test(low)) {
-  intencion = 'bloqueo'; sub_intencion = /listar|lista|ver|mostrar|consultar/i.test(low) ? 'listar' : 'registrar'; canal_destino = 'DISCORD_CHANNEL_BLOQUEOS';
+  intencion = 'bloqueo'; sub_intencion = /listar|lista|ver|mostrar|consultar|dime|cuales|hay/i.test(low) ? 'listar' : 'registrar'; canal_destino = 'DISCORD_CHANNEL_BLOQUEOS';
 } else if (/riesgo|peligro|amenaza|podr[ií]a fallar/i.test(low)) {
-  intencion = 'riesgo'; sub_intencion = /listar|lista|ver|mostrar|consultar/i.test(low) ? 'listar' : 'registrar'; canal_destino = 'DISCORD_CHANNEL_RIESGOS';
+  intencion = 'riesgo'; sub_intencion = /listar|lista|ver|mostrar|consultar|dime|cuales|hay/i.test(low) ? 'listar' : 'registrar'; canal_destino = 'DISCORD_CHANNEL_RIESGOS';
 } else if (/kpis?|indicadores|reporte (diario|semanal)|genera(r)? reporte|resumen (del|de la) semana|estado (del|general)/i.test(low)) {
   intencion = 'reporte'; sub_intencion = /kpis?|indicadores/i.test(low) ? 'kpis' : (/semanal|semana/i.test(low) ? 'semanal' : 'diario'); canal_destino = 'DISCORD_CHANNEL_REPORTES';
 } else if (/reuni[oó]n|prepara(r)? la reuni|agenda|acta|acuerdo|compromiso/i.test(low)) {
@@ -357,7 +391,7 @@ if (isCommand) {
 } else if (/entregable|document(o|aci)|versi[oó]n|informe|prototipo|entregables falt/i.test(low)) {
   intencion = 'entregable'; sub_intencion = /registr|crear|agregar/i.test(low) ? 'registrar' : 'pendientes'; canal_destino = 'DISCORD_CHANNEL_ENTREGABLES';
 } else if (/retrospectiva|retro|qu[eé] sali[oó] bien|qu[eé] mejorar|lecciones aprendidas/i.test(low)) {
-  intencion = 'retrospectiva'; sub_intencion = /listar|lista|ver|resumen|mostrar/i.test(low) ? 'listar' : 'registrar';
+  intencion = 'retrospectiva'; sub_intencion = /listar|lista|ver|resumen|mostrar/i.test(low) ? 'listar' : 'registrar'; canal_destino = 'DISCORD_CHANNEL_REUNIONES';
 } else if (/estado (actual|del proyecto|de petsafe)|resume(n|me)|c[oó]mo va(mos)?|overview/i.test(low)) {
   intencion = 'estado_proyecto'; sub_intencion = 'general';
 } else if (/ayuda|help|c[oó]mo (te uso|funciona)/i.test(low)) {
@@ -366,7 +400,7 @@ if (isCommand) {
 
 applyChannelDefault();
 
-datos.responsable = match(/(?:asigna(?:r|le)?\s+a\s+|responsable:?\s*|para\s+)(@[^\s]+|[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)?)/);
+datos.responsable = match(/(?:asigna(?:r|le)?\s+a\s+|responsable:?\s*|para\s+)([^,;\n]+?)(?=\s+(?:prioridad|sprint|limite|l[ií]mite|fecha|cuando|cu[aá]ndo|donde|d[oó]nde|version|versi[oó]n|participantes|asistentes):?\s|$)/i) || match(/(?:asigna(?:r|le)?\s+a\s+|responsable:?\s*|para\s+)(@[^\s]+|[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)?)/i);
 datos.fecha_limite = parseDate(match(/(?:para|antes del?|fecha:?|limite:?|l[ií]mite:?)\s+(\d{4}-\d{2}-\d{2}|ma[nñ]ana|hoy|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)/i));
 datos.prioridad = normalizePriority(match(/prioridad:?\s*(baja|media|alta|cr[ií]tica)/i));
 datos.estado = normalizeState(match(/estado:?\s*([a-záéíóúñ_ ]+)/i));
@@ -376,14 +410,18 @@ datos.probabilidad = match(/probabilidad:?\s*(baja|media|alta)/i);
 datos.impacto = match(/impacto:?\s*(bajo|medio|alto|cr[ií]tico)/i);
 datos.dias = clampDays(
   cmdParts.find((p, idx) => idx > 0 && /^\d{1,3}$/.test(p)) ||
-  msg.match(/(?:u[uú]ltimos?|rango|dias|d[ií]as)\D{0,12}(\d{1,3})/i)?.[1]
+  msg.match(/(?:u[úu]ltimos?|ultimos?|rango|dias|d[ií]as)\D{0,16}(\d{1,3})/i)?.[1] ||
+  msg.match(/(\d{1,3})\s+d[ií]as/i)?.[1]
 );
+const rango = parseSpanishDateRange(msg);
+datos.fecha_desde = rango.desde;
+datos.fecha_hasta = rango.hasta;
 datos.fase = match(/(?:fase|hito|lista):?\s*([^,;\n]+)/i);
 datos.fecha_inicio = parseDate(match(/(?:inicio|desde):?\s+(\d{4}-\d{2}-\d{2}|ma[nñ]ana|hoy|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)/i));
 datos.fecha_reunion = parseDate(match(/(?:cuando|cu[aá]ndo|fecha|para):?\s+(\d{4}-\d{2}-\d{2}|ma[nñ]ana|hoy|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)/i));
 datos.hora_reunion = match(/(?:hora|a las|desde las)\s*([01]?\d|2[0-3])(?::([0-5]\d))?/i);
-datos.lugar = match(/(?:donde|d[oó]nde|lugar|ubicacion|ubicaci[oó]n):?\s*([^,;\n]+?)(?=\s+(?:participantes|asistentes|con|duracion|duraci[oó]n|minutos|cuando|cu[aá]ndo|fecha|hora):?\s|$)/i);
-datos.participantes = match(/(?:con|participan|participantes|asistentes):?\s*([^;\n]+)/i);
+datos.lugar = match(/(?:donde|d[oó]nde|lugar|ubicacion|ubicaci[oó]n):?\s*([^,;\n]+?)(?=\s+(?:participantes|asistentes|participan|con|duracion|duraci[oó]n|minutos|cuando|cu[aá]ndo|fecha|hora):?\s|$)/i);
+datos.participantes = match(/(?:con|participantes|participan|asistentes):?\s*([^;\n]+)/i);
 datos.legacy_command = legacyCommand;
 datos.channel_role = channelRole;
 datos.texto_original = msg;
@@ -482,6 +520,7 @@ const sections = {
     'Este canal concentra estado ejecutivo, reportes y lectura PM del proyecto.',
     '`/pm estado` o `/estado`',
     '`/pm reporte diario`, `/pm reporte semanal`, `/pm reporte 14`, `/reporte 7`',
+    '`/reporte pdf 7` genera el informe PDF y lo publica en Discord',
     '`/pm kpis 7` o `/kpis 7`',
     'Usa rangos de 1 a 90 dias.'
   ],
@@ -681,6 +720,26 @@ const TEAM = [
   'Fernando Joel Bonilla Guerrero',
   'Joel Bonilla'
 ];
+const TEAM_ALIASES = {
+  dm: 'David Manjarres',
+  djb: 'David Josue Barragan Pozo',
+  djbp: 'David Josue Barragan Pozo',
+  barragan: 'David Josue Barragan Pozo',
+  barragán: 'David Josue Barragan Pozo',
+  jjga: 'Josue Joel Garcia Abata',
+  jga: 'Josue Joel Garcia Abata',
+  ja: 'Josue Joel Garcia Abata',
+  josue: 'Josue Joel Garcia Abata',
+  josué: 'Josue Joel Garcia Abata',
+  'josue garcia': 'Josue Joel Garcia Abata',
+  'josué garcía': 'Josue Joel Garcia Abata',
+  fjbg: 'Fernando Joel Bonilla Guerrero',
+  fg: 'Fernando Joel Bonilla Guerrero',
+  'fernando guerrero': 'Fernando Joel Bonilla Guerrero',
+  'fernando bonilla': 'Fernando Joel Bonilla Guerrero',
+  jb: 'Joel Bonilla',
+  'joel bonilla': 'Joel Bonilla'
+};
 function cleanField(value) {
   return String(value || '').replace(/\s+(responsable|prioridad|estado|limite|l[ií]mite|fase|hito|lista|inicio|desde):?.*$/i, '').trim();
 }
@@ -696,6 +755,8 @@ function normalizeState(value) {
 function resolvePerson(value) {
   const input = cleanField(value);
   if (!input) return { status: 'empty', value: null, matches: [] };
+  const alias = TEAM_ALIASES[norm(input)];
+  if (alias) return { status: 'ok', value: alias, matches: [alias] };
   const wanted = norm(input).split(/\s+/).filter(Boolean);
   const matches = TEAM.filter((name) => wanted.every((part) => norm(name).includes(part)));
   if (matches.length === 1) return { status: 'ok', value: matches[0], matches };
@@ -727,6 +788,19 @@ if (responsableInput && resolved.status === 'unknown') {
 const responsable = resolved.status === 'ok' ? resolved.value : null;
 const fecha = datos.fecha_limite || raw.match(/(?:limite|l[ií]mite|vence|fecha):?\s*(\d{4}-\d{2}-\d{2})/i)?.[1] || raw.match(/(\d{4}-\d{2}-\d{2})/)?.[1] || null;
 const fechaInicio = datos.fecha_inicio || raw.match(/(?:inicio|desde):?\s*(\d{4}-\d{2}-\d{2})/i)?.[1] || null;
+const dias = Math.max(1, Math.min(90, Number(datos.dias || raw.match(/(?:u[úu]ltimos?|ultimos?|d[ií]as)\D{0,16}(\d{1,3})/i)?.[1] || raw.match(/(\d{1,3})\s+d[ií]as/i)?.[1] || 7)));
+function defaultWeekRange() {
+  const d = new Date();
+  const day = d.getDay() || 7;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - day + 1);
+  const friday = new Date(monday);
+  friday.setDate(monday.getDate() + 4);
+  return { desde: monday.toISOString().slice(0, 10), hasta: friday.toISOString().slice(0, 10) };
+}
+const week = defaultWeekRange();
+const fechaDesde = datos.fecha_desde || raw.match(/desde:?\s*(\d{4}-\d{2}-\d{2})/i)?.[1] || week.desde;
+const fechaHasta = datos.fecha_hasta || raw.match(/hasta:?\s*(\d{4}-\d{2}-\d{2})/i)?.[1] || week.hasta;
 const entregable = raw.match(/entregable:?\s*([^,;\n]+)/i)?.[1]?.trim() || null;
 const fase = cleanField(datos.fase || parseField('fase|hito|lista') || raw.match(/sprint:?\s*([^,;\n]+)/i)?.[1]?.trim() || '');
 const cleaned = raw
@@ -789,6 +863,30 @@ FROM upd;`;
   query = `SELECT 'overdue' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, (CURRENT_DATE - fecha_limite::date) AS dias_atraso
 FROM pm_tareas WHERE fecha_limite < CURRENT_DATE AND estado NOT IN ('completada','cancelada')
 ORDER BY dias_atraso DESC, prioridad LIMIT 20;`;
+} else if (['completadas','completados','terminadas','terminados','cerradas','cerrados'].includes(sub)) {
+  action = 'completed';
+  query = `SELECT 'completed' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, fecha_actualizacion
+FROM pm_tareas
+WHERE estado = 'completada' AND fecha_actualizacion::date >= (CURRENT_DATE - ((${dias} - 1) * INTERVAL '1 day'))::date
+ORDER BY fecha_actualizacion DESC, id DESC LIMIT 25;`;
+} else if (['cliente','stakeholder','stakeholders','asistencia_cliente'].includes(sub)) {
+  action = 'client_help';
+  query = `SELECT 'client_help' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, entregable, sprint,
+CASE
+  WHEN (titulo || ' ' || COALESCE(descripcion,'') || ' ' || COALESCE(entregable,'')) ~* '(cliente|usuario|aceptaci[oó]n|aprobaci[oó]n|firma|consentimiento|capacitaci[oó]n|manual|implantaci[oó]n)' THEN 'requiere validacion/interaccion del cliente'
+  ELSE 'posible dependencia de stakeholder'
+END AS motivo
+FROM pm_tareas
+WHERE estado NOT IN ('completada','cancelada')
+  AND (titulo || ' ' || COALESCE(descripcion,'') || ' ' || COALESCE(entregable,'')) ~* '(cliente|usuario|aceptaci[oó]n|aprobaci[oó]n|firma|consentimiento|capacitaci[oó]n|manual|implantaci[oó]n)'
+ORDER BY fecha_limite NULLS LAST, prioridad LIMIT 25;`;
+} else if (['prevision','previstas','planificadas','semana'].includes(sub)) {
+  action = 'forecast';
+  query = `SELECT 'forecast' AS action, id, titulo, responsable, prioridad, estado, fecha_limite, entregable, sprint, ${q(fechaDesde)}::date AS fecha_desde, ${q(fechaHasta)}::date AS fecha_hasta
+FROM pm_tareas
+WHERE estado NOT IN ('completada','cancelada')
+  AND fecha_limite BETWEEN ${q(fechaDesde)}::date AND ${q(fechaHasta)}::date
+ORDER BY fecha_limite NULLS LAST, CASE prioridad WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END LIMIT 25;`;
 } else {
   action = ['pendientes','listar','lista','list'].includes(sub) ? sub : 'listar';
   if (action === 'pendientes') {
@@ -819,7 +917,27 @@ try {
   if (card?.id) trello = { status: 'sincronizado', card_id: card.id, url: card.shortUrl || card.url || '' };
   else if (trello.status === 'pendiente') trello = { status: 'fallo', detalle: 'Trello no devolvio id de tarjeta.' };
 } catch (e) {}
-const lineTask = (t) => `#${t.id} [${t.estado || 'sin_estado'}/${t.prioridad || 'media'}] ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - vence ' + t.fecha_limite : ''}`;
+function fmtDate(value) {
+  if (!value) return 'sin fecha';
+  const raw = String(value);
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return raw;
+  const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return `${Number(m[3])} ${months[Number(m[2]) - 1]} ${m[1]}`;
+}
+function fmtDateTime(value) {
+  if (!value) return 'sin fecha';
+  const raw = String(value);
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
+  if (!m) return fmtDate(value);
+  const d = new Date(raw);
+  if (Number.isFinite(d.getTime())) {
+    const local = new Date(d.getTime() - (5 * 60 * 60 * 1000));
+    return `${fmtDate(local.toISOString().slice(0, 10))} ${local.toISOString().slice(11, 16)}`;
+  }
+  return `${fmtDate(`${m[1]}-${m[2]}-${m[3]}`)}${m[4] ? ' ' + m[4] + ':' + m[5] : ''}`;
+}
+const lineTask = (t) => `#${t.id} [${t.estado || 'sin_estado'}/${t.prioridad || 'media'}] ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - vence ' + fmtDate(t.fecha_limite) : ''}`;
 function groupBy(items, keyFn) {
   return items.reduce((acc, item) => {
     const key = keyFn(item);
@@ -839,7 +957,7 @@ if (!rows.length) {
   respuesta = action === 'overdue' ? 'No hay tareas atrasadas. El proyecto va en tiempo.' : 'No hay tareas activas registradas.';
 } else if (action === 'created') {
   const t = rows[0];
-  respuesta = `Tarea registrada.\nID: #${t.id}\nTitulo: ${t.titulo}\nFase/hito: ${t.sprint || 'Sin fase'}\nResponsable: ${t.responsable || 'sin asignar'}\nInicio: ${t.fecha_inicio || 'sin fecha'}\nFecha limite: ${t.fecha_limite || 'sin fecha'}\nPrioridad: ${t.prioridad}${trelloLine()}\nProximo paso: registrar avance con /pm avance registrar #${t.id}.`;
+  respuesta = `Tarea registrada.\nID: #${t.id}\nTitulo: ${t.titulo}\nFase/hito: ${t.sprint || 'Sin fase'}\nResponsable: ${t.responsable || 'sin asignar'}\nInicio: ${fmtDate(t.fecha_inicio)}\nFecha limite: ${fmtDate(t.fecha_limite)}\nPrioridad: ${t.prioridad}${trelloLine()}\nProximo paso: registrar avance con /pm avance registrar #${t.id}.`;
 } else if (action === 'assigned') {
   const t = rows[0];
   respuesta = `Tarea asignada.\nID: #${t.id}\nTitulo: ${t.titulo}\nResponsable: ${t.responsable}${trelloLine()}\nProximo paso: registrar avance con /pm avance registrar #${t.id}.`;
@@ -848,6 +966,20 @@ if (!rows.length) {
   respuesta = `Tarea actualizada.\nID: #${t.id}\nEstado: ${t.estado}\nPrioridad: ${t.prioridad}\nFase/hito: ${t.sprint || 'Sin fase'}\nResponsable: ${t.responsable || 'sin asignar'}${trelloLine()}\nValores permitidos: estados pendiente, en_progreso, bloqueada, en_revision, completada, cancelada; prioridades baja, media, alta, critica.`;
 } else if (action === 'overdue') {
   respuesta = `Tareas atrasadas (${rows.length}):\n` + rows.map(t => `- ${lineTask(t)} - atraso: ${t.dias_atraso} dia(s)`).join('\n') + '\nRecomendacion PM: revisar responsables y bloqueos activos hoy.';
+} else if (action === 'completed') {
+  respuesta = rows.length
+    ? `Tareas completadas (${rows.length}):\n` + rows.map(t => `- #${t.id} ${t.titulo} - ${t.responsable || 'sin responsable'} - completada ${fmtDateTime(t.fecha_actualizacion)}`).join('\n')
+    : 'No hay tareas completadas registradas para ese rango.';
+} else if (action === 'client_help') {
+  respuesta = rows.length
+    ? `Tareas que requieren asistencia/validacion del cliente (${rows.length}):\n` + rows.map(t => `- ${lineTask(t)}\n  Motivo: ${t.motivo}`).join('\n')
+    : 'No encontre tareas activas que requieran asistencia directa del cliente.';
+} else if (action === 'forecast') {
+  const first = rows[0] || {};
+  const range = `${fmtDate(first.fecha_desde)} a ${fmtDate(first.fecha_hasta)}`;
+  respuesta = rows.length
+    ? `Tareas previstas para completar del ${range} (${rows.length}):\n` + rows.map(t => `- ${lineTask(t)}${t.sprint ? ' - fase: ' + t.sprint : ''}`).join('\n')
+    : `No encontre tareas con fecha limite entre ${range}.`;
 } else if (action === 'pending') {
   const labels = { atrasada: 'Atrasadas', proxima: 'Vencen pronto', normal: 'En curso sin urgencia inmediata' };
   const groups = groupBy(rows, t => t.urgencia || 'normal');
@@ -895,17 +1027,21 @@ function memberIdFor(name) {
   return hit ? hit[1] : '';
 }
 
-const params = new URLSearchParams();
-params.set('name', `#${task.id} ${task.titulo}`.slice(0, 160));
-params.set('desc', String(task.descripcion || task.titulo || '').slice(0, 1500));
-if (listId) params.set('idList', listId);
-if (task.fecha_limite) params.set('due', task.fecha_limite);
-if (task.fecha_inicio) params.set('start', task.fecha_inicio);
-if (task.estado === 'completada') params.set('dueComplete', 'true');
-if (task.estado && task.estado !== 'completada') params.set('dueComplete', 'false');
+const params = [];
+function addParam(key, value) {
+  if (value === null || value === undefined || value === '') return;
+  params.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
+}
+addParam('name', `#${task.id} ${task.titulo}`.slice(0, 160));
+addParam('desc', String(task.descripcion || task.titulo || '').slice(0, 1500));
+if (listId) addParam('idList', listId);
+if (task.fecha_limite) addParam('due', task.fecha_limite);
+if (task.fecha_inicio) addParam('start', task.fecha_inicio);
+if (task.estado === 'completada') addParam('dueComplete', 'true');
+if (task.estado && task.estado !== 'completada') addParam('dueComplete', 'false');
 if (task.responsable) {
   const memberId = memberIdFor(task.responsable);
-  if (memberId) params.set('idMembers', memberId);
+  if (memberId) addParam('idMembers', memberId);
 }
 
 const method = task.trello_card_id ? 'PUT' : 'POST';
@@ -913,7 +1049,7 @@ const path = task.trello_card_id ? `/cards/${task.trello_card_id}` : '/cards';
 return [{ json: {
   needs_sync: true,
   method,
-  url: `https://api.trello.com/1${path}?${params.toString()}`,
+  url: `https://api.trello.com/1${path}?${params.join('&')}`,
   task_id: task.id,
   existing_card_id: task.trello_card_id || '',
   trello_sync: { status: 'pendiente' }
@@ -977,17 +1113,50 @@ const raw = String(datos.texto || datos.texto_original || ctx.mensaje_original |
 const sub = String(ctx.sub_intencion || 'registrar').toLowerCase();
 const q = (v) => v === null || v === undefined || v === '' ? 'NULL' : "'" + String(v).replace(/'/g, "''") + "'";
 const taskId = Number(datos.id || raw.match(/#?(\d+)/)?.[1] || 0) || null;
-const pct = Math.max(0, Math.min(100, Number(datos.porcentaje || raw.match(/(\d{1,3})\s*%/)?.[1] || 0)));
+const completeSignal = /completad|terminad|finalizad|cerrad|entregad|list[oa]/i.test(raw);
+const evidenceSignal = /evidencia|documento|reporte|adjunt|pdf|entregable/i.test(raw);
+const pctRaw = Number(datos.porcentaje || raw.match(/(\d{1,3})\s*%/)?.[1] || 0);
+const pct = Math.max(0, Math.min(100, pctRaw || completeSignal ? (pctRaw || 100) : 0));
 const responsable = datos.responsable || ctx.usuario || 'sin responsable';
-const desc = raw.replace(/^\/pm\s+avance\s+\w+/i, '').trim() || 'Avance registrado';
+const desc = raw
+  .replace(/^\/pm\s+avance\s+\w+/i, '')
+  .replace(/^\/avance\s+\w+/i, '')
+  .replace(/#\d+/g, '')
+  .replace(/\d{1,3}\s*%/g, '')
+  .trim() || 'Avance registrado';
 let query;
 if (['resumen','listar','dia','diario'].includes(sub)) {
   query = `SELECT 'summary' AS action, responsable, COUNT(*) AS total, string_agg(descripcion, ' | ' ORDER BY fecha DESC) AS detalles
 FROM pm_avances WHERE fecha::date = CURRENT_DATE GROUP BY responsable ORDER BY responsable;`;
 } else {
-  query = `INSERT INTO pm_avances (tarea_id, responsable, descripcion, porcentaje, bloqueos_reportados)
-VALUES (${taskId || 'NULL'}, ${q(responsable)}, ${q(desc)}, ${pct}, ${/bloque/i.test(raw) ? q(raw) : 'NULL'})
-RETURNING 'created' AS action, id, tarea_id, responsable, descripcion, porcentaje, fecha;`;
+  const normRaw = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const stop = new Set(['para','esta','este','tarea','avance','avances','registrar','completada','completado','terminada','terminado','finalizada','finalizado','evidencia','documento','reporte','adjunto','adjunta','subido','subida','actividad','respectivo','respectiva','equipo']);
+  const keywords = [...new Set(normRaw.split(/[^a-z0-9]+/).filter((w) => w.length >= 5 && !stop.has(w)))].slice(0, 8);
+  const titleNormSql = "lower(translate(titulo, 'áéíóúÁÉÍÓÚñÑ', 'aeiouAEIOUnN'))";
+  const scoreParts = keywords.map((word) => `(CASE WHEN ${titleNormSql} LIKE ${q('%' + word + '%')} THEN 1 ELSE 0 END)`);
+  const scoreSql = scoreParts.length ? scoreParts.join(' + ') : '0';
+  const threshold = Math.min(2, keywords.length || 2);
+  const candidateSql = taskId
+    ? `SELECT id FROM pm_tareas WHERE id=${taskId}`
+    : `SELECT id FROM (SELECT id, (${scoreSql}) AS score FROM pm_tareas WHERE estado NOT IN ('completada','cancelada') ORDER BY score DESC, fecha_limite NULLS LAST LIMIT 1) m WHERE score >= ${threshold}`;
+  const desiredState = (pct >= 100 || completeSignal) ? 'completada' : (evidenceSignal ? 'en_revision' : null);
+  query = `WITH ins AS (
+  INSERT INTO pm_avances (tarea_id, responsable, descripcion, porcentaje, bloqueos_reportados)
+  VALUES (${taskId || 'NULL'}, ${q(responsable)}, ${q(desc)}, ${pct}, ${/bloque/i.test(raw) ? q(raw) : 'NULL'})
+  RETURNING id, tarea_id, responsable, descripcion, porcentaje, fecha
+),
+candidate AS (${candidateSql}),
+upd AS (
+  UPDATE pm_tareas
+  SET estado = COALESCE(${q(desiredState)}, estado), fecha_actualizacion = NOW()
+  WHERE id IN (SELECT id FROM candidate) AND ${desiredState ? 'true' : 'false'}
+  RETURNING id AS tarea_actualizada_id, titulo AS tarea_titulo, estado AS tarea_estado
+)
+SELECT 'created' AS action, ins.id, COALESCE(ins.tarea_id, upd.tarea_actualizada_id) AS tarea_id,
+  ins.responsable, ins.descripcion, ins.porcentaje, ins.fecha,
+  upd.tarea_actualizada_id, upd.tarea_titulo, upd.tarea_estado
+FROM ins
+LEFT JOIN upd ON true;`;
 }
 return [{ json: { query, canal_destino: 'DISCORD_CHANNEL_AVANCES', canal_id: process.env.DISCORD_CHANNEL_AVANCES || ctx.canal_origen } }];
 });
@@ -1002,7 +1171,10 @@ if (!rows.length) {
   respuesta = 'Resumen de avances de hoy:\n' + rows.map(r => `- ${r.responsable}: ${r.total} registro(s). ${r.detalles || ''}`).join('\n');
 } else {
   const a = rows[0];
-  respuesta = `Avance registrado.\nResponsable: ${a.responsable}\nTarea: ${a.tarea_id ? '#' + a.tarea_id : 'sin tarea asociada'}\nPorcentaje: ${a.porcentaje}%\nProximo paso: validar si requiere evidencia, revision o desbloqueo.`;
+  const taskLine = a.tarea_actualizada_id
+    ? `\n✅ Tarea actualizada: #${a.tarea_actualizada_id} ${a.tarea_titulo} -> ${a.tarea_estado}`
+    : '';
+  respuesta = `✅ Avance registrado.\nResponsable: ${a.responsable}\nTarea: ${a.tarea_id ? '#' + a.tarea_id : 'sin tarea asociada'}\nPorcentaje: ${a.porcentaje}%${taskLine}\nProximo paso: validar evidencia, revision o desbloqueo si aplica.`;
 }
 return [{ json: { respuesta, canal_destino: ctx.canal_destino, canal_id: ctx.canal_id, storage: 'postgres:pm_avances' } }];
 });
@@ -1027,6 +1199,15 @@ const q = (v) => v === null || v === undefined || v === '' ? 'NULL' : "'" + Stri
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const intencion = ctx.intencion;
 const taskId = Number(datos.id || raw.match(/#?(\d+)/)?.[1] || 0) || null;
+if (/(?:que|qué)\s+puedo\s+hacer|(?:para|pa)\s+que\s+sirve|c[oó]mo\s+(uso|funciona)|ayuda|comandos|este canal|en este canal/i.test(raw)) {
+  const action = intencion === 'riesgo' ? 'risk_help' : 'blocker_help';
+  return [{ json: {
+    query: `SELECT ${q(action)} AS action;`,
+    mode: 'help',
+    canal_destino: intencion === 'riesgo' ? 'DISCORD_CHANNEL_RIESGOS' : 'DISCORD_CHANNEL_BLOQUEOS',
+    canal_id: process.env[intencion === 'riesgo' ? 'DISCORD_CHANNEL_RIESGOS' : 'DISCORD_CHANNEL_BLOQUEOS'] || ctx.canal_origen
+  } }];
+}
 if (['listar','lista','ver'].includes(sub)) {
   const query = intencion === 'riesgo'
     ? `SELECT 'risk_list' AS action, id, descripcion, probabilidad, impacto, prioridad_calculada, mitigacion, responsable, estado, fecha_creacion FROM pm_riesgos WHERE estado = 'abierto' ORDER BY CASE prioridad_calculada WHEN 'critica' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, fecha_creacion DESC LIMIT 15;`
@@ -1056,6 +1237,9 @@ function cleanDesc(text) {
   return String(text || '')
     .replace(/^\/pm\s+(bloqueo|bloqueos|impedimento|impedimentos|riesgo|riesgos)\s+\w+/i, '')
     .replace(/^\/(bloqueo|bloqueos|impedimento|impedimentos|riesgo|riesgos)\s*/i, '')
+    .replace(/^descripci[oó]n:?\s*/i, '')
+    .replace(/\s+mitigaci[oó]n:?\s*[^;\n]+/ig, '')
+    .replace(/\s+accion:?\s*[^;\n]+/ig, '')
     .replace(/prioridad:?\s*(baja|media|alta|cr[ií]tica)/ig, '')
     .replace(/probabilidad:?\s*(baja|media|alta)/ig, '')
     .replace(/impacto:?\s*(bajo|medio|alto|cr[ií]tico)/ig, '')
@@ -1065,7 +1249,7 @@ function cleanDesc(text) {
 }
 const area = areaFrom(raw);
 const descBase = cleanDesc(raw) || raw;
-const desc = `[${area}] ${descBase}`;
+const desc = descBase;
 let query;
 let target;
 if (intencion === 'riesgo') {
@@ -1079,7 +1263,7 @@ RETURNING 'risk' AS action, id, descripcion, probabilidad, impacto, prioridad_ca
   target = 'DISCORD_CHANNEL_BLOQUEOS';
   const action = raw.match(/accion:?\s*([^;\n]+)/i)?.[1]?.trim() || (taskId ? 'Acordar desbloqueo con responsable de la tarea y actualizar fecha si cambia el plan.' : 'Asignar responsable de resolucion, vincular tarea afectada y revisar impacto en el plan.');
   query = `INSERT INTO pm_bloqueos (descripcion, responsable_afectado, tarea_id, severidad, estado, accion_recomendada, creado_por)
-VALUES (${q(desc)}, ${q(datos.responsable || ctx.usuario)}, ${taskId || 'NULL'}, ${q(sev)}, 'abierto', ${q(action)}, ${q(ctx.usuario)})
+SELECT ${q(desc)}, ${q(datos.responsable || ctx.usuario)}, ${taskId ? `(SELECT id FROM pm_tareas WHERE id=${taskId})` : 'NULL'}, ${q(sev)}, 'abierto', ${q(action)}, ${q(ctx.usuario)}
 RETURNING 'blocker' AS action, id, descripcion, responsable_afectado, tarea_id, severidad, accion_recomendada, ${q(area)} AS area_aplicacion;`;
 }
 return [{ json: { query, canal_destino: target, canal_id: process.env[target] || ctx.canal_origen } }];
@@ -1090,14 +1274,27 @@ const rows = $input.all().map(i => i.json);
 const r = rows[0] || {};
 const ctx = $('Build Bloqueo/Riesgo Query').item.json;
 let respuesta;
+function cleanStoredDesc(value) {
+  return String(value || '')
+    .replace(/^\[[^\]]+\]\s*/i, '')
+    .replace(/^descripci[oó]n:?\s*/i, '')
+    .replace(/\s+mitigaci[oó]n:?\s*[^|;\n]+/ig, '')
+    .replace(/\s+probabilidad:?\s*(baja|media|alta)/ig, '')
+    .replace(/\s+impacto:?\s*(bajo|medio|alto|cr[ií]tico)/ig, '')
+    .replace(/\s+prioridad:?\s*(baja|media|alta|cr[ií]tica)/ig, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
 if (r.action === 'risk') {
-  respuesta = `Riesgo registrado.\nID: #${r.id}\nAplicacion: ${r.area_aplicacion}\nDescripcion: ${r.descripcion}\nProbabilidad: ${r.probabilidad}\nImpacto: ${r.impacto}\nPrioridad calculada: ${r.prioridad_calculada}\nMitigacion sugerida: ${r.mitigacion}\nProximo paso: asignar responsable de mitigacion y fecha de revision.`;
+  respuesta = `⚠️ Riesgo #${r.id} registrado\n📍 Area: ${r.area_aplicacion}\n📝 Descripcion: ${cleanStoredDesc(r.descripcion)}\n📊 Probabilidad/impacto: ${r.probabilidad} / ${r.impacto}\n🚦 Prioridad: ${r.prioridad_calculada}\n🛡️ Mitigacion: ${r.mitigacion}\n➡️ Siguiente paso: asignar responsable y fecha de revision.`;
 } else {
+  if (r.action === 'risk_help') respuesta = '**Ayuda PM - riesgos**\n⚠️ Registra amenazas potenciales que aun pueden ocurrir.\n`/pm riesgo registrar descripcion: ... probabilidad: alta impacto: critico mitigacion: ...`\n`/pm riesgo listar`\n`/pm riesgo mitigar #2`\nTip: si ya detiene el trabajo, va en #bloqueos; si todavia puede pasar, va en #riesgos.';
+  else if (r.action === 'blocker_help') respuesta = '**Ayuda PM - bloqueos**\n🚧 Registra impedimentos reales que ya frenan una tarea.\n`/pm bloqueo registrar descripcion prioridad: alta tarea: #12 responsable: David`\n`/pm bloqueo listar`\n`/pm bloqueo cerrar #3`\nTip: si solo es una amenaza futura, registralo en #riesgos.';
   if (!rows.length && ctx.mode === 'list') respuesta = ctx.canal_destino === 'DISCORD_CHANNEL_RIESGOS' ? 'No hay riesgos abiertos registrados.' : 'No hay bloqueos activos registrados.';
-  else if (r.action === 'risk_list') respuesta = 'Riesgos abiertos:\n' + rows.map(x => `- #${x.id} [${x.prioridad_calculada}] ${x.descripcion} | mitigacion: ${x.mitigacion || 'sin definir'} | responsable: ${x.responsable || 'sin asignar'}`).join('\n');
-  else if (r.action === 'blocker_list') respuesta = 'Bloqueos activos:\n' + rows.map(x => `- #${x.id} [${x.severidad}] ${x.descripcion} | tarea: ${x.tarea_id ? '#' + x.tarea_id : 'sin asociar'} | accion: ${x.accion_recomendada || 'sin definir'}`).join('\n');
-  else if (r.action === 'risk_closed' || r.action === 'blocker_closed') respuesta = `Elemento actualizado.\nID: #${r.id}\nEstado: ${r.estado}\nDescripcion: ${r.descripcion}`;
-  else respuesta = `Detecte y registre un bloqueo.\nID: #${r.id}\nAplicacion: ${r.area_aplicacion}\nAfectado: ${r.responsable_afectado}\nSeveridad: ${r.severidad}\nTarea: ${r.tarea_id ? '#' + r.tarea_id : 'sin tarea asociada'}\nAccion recomendada: ${r.accion_recomendada}\nProximo paso: cerrar con /pm bloqueo cerrar #${r.id} cuando quede resuelto.`;
+  else if (r.action === 'risk_list') respuesta = `⚠️ Riesgos abiertos (${rows.length})\n` + rows.map(x => `• #${x.id} [${x.prioridad_calculada}] ${cleanStoredDesc(x.descripcion)}\n  🛡️ ${x.mitigacion || 'Mitigacion sin definir'} | 👤 ${x.responsable || 'sin asignar'}`).join('\n');
+  else if (r.action === 'blocker_list') respuesta = `🚧 Bloqueos activos (${rows.length})\n` + rows.map(x => `• #${x.id} [${x.severidad}] ${cleanStoredDesc(x.descripcion)}\n  🎯 Tarea: ${x.tarea_id ? '#' + x.tarea_id : 'sin asociar'} | ➡️ ${x.accion_recomendada || 'accion sin definir'}`).join('\n');
+  else if (r.action === 'risk_closed' || r.action === 'blocker_closed') respuesta = `✅ Elemento actualizado\nID: #${r.id}\nEstado: ${r.estado}\nDescripcion: ${cleanStoredDesc(r.descripcion)}`;
+  else if (!respuesta) respuesta = `🚧 Bloqueo #${r.id} registrado\n📍 Area: ${r.area_aplicacion}\n👤 Afectado: ${r.responsable_afectado}\n🚦 Severidad: ${r.severidad}\n🎯 Tarea: ${r.tarea_id ? '#' + r.tarea_id : 'sin tarea asociada'}\n➡️ Accion recomendada: ${r.accion_recomendada}\nCerrar con \`/pm bloqueo cerrar #${r.id}\` cuando quede resuelto.`;
 }
 const storage = String(r.action || '').startsWith('risk') ? 'postgres:pm_riesgos' : 'postgres:pm_bloqueos';
 return [{ json: { respuesta, canal_destino: ctx.canal_destino, canal_id: ctx.canal_id, storage } }];
@@ -1115,31 +1312,32 @@ writeWorkflow(path.join(pmoDir, 'WF_PM_Bloqueos_Riesgos.json'), workflow('wf-pm-
 }));
 
 const reportQuery = `WITH cfg AS (
-  SELECT GREATEST(1, LEAST(90, $1::int)) AS dias
+  SELECT GREATEST(1, LEAST(90, $1::int)) AS dias,
+         (NOW() AT TIME ZONE 'America/Guayaquil')::date AS hoy
 )
 SELECT
   cfg.dias AS rango_dias,
-  (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date AS fecha_desde,
-  CURRENT_DATE::date AS fecha_hasta,
-  (SELECT COUNT(*) FROM pm_tareas WHERE estado = 'completada' AND fecha_actualizacion::date >= (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS tareas_completadas_periodo,
+  (cfg.hoy - ((cfg.dias - 1) * INTERVAL '1 day'))::date AS fecha_desde,
+  cfg.hoy::date AS fecha_hasta,
+  (SELECT COUNT(*) FROM pm_tareas WHERE estado = 'completada' AND (fecha_actualizacion AT TIME ZONE 'America/Guayaquil')::date >= (cfg.hoy - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS tareas_completadas_periodo,
   (SELECT COUNT(*) FROM pm_tareas) AS tareas_totales,
   (SELECT COUNT(*) FROM pm_tareas WHERE estado = 'completada') AS tareas_completadas_total,
   (SELECT COUNT(*) FROM pm_tareas WHERE estado NOT IN ('completada','cancelada')) AS tareas_pendientes,
-  (SELECT COUNT(*) FROM pm_tareas WHERE fecha_limite < CURRENT_DATE AND estado NOT IN ('completada','cancelada')) AS tareas_atrasadas,
-  (SELECT COUNT(*) FROM pm_tareas WHERE fecha_limite <= CURRENT_DATE + INTERVAL '3 days' AND estado NOT IN ('completada','cancelada')) AS tareas_vencen_pronto,
+  (SELECT COUNT(*) FROM pm_tareas WHERE fecha_limite < cfg.hoy AND estado NOT IN ('completada','cancelada')) AS tareas_atrasadas,
+  (SELECT COUNT(*) FROM pm_tareas WHERE fecha_limite <= cfg.hoy + INTERVAL '3 days' AND estado NOT IN ('completada','cancelada')) AS tareas_vencen_pronto,
   (SELECT COUNT(*) FROM pm_bloqueos WHERE estado <> 'resuelto') AS bloqueos_activos,
   (SELECT COUNT(*) FROM pm_bloqueos WHERE estado <> 'resuelto' AND severidad IN ('alta','critica')) AS bloqueos_altos,
   (SELECT COUNT(*) FROM pm_riesgos WHERE estado = 'abierto') AS riesgos_abiertos,
   (SELECT COUNT(*) FROM pm_riesgos WHERE estado = 'abierto' AND prioridad_calculada IN ('alta','critica')) AS riesgos_altos,
-  (SELECT COUNT(*) FROM pm_avances WHERE fecha::date >= (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS avances_periodo,
-  (SELECT COUNT(*) FROM pm_decisiones WHERE fecha::date >= (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS decisiones_periodo,
+  (SELECT COUNT(*) FROM pm_avances WHERE (fecha AT TIME ZONE 'America/Guayaquil')::date >= (cfg.hoy - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS avances_periodo,
+  (SELECT COUNT(*) FROM pm_decisiones WHERE (fecha AT TIME ZONE 'America/Guayaquil')::date >= (cfg.hoy - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS decisiones_periodo,
   (SELECT COALESCE(json_agg(t ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,titulo,responsable,prioridad,estado,fecha_limite FROM pm_tareas WHERE estado NOT IN ('completada','cancelada') ORDER BY fecha_limite NULLS LAST LIMIT 8) t) AS tareas,
-  (SELECT COALESCE(json_agg(t ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,titulo,responsable,prioridad,estado,fecha_limite FROM pm_tareas WHERE fecha_limite <= CURRENT_DATE + INTERVAL '3 days' AND estado NOT IN ('completada','cancelada') ORDER BY fecha_limite NULLS LAST LIMIT 8) t) AS tareas_pronto,
+  (SELECT COALESCE(json_agg(t ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,titulo,responsable,prioridad,estado,fecha_limite FROM pm_tareas WHERE fecha_limite <= cfg.hoy + INTERVAL '3 days' AND estado NOT IN ('completada','cancelada') ORDER BY fecha_limite NULLS LAST LIMIT 8) t) AS tareas_pronto,
   (SELECT COALESCE(json_agg(b ORDER BY fecha_creacion DESC), '[]'::json) FROM (SELECT id,descripcion,responsable_afectado,severidad,fecha_creacion FROM pm_bloqueos WHERE estado <> 'resuelto' ORDER BY fecha_creacion DESC LIMIT 5) b) AS bloqueos,
   (SELECT COALESCE(json_agg(r ORDER BY fecha_creacion DESC), '[]'::json) FROM (SELECT id,descripcion,prioridad_calculada,mitigacion,fecha_creacion FROM pm_riesgos WHERE estado='abierto' ORDER BY fecha_creacion DESC LIMIT 5) r) AS riesgos,
   (SELECT COALESCE(json_agg(e ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,nombre,responsable,estado,fecha_limite FROM pm_entregables WHERE estado NOT IN ('entregado','aprobado') ORDER BY fecha_limite NULLS LAST LIMIT 5) e) AS entregables,
   (SELECT COALESCE(json_agg(d ORDER BY fecha DESC), '[]'::json) FROM (SELECT id,decision,responsable,fecha FROM pm_decisiones ORDER BY fecha DESC LIMIT 5) d) AS decisiones,
-  (SELECT COALESCE(json_agg(a ORDER BY avances DESC), '[]'::json) FROM (SELECT responsable, COUNT(*) AS avances, MAX(fecha) AS ultimo_avance FROM pm_avances WHERE fecha::date >= (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date GROUP BY responsable) a) AS avances_por_responsable,
+  (SELECT COALESCE(json_agg(a ORDER BY avances DESC), '[]'::json) FROM (SELECT responsable, COUNT(*) AS avances, MAX(fecha) AS ultimo_avance FROM pm_avances WHERE (fecha AT TIME ZONE 'America/Guayaquil')::date >= (cfg.hoy - ((cfg.dias - 1) * INTERVAL '1 day'))::date GROUP BY responsable) a) AS avances_por_responsable,
   (SELECT COALESCE(json_agg(c ORDER BY tareas DESC), '[]'::json) FROM (SELECT COALESCE(responsable,'sin responsable') AS responsable, COUNT(*) AS tareas FROM pm_tareas WHERE estado NOT IN ('completada','cancelada') GROUP BY COALESCE(responsable,'sin responsable')) c) AS carga_responsables
 FROM cfg;`;
 
@@ -1147,17 +1345,50 @@ const reportFormatCode = code(function(){
 const row = $json;
 const ctx = $('Execute Workflow Trigger').item.json || {};
 const dias = Number(row.rango_dias || ctx.datos?.dias || (ctx.sub_intencion === 'diario' ? 1 : 7));
-const tipo = ctx.sub_intencion === 'kpis' ? 'KPIs' : (ctx.sub_intencion === 'semanal' ? 'semanal' : (ctx.intencion === 'estado_proyecto' ? 'estado general' : (dias === 1 ? 'diario' : 'periodo')));
-const periodo = dias === 1 ? `hoy (${row.fecha_hasta})` : `ultimos ${dias} dias (${row.fecha_desde} a ${row.fecha_hasta})`;
-function list(arr, fn, empty) { return (arr || []).length ? arr.map(fn).join('\n') : empty; }
-const tareas = typeof row.tareas === 'string' ? JSON.parse(row.tareas) : row.tareas;
-const bloqueos = typeof row.bloqueos === 'string' ? JSON.parse(row.bloqueos) : row.bloqueos;
-const riesgos = typeof row.riesgos === 'string' ? JSON.parse(row.riesgos) : row.riesgos;
-const entregables = typeof row.entregables === 'string' ? JSON.parse(row.entregables) : row.entregables;
-const decisiones = typeof row.decisiones === 'string' ? JSON.parse(row.decisiones) : row.decisiones;
-const tareasPronto = typeof row.tareas_pronto === 'string' ? JSON.parse(row.tareas_pronto) : row.tareas_pronto;
-const avancesResp = typeof row.avances_por_responsable === 'string' ? JSON.parse(row.avances_por_responsable) : row.avances_por_responsable;
-const cargaResp = typeof row.carga_responsables === 'string' ? JSON.parse(row.carga_responsables) : row.carga_responsables;
+const tipo = ctx.sub_intencion === 'kpis' ? 'KPIs' : (ctx.sub_intencion === 'semanal' ? 'semanal' : (ctx.intencion === 'estado_proyecto' ? 'estado general' : (dias === 1 ? 'diario' : `periodo ${dias} dias`)));
+function parseArr(value) {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  try { return JSON.parse(value); } catch (_) { return []; }
+}
+function fmtDate(value) {
+  if (!value) return 'sin fecha';
+  const s = String(value);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const d = m ? new Date(`${m[1]}-${m[2]}-${m[3]}T12:00:00-05:00`) : new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  return d.toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil', day: '2-digit', month: 'short', year: 'numeric' }).replace(/\./g, '');
+}
+const periodo = dias === 1 ? `hoy (${fmtDate(row.fecha_hasta)})` : `ultimos ${dias} dias (${fmtDate(row.fecha_desde)} a ${fmtDate(row.fecha_hasta)})`;
+function list(arr, fn, empty, limit) {
+  const values = (arr || []).slice(0, limit || arr?.length || 0);
+  return values.length ? values.map(fn).join('\n') : empty;
+}
+function cleanDesc(value) {
+  return String(value || '')
+    .replace(/^\[[^\]]+\]\s*/i, '')
+    .replace(/^descripci[oó]n:?\s*/i, '')
+    .replace(/\s+mitigaci[oó]n:?\s*[^|;\n]+/ig, '')
+    .replace(/\s+probabilidad:?\s*(baja|media|alta)/ig, '')
+    .replace(/\s+impacto:?\s*(bajo|medio|alto|cr[ií]tico)/ig, '')
+    .replace(/\s+prioridad:?\s*(baja|media|alta|cr[ií]tica)/ig, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+const statusLabel = { pendiente: 'pendiente', en_progreso: 'en progreso', bloqueada: 'bloqueada', en_revision: 'en revision', completada: 'completada', cancelada: 'cancelada' };
+const semEmoji = { verde: '🟢', amarillo: '🟡', rojo: '🔴' };
+const taskLine = (t) => `• #${t.id} [${statusLabel[t.estado] || t.estado}/${t.prioridad || 'media'}] ${t.titulo}\n  👤 ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' | 📅 ' + fmtDate(t.fecha_limite) : ''}`;
+const blockerLine = (b) => `• #${b.id} [${b.severidad}] ${cleanDesc(b.descripcion)}`;
+const riskLine = (r) => `• #${r.id} [${r.prioridad_calculada}] ${cleanDesc(r.descripcion)}${r.mitigacion ? '\n  🛡️ ' + r.mitigacion : ''}`;
+const deliverableLine = (e) => `• #${e.id} ${e.nombre} [${e.estado}]\n  👤 ${e.responsable || 'sin responsable'}${e.fecha_limite ? ' | 📅 ' + fmtDate(e.fecha_limite) : ''}`;
+const tareas = parseArr(row.tareas);
+const bloqueos = parseArr(row.bloqueos);
+const riesgos = parseArr(row.riesgos);
+const entregables = parseArr(row.entregables);
+const decisiones = parseArr(row.decisiones);
+const tareasPronto = parseArr(row.tareas_pronto);
+const avancesResp = parseArr(row.avances_por_responsable);
+const cargaResp = parseArr(row.carga_responsables);
 const total = Number(row.tareas_totales || 0);
 const completadasTotal = Number(row.tareas_completadas_total || 0);
 const avancePct = total ? Math.round((completadasTotal / total) * 100) : 0;
@@ -1173,56 +1404,73 @@ if (Number(row.avances_periodo) === 0) recomendaciones.push('Pedir avances concr
 if (!recomendaciones.length) recomendaciones.push('Mantener cadencia de avances y preparar evidencia de entregables.');
 if (ctx.sub_intencion === 'kpis') {
   const respuestaKpis = [
-    `KPIs PetSafe - ${periodo}`,
-    `Semaforo PM: ${semaforo}`,
-    `Avance global de tareas: ${avancePct}% (${completadasTotal}/${total})`,
-    `Tareas completadas en el periodo: ${row.tareas_completadas_periodo}`,
-    `Avances registrados: ${row.avances_periodo}`,
-    `Tareas activas: ${row.tareas_pendientes}`,
-    `Tareas atrasadas: ${row.tareas_atrasadas} | Vencen pronto: ${row.tareas_vencen_pronto}`,
-    `Bloqueos activos: ${row.bloqueos_activos} | Altos/criticos: ${row.bloqueos_altos}`,
-    `Riesgos abiertos: ${row.riesgos_abiertos} | Altos/criticos: ${row.riesgos_altos}`,
-    `Decisiones registradas en el periodo: ${row.decisiones_periodo}`,
+    `📊 KPIs PetSafe · ${periodo}`,
+    `🚦 Semaforo: ${semEmoji[semaforo]} ${semaforo}`,
+    `✅ Avance global: ${avancePct}% (${completadasTotal}/${total})`,
+    `📌 Periodo: ${row.tareas_completadas_periodo} tareas completadas · ${row.avances_periodo} avances · ${row.decisiones_periodo} decisiones`,
+    `🧭 Activas: ${row.tareas_pendientes} · Atrasadas: ${row.tareas_atrasadas} · Vencen pronto: ${row.tareas_vencen_pronto}`,
+    `🚧 Bloqueos activos: ${row.bloqueos_activos} (${row.bloqueos_altos} altos/criticos)`,
+    `⚠️ Riesgos abiertos: ${row.riesgos_abiertos} (${row.riesgos_altos} altos/criticos)`,
     '',
-    'Avances por responsable:',
-    list(avancesResp, a => `- ${a.responsable || 'sin responsable'}: ${a.avances}`, '- Sin avances registrados en el periodo.'),
+    '👥 Avances por responsable:',
+    list(avancesResp, a => `• ${a.responsable || 'sin responsable'}: ${a.avances}`, '• Sin avances registrados en el periodo.', 6),
     '',
-    'Carga activa por responsable:',
-    list(cargaResp, c => `- ${c.responsable}: ${c.tareas} tarea(s)`, '- Sin tareas activas.'),
+    '📦 Carga activa:',
+    list(cargaResp, c => `• ${c.responsable}: ${c.tareas} tarea(s)`, '• Sin tareas activas.', 6),
     '',
-    'Lectura PM:',
-    recomendaciones.map(r => `- ${r}`).join('\n')
+    '🧠 Lectura PM:',
+    recomendaciones.slice(0, 3).map(r => `• ${r}`).join('\n')
   ].join('\n');
   return [{ json: { respuesta: respuestaKpis, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: ctx.intencion === 'reporte' } }];
 }
+if (dias === 1 && ctx.intencion !== 'estado_proyecto') {
+  const respuestaDiaria = [
+    `📅 Reporte diario PetSafe · ${fmtDate(row.fecha_hasta)}`,
+    `🚦 ${semEmoji[semaforo]} ${semaforo} · ✅ avance global ${avancePct}% (${completadasTotal}/${total})`,
+    `Hoy: ${row.tareas_completadas_periodo} completadas · ${row.avances_periodo} avances · ${row.decisiones_periodo} decisiones`,
+    `Activas: ${row.tareas_pendientes} · Atrasadas: ${row.tareas_atrasadas} · Vencen pronto: ${row.tareas_vencen_pronto}`,
+    '',
+    '🎯 Foco inmediato',
+    list(tareasPronto, taskLine, '• Sin vencimientos criticos en los proximos 3 dias.', 3),
+    '',
+    '🚧 Bloqueos y riesgos',
+    `• Bloqueos activos: ${row.bloqueos_activos} (${row.bloqueos_altos} altos/criticos)`,
+    `• Riesgos abiertos: ${row.riesgos_abiertos} (${row.riesgos_altos} altos/criticos)`,
+    bloqueos[0] ? `• Bloqueo principal: #${bloqueos[0].id} ${cleanDesc(bloqueos[0].descripcion)}` : '• Sin bloqueos activos registrados.',
+    riesgos[0] ? `• Riesgo principal: #${riesgos[0].id} ${cleanDesc(riesgos[0].descripcion)}` : '• Sin riesgos abiertos registrados.',
+    '',
+    '➡️ Siguientes pasos',
+    recomendaciones.slice(0, 3).map(r => `• ${r}`).join('\n')
+  ].join('\n');
+  return [{ json: { respuesta: respuestaDiaria, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: ctx.intencion === 'reporte' } }];
+}
 const respuesta = [
-  `Reporte ${tipo} PetSafe`,
-  `Periodo evaluado: ${periodo}`,
-  `Semaforo PM: ${semaforo} | Avance global: ${avancePct}% (${completadasTotal}/${total})`,
-  `Completadas en el periodo: ${row.tareas_completadas_periodo} | Avances registrados: ${row.avances_periodo}`,
-  `Activas: ${row.tareas_pendientes} | Atrasadas: ${row.tareas_atrasadas} | Vencen pronto: ${row.tareas_vencen_pronto}`,
-  `Bloqueos activos: ${row.bloqueos_activos} (${row.bloqueos_altos} altos/criticos) | Riesgos abiertos: ${row.riesgos_abiertos} (${row.riesgos_altos} altos/criticos) | Decisiones del periodo: ${row.decisiones_periodo}`,
+  `📊 Reporte ${tipo} PetSafe · ${periodo}`,
+  `🚦 Semaforo: ${semEmoji[semaforo]} ${semaforo} · ✅ avance global ${avancePct}% (${completadasTotal}/${total})`,
+  `📌 Periodo: ${row.tareas_completadas_periodo} completadas · ${row.avances_periodo} avances · ${row.decisiones_periodo} decisiones`,
+  `🧭 Activas: ${row.tareas_pendientes} · Atrasadas: ${row.tareas_atrasadas} · Vencen pronto: ${row.tareas_vencen_pronto}`,
+  `🚧 Bloqueos: ${row.bloqueos_activos} (${row.bloqueos_altos} altos/criticos) · ⚠️ Riesgos: ${row.riesgos_abiertos} (${row.riesgos_altos} altos/criticos)`,
   '',
-  'Tareas clave:',
-  list(tareas, t => `- #${t.id} [${t.estado}/${t.prioridad}] ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - ' + t.fecha_limite : ''}`, '- Sin tareas activas.'),
+  '🎯 Tareas clave',
+  list(tareas, taskLine, '• Sin tareas activas.', 5),
   '',
-  'Vencen pronto:',
-  list(tareasPronto, t => `- #${t.id} [${t.estado}/${t.prioridad}] ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - ' + t.fecha_limite : ''}`, '- Sin vencimientos criticos en 3 dias.'),
+  '⏱️ Vencen pronto',
+  list(tareasPronto, taskLine, '• Sin vencimientos criticos en 3 dias.', 3),
   '',
-  'Bloqueos:',
-  list(bloqueos, b => `- #${b.id} [${b.severidad}] ${b.descripcion}`, '- Sin bloqueos activos.'),
+  '🚧 Bloqueos',
+  list(bloqueos, blockerLine, '• Sin bloqueos activos.', 3),
   '',
-  'Riesgos:',
-  list(riesgos, r => `- #${r.id} [${r.prioridad_calculada}] ${r.descripcion}`, '- Sin riesgos abiertos.'),
+  '⚠️ Riesgos',
+  list(riesgos, riskLine, '• Sin riesgos abiertos.', 3),
   '',
-  'Entregables proximos:',
-  list(entregables, e => `- #${e.id} ${e.nombre} - ${e.estado} - ${e.responsable || 'sin responsable'}${e.fecha_limite ? ' - ' + e.fecha_limite : ''}`, '- Sin entregables pendientes.'),
+  '📦 Entregables proximos',
+  list(entregables, deliverableLine, '• Sin entregables pendientes.', 4),
   '',
-  'Decisiones recientes:',
-  list(decisiones, d => `- #${d.id} ${d.decision} (${d.responsable || 'sin responsable'})`, '- Sin decisiones registradas.'),
+  '🧾 Decisiones recientes',
+  list(decisiones, d => `• #${d.id} ${d.decision} (${d.responsable || 'sin responsable'})`, '• Sin decisiones registradas.', 3),
   '',
-  'Recomendaciones PM:',
-  recomendaciones.map(r => `- ${r}`).join('\n')
+  '🧠 Recomendaciones PM',
+  recomendaciones.slice(0, 4).map(r => `• ${r}`).join('\n')
 ].join('\n');
 return [{ json: { respuesta, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: ctx.intencion === 'reporte' } }];
 });
@@ -1232,8 +1480,46 @@ VALUES (NULL, 'discord', 'pm_report', $1, $2::jsonb)
 ON CONFLICT (idempotency_key) DO NOTHING
 RETURNING outbox_id;`;
 
+const pdfReportFormatCode = code(function(){
+const ctx = $('Execute Workflow Trigger').item.json || {};
+const dias = Number(ctx.datos?.dias || 7);
+const fileName = $json.fileName || $json.file_name || `PetSafe_Reporte_ultimos${dias}d.pdf`;
+const respuesta = [
+  `📄 Reporte PDF solicitado (${dias} dias)`,
+  `Archivo: ${fileName}`,
+  'Se esta generando y publicando en el canal configurado de reportes/alertas.',
+  'Para resumen rapido en Discord usa `/reporte 7`; para PDF usa `/reporte pdf 7`.'
+].join('\n');
+return [{ json: { respuesta, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: false } }];
+});
+
 writeWorkflow(path.join(pmoDir, 'WF_PM_Reportes.json'), workflow('wf-pm-reportes', 'WF_PM_Reportes', [
   trigger,
+  node('is-pdf-report', 'PDF Report?', 'n8n-nodes-base.if', 2.2, [240, 0], {
+    conditions: { options: { caseSensitive: false, typeValidation: 'loose' }, conditions: [{ id: 'pdf-report', leftValue: '={{ $json.sub_intencion }}', rightValue: 'pdf', operator: { type: 'string', operation: 'equals' } }], combinator: 'and' },
+    options: {},
+  }),
+  node('call-pdf-report', 'Call Reporte PDF Semanal', 'n8n-nodes-base.executeWorkflow', 1.2, [500, -140], {
+    workflowId: {
+      __rl: true,
+      value: 'Gy8PUj6ikmbNkgfR',
+      mode: 'list',
+      cachedResultUrl: '/workflow/Gy8PUj6ikmbNkgfR',
+      cachedResultName: 'Reporte PDF Semanal',
+    },
+    workflowInputs: {
+      mappingMode: 'defineBelow',
+      value: {
+        rango_dias: '={{ Number($json.datos?.dias || 7) }}',
+      },
+      matchingColumns: [],
+      schema: [],
+      attemptToConvertTypes: false,
+      convertFieldsToString: true,
+    },
+    options: {},
+  }, { alwaysOutputData: true, continueOnFail: true }),
+  node('format-pdf-report', 'Format PDF Report Response', 'n8n-nodes-base.code', 2, [760, -140], { jsCode: pdfReportFormatCode }),
   pgNode('query-report', 'Query PM Report Data', [240, 0], reportQuery, {
     queryReplacement: '={{ [ $json.datos?.dias || ($json.sub_intencion === "diario" ? 1 : 7) ] }}',
   }),
@@ -1247,7 +1533,9 @@ writeWorkflow(path.join(pmoDir, 'WF_PM_Reportes.json'), workflow('wf-pm-reportes
   }),
   node('return-report', 'Return Report Response', 'n8n-nodes-base.code', 2, [1240, 0], { jsCode: "const r = $('Format PM Report').item.json; return [{ json: r }];" }),
 ], {
-  'Execute Workflow Trigger': { main: [[{ node: 'Query PM Report Data', type: 'main', index: 0 }]] },
+  'Execute Workflow Trigger': { main: [[{ node: 'PDF Report?', type: 'main', index: 0 }]] },
+  'PDF Report?': { main: [[{ node: 'Call Reporte PDF Semanal', type: 'main', index: 0 }], [{ node: 'Query PM Report Data', type: 'main', index: 0 }]] },
+  'Call Reporte PDF Semanal': { main: [[{ node: 'Format PDF Report Response', type: 'main', index: 0 }]] },
   'Query PM Report Data': { main: [[{ node: 'Format PM Report', type: 'main', index: 0 }]] },
   'Format PM Report': { main: [[{ node: 'Publish Report?', type: 'main', index: 0 }]] },
   'Publish Report?': { main: [[{ node: 'Queue Report To Discord', type: 'main', index: 0 }], [{ node: 'Return Report Response', type: 'main', index: 0 }]] },
@@ -1260,8 +1548,9 @@ const sub = String(ctx.sub_intencion || '').toLowerCase(); const q = (v) => v ==
 const date = datos.fecha_limite || raw.match(/(\d{4}-\d{2}-\d{2})/)?.[1] || null;
 let query;
 if ('${kind}' === 'entregable') {
-  const name = raw.replace(/^\/pm\s+entregable\s+\w+/i, '').replace(/responsable:?\s*[^,;\n]+/ig, '').replace(/limite:?\s*\d{4}-\d{2}-\d{2}/ig, '').trim();
-  if (['registrar','crear','agregar'].includes(sub)) query = "INSERT INTO pm_entregables (nombre,responsable,estado,fecha_limite,version,enlace,observaciones,creado_por) VALUES (" + q(name || 'Entregable sin nombre') + "," + q(datos.responsable || raw.match(/responsable:?\s*([^,;\n]+)/i)?.[1]?.trim()) + ",'pendiente'," + (date ? q(date) + "::date" : "NULL") + "," + q(raw.match(/version:?\s*([^,;\n]+)/i)?.[1]?.trim() || '1.0') + "," + q(raw.match(/https?:\/\/\S+/)?.[0]) + "," + q(raw) + "," + q(ctx.usuario) + ") RETURNING 'created' AS action,*;";
+  const name = raw.replace(/^\/pm\s+entregable\s+\w+/i, '').replace(/(?:responsable|limite|l[ií]mite|version|versi[oó]n):?\s*([^,;\n]+?)(?=\s+(?:responsable|limite|l[ií]mite|version|versi[oó]n):?\s|$)/ig, '').trim();
+  const respFallback = raw.match(/responsable:?\s*([^,;\n]+?)(?=\s+(?:limite|l[ií]mite|version|versi[oó]n):?\s|$)/i)?.[1]?.trim();
+  if (['registrar','crear','agregar'].includes(sub)) query = "INSERT INTO pm_entregables (nombre,responsable,estado,fecha_limite,version,enlace,observaciones,creado_por) VALUES (" + q(name || 'Entregable sin nombre') + "," + q(datos.responsable || respFallback) + ",'pendiente'," + (date ? q(date) + "::date" : "NULL") + "," + q(raw.match(/version:?\s*([^,;\n]+)/i)?.[1]?.trim() || '1.0') + "," + q(raw.match(/https?:\/\/\S+/)?.[0]) + "," + q(raw) + "," + q(ctx.usuario) + ") RETURNING 'created' AS action,*;";
   else query = "SELECT 'list' AS action,* FROM pm_entregables WHERE estado NOT IN ('entregado','aprobado') ORDER BY fecha_limite NULLS LAST LIMIT 15;";
 } else if ('${kind}' === 'decision') {
   const decision = raw.replace(/^\/pm\s+decision\s+\w+/i, '').trim();
@@ -1279,9 +1568,10 @@ const simpleCrudFormatter = (kind) => code(function(){
 const rows = $input.all().map(i => i.json); const ctx = $('Build Query').item.json; const first = rows[0] || {};
 let respuesta;
 if ('${kind}' === 'entregable') {
+  const fmt = (d) => d ? String(d).split('T')[0] : 'sin fecha';
   if (!rows.length) respuesta = 'No hay entregables pendientes.';
-  else if (first.action === 'created') respuesta = `Entregable registrado.\nID: #${first.id}\nNombre: ${first.nombre}\nResponsable: ${first.responsable || 'sin asignar'}\nFecha limite: ${first.fecha_limite || 'sin fecha'}\nProximo paso: adjuntar enlace/evidencia cuando este listo.`;
-  else respuesta = 'Entregables pendientes:\n' + rows.map(e => `- #${e.id} ${e.nombre} - ${e.estado} - ${e.responsable || 'sin responsable'}${e.fecha_limite ? ' - ' + e.fecha_limite : ''}`).join('\n');
+  else if (first.action === 'created') respuesta = `Entregable registrado.\nID: #${first.id}\nNombre: ${first.nombre}\nResponsable: ${first.responsable || 'sin asignar'}\nFecha limite: ${fmt(first.fecha_limite)}\nProximo paso: adjuntar enlace/evidencia cuando este listo.`;
+  else respuesta = 'Entregables pendientes:\n' + rows.map(e => `- #${e.id} ${e.nombre} - ${e.estado} - ${e.responsable || 'sin responsable'}${e.fecha_limite ? ' - ' + fmt(e.fecha_limite) : ''}`).join('\n');
 } else if ('${kind}' === 'decision') {
   if (!rows.length) respuesta = 'No hay decisiones registradas.';
   else if (first.action === 'created') respuesta = `Decision registrada.\nID: #${first.id}\nDecision: ${first.decision}\nResponsable: ${first.responsable}\nTrazabilidad: quedo guardada para reportes y reuniones.`;
@@ -1511,6 +1801,7 @@ return [{ json: {
   respuesta_base: agenda,
   titulo,
   fecha_reunion: fechaReunion,
+  fecha_local: `${date} ${hour}:${minute}`,
   fecha_fin: fechaFin,
   duracion_minutos: duracion,
   participantes: participantes.join(','),
@@ -1607,7 +1898,7 @@ if (base.operation === 'create') {
     lines.push(`Motivo probable: ${base.discord_ready ? (discordError || 'Discord no devolvio id de evento.') : 'falta DISCORD_GUILD_ID o DISCORD_BOT_TOKEN en n8n.'}`);
   }
   lines.push(`ID interno: #${stored.id || 'pendiente'}`);
-  lines.push(`Cuando: ${base.fecha_reunion}`);
+  lines.push(`Cuando: ${base.fecha_local}`);
   lines.push(`Duracion: ${base.duracion_minutos} min`);
   lines.push(`Donde: ${base.lugar}`);
   lines.push(`Participantes: ${base.participantes_texto}`);
@@ -1619,7 +1910,7 @@ if (base.operation === 'create') {
   lines.push(`Reunion actualizada: #${stored.id || base.meeting_id} ${base.titulo}`);
   if (eventUrl) lines.push(`Evento: ${eventUrl}`);
   if (discordError) lines.push(`Discord: no pude actualizar el evento automaticamente (${discordError}).`);
-  lines.push(`Cuando: ${base.fecha_reunion}`);
+  lines.push(`Cuando: ${base.fecha_local}`);
   lines.push(`Duracion: ${base.duracion_minutos} min`);
   lines.push(`Donde: ${base.lugar}`);
   lines.push(`Participantes: ${base.participantes_texto}`);
@@ -1902,9 +2193,15 @@ const errorFormatCode = code(function(){
 const e = $json || {};
 const workflow = e.workflow?.name || e.workflowName || 'workflow desconocido';
 const node = e.execution?.lastNodeExecuted || e.node?.name || 'nodo desconocido';
-const msg = e.error?.message || e.message || JSON.stringify(e).slice(0, 500);
-const content = `Error critico en PM Bot\nWorkflow: ${workflow}\nNodo: ${node}\nError: ${msg}`;
-return [{ json: { workflow, node, msg, execution_id: e.execution?.id || e.executionId || '', payload: e, content, channel_id: process.env.DISCORD_CHANNEL_ADMIN || process.env.DISCORD_CHANNEL_BOT_LOG || '' } }];
+let msg = e.execution?.error?.description || e.execution?.error?.message || e.error?.message || e.message || JSON.stringify(e).slice(0, 500);
+try {
+  if (typeof msg === 'string' && msg.startsWith('{')) {
+    const p = JSON.parse(msg);
+    msg = p.message || p.description || msg;
+  }
+} catch(err) {}
+const content = `🚨 **Error en Workflow PM Bot** 🚨\n**Workflow:** ${workflow}\n**Nodo:** ${node}\n**Detalle:** ${msg}`;
+return [{ json: { workflow, node, msg, execution_id: e.execution?.id || e.executionId || '', payload: e, content, channel_id: process.env.DISCORD_CHANNEL_BOT_LOG || '' } }];
 });
 
 writeWorkflow(path.join(coreDir, 'WF_PM_Error_Handler.json'), workflow('wf-pm-error-handler', 'WF_PM_Error_Handler', [

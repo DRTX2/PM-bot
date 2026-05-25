@@ -73,16 +73,55 @@ function extractReply(data) {
   return data?.respuesta || data?.text || data?.message || data?.response || 'Procesando...';
 }
 
+function splitDiscordContent(content, limit = 1900) {
+  const text = String(content ?? '').trim() || 'Procesando...';
+  const chunks = [];
+  let current = '';
+
+  for (const line of text.split('\n')) {
+    if (line.length > limit) {
+      if (current) {
+        chunks.push(current);
+        current = '';
+      }
+      for (let i = 0; i < line.length; i += limit) {
+        chunks.push(line.slice(i, i + limit));
+      }
+      continue;
+    }
+
+    const candidate = current ? `${current}\n${line}` : line;
+    if (candidate.length > limit) {
+      chunks.push(current);
+      current = line;
+    } else {
+      current = candidate;
+    }
+  }
+
+  if (current) chunks.push(current);
+  return chunks.length ? chunks : ['Procesando...'];
+}
+
 async function sendReply({ channelId, messageId, content }) {
   const channel = await client.channels.fetch(channelId);
   if (!channel) return;
-  await channel.send({ content: String(content).slice(0, 2000), reply: { messageReference: messageId } });
+  const chunks = splitDiscordContent(content);
+  for (let i = 0; i < chunks.length; i += 1) {
+    if (i === 0) {
+      await channel.send({ content: chunks[i], reply: { messageReference: messageId } });
+    } else {
+      await channel.send({ content: chunks[i] });
+    }
+  }
 }
 
 async function sendMessage({ channelId, content }) {
   const channel = await client.channels.fetch(channelId);
   if (!channel) return;
-  await channel.send({ content: String(content).slice(0, 2000) });
+  for (const chunk of splitDiscordContent(content)) {
+    await channel.send({ content: chunk });
+  }
 }
 
 async function callN8nAndReply({ webhookUrl, payload, channelId, messageId, timeout }) {

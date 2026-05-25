@@ -15,6 +15,82 @@
       "parameters": {}
     },
     {
+      "id": "is-pdf-report",
+      "name": "PDF Report?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "pdf-report",
+              "leftValue": "={{ $json.sub_intencion }}",
+              "rightValue": "pdf",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "call-pdf-report",
+      "name": "Call Reporte PDF Semanal",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        500,
+        -140
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "Gy8PUj6ikmbNkgfR",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/Gy8PUj6ikmbNkgfR",
+          "cachedResultName": "Reporte PDF Semanal"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "rango_dias": "={{ Number($json.datos?.dias || 7) }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "id": "format-pdf-report",
+      "name": "Format PDF Report Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        -140
+      ],
+      "parameters": {
+        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst ctx = $('Execute Workflow Trigger').item.json || {};\nconst dias = Number(ctx.datos?.dias || 7);\nconst fileName = $json.fileName || $json.file_name || `PetSafe_Reporte_ultimos${dias}d.pdf`;\nconst respuesta = [\n  `📄 Reporte PDF solicitado (${dias} dias)`,\n  `Archivo: ${fileName}`,\n  'Se esta generando y publicando en el canal configurado de reportes/alertas.',\n  'Para resumen rapido en Discord usa `/reporte 7`; para PDF usa `/reporte pdf 7`.'\n].join('\\n');\nreturn [{ json: { respuesta, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: false } }];"
+      }
+    },
+    {
       "id": "query-report",
       "name": "Query PM Report Data",
       "type": "n8n-nodes-base.postgres",
@@ -25,7 +101,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH cfg AS (\n  SELECT GREATEST(1, LEAST(90, $1::int)) AS dias\n)\nSELECT\n  cfg.dias AS rango_dias,\n  (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date AS fecha_desde,\n  CURRENT_DATE::date AS fecha_hasta,\n  (SELECT COUNT(*) FROM pm_tareas WHERE estado = 'completada' AND fecha_actualizacion::date >= (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS tareas_completadas_periodo,\n  (SELECT COUNT(*) FROM pm_tareas) AS tareas_totales,\n  (SELECT COUNT(*) FROM pm_tareas WHERE estado = 'completada') AS tareas_completadas_total,\n  (SELECT COUNT(*) FROM pm_tareas WHERE estado NOT IN ('completada','cancelada')) AS tareas_pendientes,\n  (SELECT COUNT(*) FROM pm_tareas WHERE fecha_limite < CURRENT_DATE AND estado NOT IN ('completada','cancelada')) AS tareas_atrasadas,\n  (SELECT COUNT(*) FROM pm_tareas WHERE fecha_limite <= CURRENT_DATE + INTERVAL '3 days' AND estado NOT IN ('completada','cancelada')) AS tareas_vencen_pronto,\n  (SELECT COUNT(*) FROM pm_bloqueos WHERE estado <> 'resuelto') AS bloqueos_activos,\n  (SELECT COUNT(*) FROM pm_bloqueos WHERE estado <> 'resuelto' AND severidad IN ('alta','critica')) AS bloqueos_altos,\n  (SELECT COUNT(*) FROM pm_riesgos WHERE estado = 'abierto') AS riesgos_abiertos,\n  (SELECT COUNT(*) FROM pm_riesgos WHERE estado = 'abierto' AND prioridad_calculada IN ('alta','critica')) AS riesgos_altos,\n  (SELECT COUNT(*) FROM pm_avances WHERE fecha::date >= (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS avances_periodo,\n  (SELECT COUNT(*) FROM pm_decisiones WHERE fecha::date >= (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS decisiones_periodo,\n  (SELECT COALESCE(json_agg(t ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,titulo,responsable,prioridad,estado,fecha_limite FROM pm_tareas WHERE estado NOT IN ('completada','cancelada') ORDER BY fecha_limite NULLS LAST LIMIT 8) t) AS tareas,\n  (SELECT COALESCE(json_agg(t ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,titulo,responsable,prioridad,estado,fecha_limite FROM pm_tareas WHERE fecha_limite <= CURRENT_DATE + INTERVAL '3 days' AND estado NOT IN ('completada','cancelada') ORDER BY fecha_limite NULLS LAST LIMIT 8) t) AS tareas_pronto,\n  (SELECT COALESCE(json_agg(b ORDER BY fecha_creacion DESC), '[]'::json) FROM (SELECT id,descripcion,responsable_afectado,severidad,fecha_creacion FROM pm_bloqueos WHERE estado <> 'resuelto' ORDER BY fecha_creacion DESC LIMIT 5) b) AS bloqueos,\n  (SELECT COALESCE(json_agg(r ORDER BY fecha_creacion DESC), '[]'::json) FROM (SELECT id,descripcion,prioridad_calculada,mitigacion,fecha_creacion FROM pm_riesgos WHERE estado='abierto' ORDER BY fecha_creacion DESC LIMIT 5) r) AS riesgos,\n  (SELECT COALESCE(json_agg(e ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,nombre,responsable,estado,fecha_limite FROM pm_entregables WHERE estado NOT IN ('entregado','aprobado') ORDER BY fecha_limite NULLS LAST LIMIT 5) e) AS entregables,\n  (SELECT COALESCE(json_agg(d ORDER BY fecha DESC), '[]'::json) FROM (SELECT id,decision,responsable,fecha FROM pm_decisiones ORDER BY fecha DESC LIMIT 5) d) AS decisiones,\n  (SELECT COALESCE(json_agg(a ORDER BY avances DESC), '[]'::json) FROM (SELECT responsable, COUNT(*) AS avances, MAX(fecha) AS ultimo_avance FROM pm_avances WHERE fecha::date >= (CURRENT_DATE - ((cfg.dias - 1) * INTERVAL '1 day'))::date GROUP BY responsable) a) AS avances_por_responsable,\n  (SELECT COALESCE(json_agg(c ORDER BY tareas DESC), '[]'::json) FROM (SELECT COALESCE(responsable,'sin responsable') AS responsable, COUNT(*) AS tareas FROM pm_tareas WHERE estado NOT IN ('completada','cancelada') GROUP BY COALESCE(responsable,'sin responsable')) c) AS carga_responsables\nFROM cfg;",
+        "query": "WITH cfg AS (\n  SELECT GREATEST(1, LEAST(90, $1::int)) AS dias,\n         (NOW() AT TIME ZONE 'America/Guayaquil')::date AS hoy\n)\nSELECT\n  cfg.dias AS rango_dias,\n  (cfg.hoy - ((cfg.dias - 1) * INTERVAL '1 day'))::date AS fecha_desde,\n  cfg.hoy::date AS fecha_hasta,\n  (SELECT COUNT(*) FROM pm_tareas WHERE estado = 'completada' AND (fecha_actualizacion AT TIME ZONE 'America/Guayaquil')::date >= (cfg.hoy - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS tareas_completadas_periodo,\n  (SELECT COUNT(*) FROM pm_tareas) AS tareas_totales,\n  (SELECT COUNT(*) FROM pm_tareas WHERE estado = 'completada') AS tareas_completadas_total,\n  (SELECT COUNT(*) FROM pm_tareas WHERE estado NOT IN ('completada','cancelada')) AS tareas_pendientes,\n  (SELECT COUNT(*) FROM pm_tareas WHERE fecha_limite < cfg.hoy AND estado NOT IN ('completada','cancelada')) AS tareas_atrasadas,\n  (SELECT COUNT(*) FROM pm_tareas WHERE fecha_limite <= cfg.hoy + INTERVAL '3 days' AND estado NOT IN ('completada','cancelada')) AS tareas_vencen_pronto,\n  (SELECT COUNT(*) FROM pm_bloqueos WHERE estado <> 'resuelto') AS bloqueos_activos,\n  (SELECT COUNT(*) FROM pm_bloqueos WHERE estado <> 'resuelto' AND severidad IN ('alta','critica')) AS bloqueos_altos,\n  (SELECT COUNT(*) FROM pm_riesgos WHERE estado = 'abierto') AS riesgos_abiertos,\n  (SELECT COUNT(*) FROM pm_riesgos WHERE estado = 'abierto' AND prioridad_calculada IN ('alta','critica')) AS riesgos_altos,\n  (SELECT COUNT(*) FROM pm_avances WHERE (fecha AT TIME ZONE 'America/Guayaquil')::date >= (cfg.hoy - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS avances_periodo,\n  (SELECT COUNT(*) FROM pm_decisiones WHERE (fecha AT TIME ZONE 'America/Guayaquil')::date >= (cfg.hoy - ((cfg.dias - 1) * INTERVAL '1 day'))::date) AS decisiones_periodo,\n  (SELECT COALESCE(json_agg(t ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,titulo,responsable,prioridad,estado,fecha_limite FROM pm_tareas WHERE estado NOT IN ('completada','cancelada') ORDER BY fecha_limite NULLS LAST LIMIT 8) t) AS tareas,\n  (SELECT COALESCE(json_agg(t ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,titulo,responsable,prioridad,estado,fecha_limite FROM pm_tareas WHERE fecha_limite <= cfg.hoy + INTERVAL '3 days' AND estado NOT IN ('completada','cancelada') ORDER BY fecha_limite NULLS LAST LIMIT 8) t) AS tareas_pronto,\n  (SELECT COALESCE(json_agg(b ORDER BY fecha_creacion DESC), '[]'::json) FROM (SELECT id,descripcion,responsable_afectado,severidad,fecha_creacion FROM pm_bloqueos WHERE estado <> 'resuelto' ORDER BY fecha_creacion DESC LIMIT 5) b) AS bloqueos,\n  (SELECT COALESCE(json_agg(r ORDER BY fecha_creacion DESC), '[]'::json) FROM (SELECT id,descripcion,prioridad_calculada,mitigacion,fecha_creacion FROM pm_riesgos WHERE estado='abierto' ORDER BY fecha_creacion DESC LIMIT 5) r) AS riesgos,\n  (SELECT COALESCE(json_agg(e ORDER BY fecha_limite NULLS LAST), '[]'::json) FROM (SELECT id,nombre,responsable,estado,fecha_limite FROM pm_entregables WHERE estado NOT IN ('entregado','aprobado') ORDER BY fecha_limite NULLS LAST LIMIT 5) e) AS entregables,\n  (SELECT COALESCE(json_agg(d ORDER BY fecha DESC), '[]'::json) FROM (SELECT id,decision,responsable,fecha FROM pm_decisiones ORDER BY fecha DESC LIMIT 5) d) AS decisiones,\n  (SELECT COALESCE(json_agg(a ORDER BY avances DESC), '[]'::json) FROM (SELECT responsable, COUNT(*) AS avances, MAX(fecha) AS ultimo_avance FROM pm_avances WHERE (fecha AT TIME ZONE 'America/Guayaquil')::date >= (cfg.hoy - ((cfg.dias - 1) * INTERVAL '1 day'))::date GROUP BY responsable) a) AS avances_por_responsable,\n  (SELECT COALESCE(json_agg(c ORDER BY tareas DESC), '[]'::json) FROM (SELECT COALESCE(responsable,'sin responsable') AS responsable, COUNT(*) AS tareas FROM pm_tareas WHERE estado NOT IN ('completada','cancelada') GROUP BY COALESCE(responsable,'sin responsable')) c) AS carga_responsables\nFROM cfg;",
         "options": {
           "queryReplacement": "={{ [ $json.datos?.dias || ($json.sub_intencion === \"diario\" ? 1 : 7) ] }}"
         }
@@ -47,7 +123,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst row = $json;\nconst ctx = $('Execute Workflow Trigger').item.json || {};\nconst dias = Number(row.rango_dias || ctx.datos?.dias || (ctx.sub_intencion === 'diario' ? 1 : 7));\nconst tipo = ctx.sub_intencion === 'kpis' ? 'KPIs' : (ctx.sub_intencion === 'semanal' ? 'semanal' : (ctx.intencion === 'estado_proyecto' ? 'estado general' : (dias === 1 ? 'diario' : 'periodo')));\nconst periodo = dias === 1 ? `hoy (${row.fecha_hasta})` : `ultimos ${dias} dias (${row.fecha_desde} a ${row.fecha_hasta})`;\nfunction list(arr, fn, empty) { return (arr || []).length ? arr.map(fn).join('\\n') : empty; }\nconst tareas = typeof row.tareas === 'string' ? JSON.parse(row.tareas) : row.tareas;\nconst bloqueos = typeof row.bloqueos === 'string' ? JSON.parse(row.bloqueos) : row.bloqueos;\nconst riesgos = typeof row.riesgos === 'string' ? JSON.parse(row.riesgos) : row.riesgos;\nconst entregables = typeof row.entregables === 'string' ? JSON.parse(row.entregables) : row.entregables;\nconst decisiones = typeof row.decisiones === 'string' ? JSON.parse(row.decisiones) : row.decisiones;\nconst tareasPronto = typeof row.tareas_pronto === 'string' ? JSON.parse(row.tareas_pronto) : row.tareas_pronto;\nconst avancesResp = typeof row.avances_por_responsable === 'string' ? JSON.parse(row.avances_por_responsable) : row.avances_por_responsable;\nconst cargaResp = typeof row.carga_responsables === 'string' ? JSON.parse(row.carga_responsables) : row.carga_responsables;\nconst total = Number(row.tareas_totales || 0);\nconst completadasTotal = Number(row.tareas_completadas_total || 0);\nconst avancePct = total ? Math.round((completadasTotal / total) * 100) : 0;\nlet semaforo = 'verde';\nif (Number(row.tareas_atrasadas) > 0 || Number(row.bloqueos_altos) > 0 || Number(row.riesgos_altos) > 0) semaforo = 'rojo';\nelse if (Number(row.tareas_vencen_pronto) > 0 || Number(row.bloqueos_activos) > 0 || Number(row.riesgos_abiertos) > 0 || Number(row.avances_periodo) === 0) semaforo = 'amarillo';\nconst recomendaciones = [];\nif (Number(row.tareas_atrasadas) > 0) recomendaciones.push('Priorizar tareas atrasadas y validar bloqueos con responsables hoy.');\nif (Number(row.tareas_vencen_pronto) > 0) recomendaciones.push('Cerrar o replanificar tareas que vencen en los proximos 3 dias.');\nif (Number(row.bloqueos_activos) > 0) recomendaciones.push('Revisar bloqueos activos antes de abrir trabajo nuevo.');\nif (Number(row.riesgos_abiertos) > 0) recomendaciones.push('Actualizar mitigaciones de riesgos abiertos y asignar fecha de revision.');\nif (Number(row.avances_periodo) === 0) recomendaciones.push('Pedir avances concretos; no hay actividad registrada en el periodo.');\nif (!recomendaciones.length) recomendaciones.push('Mantener cadencia de avances y preparar evidencia de entregables.');\nif (ctx.sub_intencion === 'kpis') {\n  const respuestaKpis = [\n    `KPIs PetSafe - ${periodo}`,\n    `Semaforo PM: ${semaforo}`,\n    `Avance global de tareas: ${avancePct}% (${completadasTotal}/${total})`,\n    `Tareas completadas en el periodo: ${row.tareas_completadas_periodo}`,\n    `Avances registrados: ${row.avances_periodo}`,\n    `Tareas activas: ${row.tareas_pendientes}`,\n    `Tareas atrasadas: ${row.tareas_atrasadas} | Vencen pronto: ${row.tareas_vencen_pronto}`,\n    `Bloqueos activos: ${row.bloqueos_activos} | Altos/criticos: ${row.bloqueos_altos}`,\n    `Riesgos abiertos: ${row.riesgos_abiertos} | Altos/criticos: ${row.riesgos_altos}`,\n    `Decisiones registradas en el periodo: ${row.decisiones_periodo}`,\n    '',\n    'Avances por responsable:',\n    list(avancesResp, a => `- ${a.responsable || 'sin responsable'}: ${a.avances}`, '- Sin avances registrados en el periodo.'),\n    '',\n    'Carga activa por responsable:',\n    list(cargaResp, c => `- ${c.responsable}: ${c.tareas} tarea(s)`, '- Sin tareas activas.'),\n    '',\n    'Lectura PM:',\n    recomendaciones.map(r => `- ${r}`).join('\\n')\n  ].join('\\n');\n  return [{ json: { respuesta: respuestaKpis, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: ctx.intencion === 'reporte' } }];\n}\nconst respuesta = [\n  `Reporte ${tipo} PetSafe`,\n  `Periodo evaluado: ${periodo}`,\n  `Semaforo PM: ${semaforo} | Avance global: ${avancePct}% (${completadasTotal}/${total})`,\n  `Completadas en el periodo: ${row.tareas_completadas_periodo} | Avances registrados: ${row.avances_periodo}`,\n  `Activas: ${row.tareas_pendientes} | Atrasadas: ${row.tareas_atrasadas} | Vencen pronto: ${row.tareas_vencen_pronto}`,\n  `Bloqueos activos: ${row.bloqueos_activos} (${row.bloqueos_altos} altos/criticos) | Riesgos abiertos: ${row.riesgos_abiertos} (${row.riesgos_altos} altos/criticos) | Decisiones del periodo: ${row.decisiones_periodo}`,\n  '',\n  'Tareas clave:',\n  list(tareas, t => `- #${t.id} [${t.estado}/${t.prioridad}] ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - ' + t.fecha_limite : ''}`, '- Sin tareas activas.'),\n  '',\n  'Vencen pronto:',\n  list(tareasPronto, t => `- #${t.id} [${t.estado}/${t.prioridad}] ${t.titulo} - ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' - ' + t.fecha_limite : ''}`, '- Sin vencimientos criticos en 3 dias.'),\n  '',\n  'Bloqueos:',\n  list(bloqueos, b => `- #${b.id} [${b.severidad}] ${b.descripcion}`, '- Sin bloqueos activos.'),\n  '',\n  'Riesgos:',\n  list(riesgos, r => `- #${r.id} [${r.prioridad_calculada}] ${r.descripcion}`, '- Sin riesgos abiertos.'),\n  '',\n  'Entregables proximos:',\n  list(entregables, e => `- #${e.id} ${e.nombre} - ${e.estado} - ${e.responsable || 'sin responsable'}${e.fecha_limite ? ' - ' + e.fecha_limite : ''}`, '- Sin entregables pendientes.'),\n  '',\n  'Decisiones recientes:',\n  list(decisiones, d => `- #${d.id} ${d.decision} (${d.responsable || 'sin responsable'})`, '- Sin decisiones registradas.'),\n  '',\n  'Recomendaciones PM:',\n  recomendaciones.map(r => `- ${r}`).join('\\n')\n].join('\\n');\nreturn [{ json: { respuesta, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: ctx.intencion === 'reporte' } }];"
+        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst row = $json;\nconst ctx = $('Execute Workflow Trigger').item.json || {};\nconst dias = Number(row.rango_dias || ctx.datos?.dias || (ctx.sub_intencion === 'diario' ? 1 : 7));\nconst tipo = ctx.sub_intencion === 'kpis' ? 'KPIs' : (ctx.sub_intencion === 'semanal' ? 'semanal' : (ctx.intencion === 'estado_proyecto' ? 'estado general' : (dias === 1 ? 'diario' : `periodo ${dias} dias`)));\nfunction parseArr(value) {\n  if (Array.isArray(value)) return value;\n  if (!value) return [];\n  try { return JSON.parse(value); } catch (_) { return []; }\n}\nfunction fmtDate(value) {\n  if (!value) return 'sin fecha';\n  const s = String(value);\n  const m = s.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);\n  const d = m ? new Date(`${m[1]}-${m[2]}-${m[3]}T12:00:00-05:00`) : new Date(s);\n  if (Number.isNaN(d.getTime())) return s;\n  return d.toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil', day: '2-digit', month: 'short', year: 'numeric' }).replace(/\\./g, '');\n}\nconst periodo = dias === 1 ? `hoy (${fmtDate(row.fecha_hasta)})` : `ultimos ${dias} dias (${fmtDate(row.fecha_desde)} a ${fmtDate(row.fecha_hasta)})`;\nfunction list(arr, fn, empty, limit) {\n  const values = (arr || []).slice(0, limit || arr?.length || 0);\n  return values.length ? values.map(fn).join('\\n') : empty;\n}\nfunction cleanDesc(value) {\n  return String(value || '')\n    .replace(/^\\[[^\\]]+\\]\\s*/i, '')\n    .replace(/^descripci[oó]n:?\\s*/i, '')\n    .replace(/\\s+mitigaci[oó]n:?\\s*[^|;\\n]+/ig, '')\n    .replace(/\\s+probabilidad:?\\s*(baja|media|alta)/ig, '')\n    .replace(/\\s+impacto:?\\s*(bajo|medio|alto|cr[ií]tico)/ig, '')\n    .replace(/\\s+prioridad:?\\s*(baja|media|alta|cr[ií]tica)/ig, '')\n    .replace(/\\s{2,}/g, ' ')\n    .trim();\n}\nconst statusLabel = { pendiente: 'pendiente', en_progreso: 'en progreso', bloqueada: 'bloqueada', en_revision: 'en revision', completada: 'completada', cancelada: 'cancelada' };\nconst semEmoji = { verde: '🟢', amarillo: '🟡', rojo: '🔴' };\nconst taskLine = (t) => `• #${t.id} [${statusLabel[t.estado] || t.estado}/${t.prioridad || 'media'}] ${t.titulo}\\n  👤 ${t.responsable || 'sin responsable'}${t.fecha_limite ? ' | 📅 ' + fmtDate(t.fecha_limite) : ''}`;\nconst blockerLine = (b) => `• #${b.id} [${b.severidad}] ${cleanDesc(b.descripcion)}`;\nconst riskLine = (r) => `• #${r.id} [${r.prioridad_calculada}] ${cleanDesc(r.descripcion)}${r.mitigacion ? '\\n  🛡️ ' + r.mitigacion : ''}`;\nconst deliverableLine = (e) => `• #${e.id} ${e.nombre} [${e.estado}]\\n  👤 ${e.responsable || 'sin responsable'}${e.fecha_limite ? ' | 📅 ' + fmtDate(e.fecha_limite) : ''}`;\nconst tareas = parseArr(row.tareas);\nconst bloqueos = parseArr(row.bloqueos);\nconst riesgos = parseArr(row.riesgos);\nconst entregables = parseArr(row.entregables);\nconst decisiones = parseArr(row.decisiones);\nconst tareasPronto = parseArr(row.tareas_pronto);\nconst avancesResp = parseArr(row.avances_por_responsable);\nconst cargaResp = parseArr(row.carga_responsables);\nconst total = Number(row.tareas_totales || 0);\nconst completadasTotal = Number(row.tareas_completadas_total || 0);\nconst avancePct = total ? Math.round((completadasTotal / total) * 100) : 0;\nlet semaforo = 'verde';\nif (Number(row.tareas_atrasadas) > 0 || Number(row.bloqueos_altos) > 0 || Number(row.riesgos_altos) > 0) semaforo = 'rojo';\nelse if (Number(row.tareas_vencen_pronto) > 0 || Number(row.bloqueos_activos) > 0 || Number(row.riesgos_abiertos) > 0 || Number(row.avances_periodo) === 0) semaforo = 'amarillo';\nconst recomendaciones = [];\nif (Number(row.tareas_atrasadas) > 0) recomendaciones.push('Priorizar tareas atrasadas y validar bloqueos con responsables hoy.');\nif (Number(row.tareas_vencen_pronto) > 0) recomendaciones.push('Cerrar o replanificar tareas que vencen en los proximos 3 dias.');\nif (Number(row.bloqueos_activos) > 0) recomendaciones.push('Revisar bloqueos activos antes de abrir trabajo nuevo.');\nif (Number(row.riesgos_abiertos) > 0) recomendaciones.push('Actualizar mitigaciones de riesgos abiertos y asignar fecha de revision.');\nif (Number(row.avances_periodo) === 0) recomendaciones.push('Pedir avances concretos; no hay actividad registrada en el periodo.');\nif (!recomendaciones.length) recomendaciones.push('Mantener cadencia de avances y preparar evidencia de entregables.');\nif (ctx.sub_intencion === 'kpis') {\n  const respuestaKpis = [\n    `📊 KPIs PetSafe · ${periodo}`,\n    `🚦 Semaforo: ${semEmoji[semaforo]} ${semaforo}`,\n    `✅ Avance global: ${avancePct}% (${completadasTotal}/${total})`,\n    `📌 Periodo: ${row.tareas_completadas_periodo} tareas completadas · ${row.avances_periodo} avances · ${row.decisiones_periodo} decisiones`,\n    `🧭 Activas: ${row.tareas_pendientes} · Atrasadas: ${row.tareas_atrasadas} · Vencen pronto: ${row.tareas_vencen_pronto}`,\n    `🚧 Bloqueos activos: ${row.bloqueos_activos} (${row.bloqueos_altos} altos/criticos)`,\n    `⚠️ Riesgos abiertos: ${row.riesgos_abiertos} (${row.riesgos_altos} altos/criticos)`,\n    '',\n    '👥 Avances por responsable:',\n    list(avancesResp, a => `• ${a.responsable || 'sin responsable'}: ${a.avances}`, '• Sin avances registrados en el periodo.', 6),\n    '',\n    '📦 Carga activa:',\n    list(cargaResp, c => `• ${c.responsable}: ${c.tareas} tarea(s)`, '• Sin tareas activas.', 6),\n    '',\n    '🧠 Lectura PM:',\n    recomendaciones.slice(0, 3).map(r => `• ${r}`).join('\\n')\n  ].join('\\n');\n  return [{ json: { respuesta: respuestaKpis, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: ctx.intencion === 'reporte' } }];\n}\nif (dias === 1 && ctx.intencion !== 'estado_proyecto') {\n  const respuestaDiaria = [\n    `📅 Reporte diario PetSafe · ${fmtDate(row.fecha_hasta)}`,\n    `🚦 ${semEmoji[semaforo]} ${semaforo} · ✅ avance global ${avancePct}% (${completadasTotal}/${total})`,\n    `Hoy: ${row.tareas_completadas_periodo} completadas · ${row.avances_periodo} avances · ${row.decisiones_periodo} decisiones`,\n    `Activas: ${row.tareas_pendientes} · Atrasadas: ${row.tareas_atrasadas} · Vencen pronto: ${row.tareas_vencen_pronto}`,\n    '',\n    '🎯 Foco inmediato',\n    list(tareasPronto, taskLine, '• Sin vencimientos criticos en los proximos 3 dias.', 3),\n    '',\n    '🚧 Bloqueos y riesgos',\n    `• Bloqueos activos: ${row.bloqueos_activos} (${row.bloqueos_altos} altos/criticos)`,\n    `• Riesgos abiertos: ${row.riesgos_abiertos} (${row.riesgos_altos} altos/criticos)`,\n    bloqueos[0] ? `• Bloqueo principal: #${bloqueos[0].id} ${cleanDesc(bloqueos[0].descripcion)}` : '• Sin bloqueos activos registrados.',\n    riesgos[0] ? `• Riesgo principal: #${riesgos[0].id} ${cleanDesc(riesgos[0].descripcion)}` : '• Sin riesgos abiertos registrados.',\n    '',\n    '➡️ Siguientes pasos',\n    recomendaciones.slice(0, 3).map(r => `• ${r}`).join('\\n')\n  ].join('\\n');\n  return [{ json: { respuesta: respuestaDiaria, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: ctx.intencion === 'reporte' } }];\n}\nconst respuesta = [\n  `📊 Reporte ${tipo} PetSafe · ${periodo}`,\n  `🚦 Semaforo: ${semEmoji[semaforo]} ${semaforo} · ✅ avance global ${avancePct}% (${completadasTotal}/${total})`,\n  `📌 Periodo: ${row.tareas_completadas_periodo} completadas · ${row.avances_periodo} avances · ${row.decisiones_periodo} decisiones`,\n  `🧭 Activas: ${row.tareas_pendientes} · Atrasadas: ${row.tareas_atrasadas} · Vencen pronto: ${row.tareas_vencen_pronto}`,\n  `🚧 Bloqueos: ${row.bloqueos_activos} (${row.bloqueos_altos} altos/criticos) · ⚠️ Riesgos: ${row.riesgos_abiertos} (${row.riesgos_altos} altos/criticos)`,\n  '',\n  '🎯 Tareas clave',\n  list(tareas, taskLine, '• Sin tareas activas.', 5),\n  '',\n  '⏱️ Vencen pronto',\n  list(tareasPronto, taskLine, '• Sin vencimientos criticos en 3 dias.', 3),\n  '',\n  '🚧 Bloqueos',\n  list(bloqueos, blockerLine, '• Sin bloqueos activos.', 3),\n  '',\n  '⚠️ Riesgos',\n  list(riesgos, riskLine, '• Sin riesgos abiertos.', 3),\n  '',\n  '📦 Entregables proximos',\n  list(entregables, deliverableLine, '• Sin entregables pendientes.', 4),\n  '',\n  '🧾 Decisiones recientes',\n  list(decisiones, d => `• #${d.id} ${d.decision} (${d.responsable || 'sin responsable'})`, '• Sin decisiones registradas.', 3),\n  '',\n  '🧠 Recomendaciones PM',\n  recomendaciones.slice(0, 4).map(r => `• ${r}`).join('\\n')\n].join('\\n');\nreturn [{ json: { respuesta, canal_destino: 'DISCORD_CHANNEL_REPORTES', canal_id: process.env.DISCORD_CHANNEL_REPORTES || ctx.canal_origen, should_publish: ctx.intencion === 'reporte' } }];"
       }
     },
     {
@@ -123,7 +199,36 @@
       "main": [
         [
           {
+            "node": "PDF Report?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF Report?": {
+      "main": [
+        [
+          {
+            "node": "Call Reporte PDF Semanal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Query PM Report Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Reporte PDF Semanal": {
+      "main": [
+        [
+          {
+            "node": "Format PDF Report Response",
             "type": "main",
             "index": 0
           }

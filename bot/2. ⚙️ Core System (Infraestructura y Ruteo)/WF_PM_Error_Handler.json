@@ -24,7 +24,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst e = $json || {};\nconst workflow = e.workflow?.name || e.workflowName || 'workflow desconocido';\nconst node = e.execution?.lastNodeExecuted || e.node?.name || 'nodo desconocido';\nconst msg = e.error?.message || e.message || JSON.stringify(e).slice(0, 500);\nconst content = `Error critico en PM Bot\\nWorkflow: ${workflow}\\nNodo: ${node}\\nError: ${msg}`;\nreturn [{ json: { workflow, node, msg, execution_id: e.execution?.id || e.executionId || '', payload: e, content, channel_id: process.env.DISCORD_CHANNEL_ADMIN || process.env.DISCORD_CHANNEL_BOT_LOG || '' } }];"
+        "jsCode": "const process = { env: typeof $env !== 'undefined' ? $env : {} };\nconst e = $json || {};\nconst workflow = e.workflow?.name || e.workflowName || 'workflow desconocido';\nconst node = e.execution?.lastNodeExecuted || e.node?.name || 'nodo desconocido';\nlet msg = e.execution?.error?.description || e.execution?.error?.message || e.error?.message || e.message || JSON.stringify(e).slice(0, 500);\ntry {\n  if (typeof msg === 'string' && msg.startsWith('{')) {\n    const p = JSON.parse(msg);\n    msg = p.message || p.description || msg;\n  }\n} catch(err) {}\nconst content = `🚨 **Error en Workflow PM Bot** 🚨\\n**Workflow:** ${workflow}\\n**Nodo:** ${node}\\n**Detalle:** ${msg}`;\nreturn [{ json: { workflow, node, msg, execution_id: e.execution?.id || e.executionId || '', payload: e, content, channel_id: process.env.DISCORD_CHANNEL_BOT_LOG || '' } }];"
       }
     },
     {

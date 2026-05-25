@@ -142,7 +142,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT fecha_ejecucion, hay_problemas, total_tareas, tareas_completadas, tareas_vencidas, progreso_pct, cantidad_problemas, severidad_maxima, kpis_json FROM analisis_proyecto WHERE fecha_ejecucion >= NOW() - ($1 || ' days')::interval ORDER BY fecha_ejecucion DESC;",
+        "query": "\nWITH stats AS (\n  SELECT\n    NOW() AS fecha_ejecucion,\n    COUNT(*)::int AS total_tareas,\n    COUNT(*) FILTER (WHERE estado = 'completada')::int AS tareas_completadas,\n    COUNT(*) FILTER (\n      WHERE fecha_limite < (NOW() AT TIME ZONE 'America/Guayaquil')::date\n        AND estado NOT IN ('completada','cancelada')\n    )::int AS tareas_vencidas\n  FROM pm_tareas\n),\nrisks AS (\n  SELECT\n    COUNT(*) FILTER (WHERE estado = 'abierto')::int AS abiertos,\n    COUNT(*) FILTER (WHERE estado = 'abierto' AND prioridad_calculada IN ('alta','critica'))::int AS altos,\n    COUNT(*) FILTER (WHERE estado = 'abierto' AND prioridad_calculada = 'critica')::int AS criticos\n  FROM pm_riesgos\n),\nblockers AS (\n  SELECT\n    COUNT(*) FILTER (WHERE estado <> 'resuelto')::int AS activos,\n    COUNT(*) FILTER (WHERE estado <> 'resuelto' AND severidad IN ('alta','critica'))::int AS altos,\n    COUNT(*) FILTER (WHERE estado <> 'resuelto' AND severidad = 'critica')::int AS criticos\n  FROM pm_bloqueos\n)\nSELECT\n  fecha_ejecucion,\n  (tareas_vencidas > 0 OR blockers.altos > 0 OR risks.altos > 0) AS hay_problemas,\n  total_tareas,\n  tareas_completadas,\n  tareas_vencidas,\n  CASE WHEN total_tareas = 0 THEN 0 ELSE ROUND((tareas_completadas::numeric / total_tareas) * 100)::int END AS progreso_pct,\n  (tareas_vencidas + blockers.altos + risks.altos)::int AS cantidad_problemas,\n  CASE\n    WHEN blockers.criticos > 0 OR risks.criticos > 0 THEN 'critica'\n    WHEN blockers.altos > 0 OR risks.altos > 0 THEN 'alta'\n    WHEN tareas_vencidas > 0 THEN 'media'\n    ELSE 'baja'\n  END AS severidad_maxima,\n  json_build_object(\n    'velocidad_semana', (\n      SELECT COUNT(*) FROM pm_tareas\n      WHERE estado = 'completada'\n        AND (fecha_actualizacion AT TIME ZONE 'America/Guayaquil')::date >= ((NOW() AT TIME ZONE 'America/Guayaquil')::date - INTERVAL '6 days')\n    ),\n    'pct_a_tiempo', CASE WHEN total_tareas = 0 THEN 100 ELSE ROUND(((total_tareas - tareas_vencidas)::numeric / total_tareas) * 100)::int END,\n    'dias_hasta_fin', COALESCE((SELECT MAX(fecha_limite) - (NOW() AT TIME ZONE 'America/Guayaquil')::date FROM pm_tareas), 0),\n    'proyeccion_a_tiempo', (tareas_vencidas = 0 AND blockers.activos = 0),\n    'commits_por_dia_back', '-',\n    'commits_por_dia_front', '-',\n    'pr_open_time_back', '-',\n    'pr_merge_ratio', '-'\n  ) AS kpis_json\nFROM stats\nCROSS JOIN risks\nCROSS JOIN blockers",
         "options": {
           "queryReplacement": "={{ $node[\"Configuración\"].json.rango_dias }}"
         }
@@ -165,7 +165,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM analisis_proyecto ORDER BY fecha_ejecucion DESC LIMIT 1;",
+        "query": "SELECT 1 AS id, q.* FROM (\nWITH stats AS (\n  SELECT\n    NOW() AS fecha_ejecucion,\n    COUNT(*)::int AS total_tareas,\n    COUNT(*) FILTER (WHERE estado = 'completada')::int AS tareas_completadas,\n    COUNT(*) FILTER (\n      WHERE fecha_limite < (NOW() AT TIME ZONE 'America/Guayaquil')::date\n        AND estado NOT IN ('completada','cancelada')\n    )::int AS tareas_vencidas\n  FROM pm_tareas\n),\nrisks AS (\n  SELECT\n    COUNT(*) FILTER (WHERE estado = 'abierto')::int AS abiertos,\n    COUNT(*) FILTER (WHERE estado = 'abierto' AND prioridad_calculada IN ('alta','critica'))::int AS altos,\n    COUNT(*) FILTER (WHERE estado = 'abierto' AND prioridad_calculada = 'critica')::int AS criticos\n  FROM pm_riesgos\n),\nblockers AS (\n  SELECT\n    COUNT(*) FILTER (WHERE estado <> 'resuelto')::int AS activos,\n    COUNT(*) FILTER (WHERE estado <> 'resuelto' AND severidad IN ('alta','critica'))::int AS altos,\n    COUNT(*) FILTER (WHERE estado <> 'resuelto' AND severidad = 'critica')::int AS criticos\n  FROM pm_bloqueos\n)\nSELECT\n  fecha_ejecucion,\n  (tareas_vencidas > 0 OR blockers.altos > 0 OR risks.altos > 0) AS hay_problemas,\n  total_tareas,\n  tareas_completadas,\n  tareas_vencidas,\n  CASE WHEN total_tareas = 0 THEN 0 ELSE ROUND((tareas_completadas::numeric / total_tareas) * 100)::int END AS progreso_pct,\n  (tareas_vencidas + blockers.altos + risks.altos)::int AS cantidad_problemas,\n  CASE\n    WHEN blockers.criticos > 0 OR risks.criticos > 0 THEN 'critica'\n    WHEN blockers.altos > 0 OR risks.altos > 0 THEN 'alta'\n    WHEN tareas_vencidas > 0 THEN 'media'\n    ELSE 'baja'\n  END AS severidad_maxima,\n  json_build_object(\n    'velocidad_semana', (\n      SELECT COUNT(*) FROM pm_tareas\n      WHERE estado = 'completada'\n        AND (fecha_actualizacion AT TIME ZONE 'America/Guayaquil')::date >= ((NOW() AT TIME ZONE 'America/Guayaquil')::date - INTERVAL '6 days')\n    ),\n    'pct_a_tiempo', CASE WHEN total_tareas = 0 THEN 100 ELSE ROUND(((total_tareas - tareas_vencidas)::numeric / total_tareas) * 100)::int END,\n    'dias_hasta_fin', COALESCE((SELECT MAX(fecha_limite) - (NOW() AT TIME ZONE 'America/Guayaquil')::date FROM pm_tareas), 0),\n    'proyeccion_a_tiempo', (tareas_vencidas = 0 AND blockers.activos = 0),\n    'commits_por_dia_back', '-',\n    'commits_por_dia_front', '-',\n    'pr_open_time_back', '-',\n    'pr_merge_ratio', '-'\n  ) AS kpis_json\nFROM stats\nCROSS JOIN risks\nCROSS JOIN blockers) q LIMIT 1;",
         "options": {}
       },
       "id": "ca6f9d9b-f543-46b7-a331-625592090408",
@@ -186,7 +186,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT card_id, card_nombre, lista_nombre, miembro_nombre, fecha_vencimiento FROM estado_tareas WHERE analisis_id = (SELECT id FROM analisis_proyecto ORDER BY fecha_ejecucion DESC LIMIT 1) AND completada = FALSE AND fecha_vencimiento < NOW() ORDER BY fecha_vencimiento DESC;",
+        "query": "\nSELECT\n  id::text AS card_id,\n  titulo AS card_nombre,\n  COALESCE(sprint, 'Sin fase') AS lista_nombre,\n  responsable AS miembro_nombre,\n  fecha_limite::timestamp with time zone AS fecha_vencimiento\nFROM pm_tareas\nWHERE estado NOT IN ('completada','cancelada')\n  AND fecha_limite < (NOW() AT TIME ZONE 'America/Guayaquil')::date\nORDER BY fecha_limite ASC;",
         "options": {}
       },
       "id": "53f19564-4c37-42c1-ac0c-6e81d4d8944b",
@@ -207,7 +207,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT nombre, tipo, fecha_inicio, fecha_fin, responsable, completado FROM hitos_proyecto WHERE fecha_fin >= CURRENT_DATE AND fecha_fin <= CURRENT_DATE + INTERVAL '30 days' ORDER BY fecha_fin ASC;",
+        "query": "\nSELECT\n  nombre,\n  COALESCE(tipo, 'entregable') AS tipo,\n  fecha_creacion::date AS fecha_inicio,\n  fecha_limite AS fecha_fin,\n  responsable,\n  estado IN ('entregado','aprobado') AS completado\nFROM pm_entregables\nWHERE fecha_limite >= (NOW() AT TIME ZONE 'America/Guayaquil')::date\n  AND fecha_limite <= (NOW() AT TIME ZONE 'America/Guayaquil')::date + INTERVAL '30 days'\nORDER BY fecha_limite ASC;",
         "options": {}
       },
       "id": "204d389d-b96a-4804-86d2-4fe080e8c9e8",
@@ -228,7 +228,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT fecha, tipo, descripcion FROM eventos_detectados WHERE fecha >= NOW() - ($1 || ' days')::interval ORDER BY fecha DESC LIMIT 100;",
+        "query": "\nSELECT\n  creado_en AS fecha,\n  tipo,\n  COALESCE(payload->>'descripcion', payload->>'title', payload->>'message', payload::text) AS descripcion\nFROM eventos_detectados\nWHERE creado_en >= NOW() - ($1 || ' days')::interval\nORDER BY creado_en DESC\nLIMIT 100;",
         "options": {
           "queryReplacement": "={{ $node[\"Configuración\"].json.rango_dias }}"
         }
@@ -251,7 +251,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT fecha, tipo, descripcion FROM recomendaciones WHERE aplicada = FALSE AND tipo = 'alerta_ia' AND fecha >= NOW() - ($1 || ' days')::interval ORDER BY fecha DESC LIMIT 20;",
+        "query": "\nSELECT fecha, tipo, descripcion, false AS aplicada\nFROM (\n  SELECT\n    fecha_creacion AS fecha,\n    'alerta_ia' AS tipo,\n    'Bloqueo #' || id || ': ' || descripcion || '. Accion: ' || COALESCE(accion_recomendada, 'por definir') AS descripcion\n  FROM pm_bloqueos\n  WHERE estado <> 'resuelto'\n  UNION ALL\n  SELECT\n    fecha_creacion AS fecha,\n    'alerta_ia' AS tipo,\n    'Riesgo #' || id || ': ' || descripcion || '. Mitigacion: ' || COALESCE(mitigacion, 'por definir') AS descripcion\n  FROM pm_riesgos\n  WHERE estado = 'abierto'\n) x\nWHERE fecha >= NOW() - ($1 || ' days')::interval\nORDER BY fecha DESC\nLIMIT 20;",
         "options": {
           "queryReplacement": "={{ $node[\"Configuración\"].json.rango_dias }}"
         }
@@ -274,7 +274,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT email, nombre FROM destinatarios_reporte WHERE activo = TRUE;",
+        "query": "SELECT NULL::text AS email, NULL::text AS nombre WHERE false;",
         "options": {}
       },
       "id": "49c5fc3b-0c43-4741-8597-4740ae73c997",
@@ -531,7 +531,9 @@
           "id": "a8FFW4GlCOssGKKe",
           "name": "SMTP account"
         }
-      }
+      },
+      "disabled": true,
+      "continueOnFail": true
     },
     {
       "parameters": {
